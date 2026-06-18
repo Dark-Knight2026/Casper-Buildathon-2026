@@ -339,3 +339,256 @@ async fn negotiations_append_and_list_in_order(pool: PgPool) {
     assert_eq!(entries[0]["kind"], "message");
     assert_eq!(entries[1]["kind"], "counter-offer");
 }
+
+// Negative & branch coverage --------------------------------------------------
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_renewal_rejected_for_non_owner_lease(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    // Lease owned by landlord A; landlord B (also a landlord) tries to renew it.
+    let landlord_a = common::seed_user(&pool, UserRole::Landlord).await;
+    let (_, btoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let lease_id = seed_lease(&pool, landlord_a, tenant_id, "active").await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/renewals",
+        &btoken,
+        &renewal_body(lease_id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_renewal_lease_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/renewals",
+        &ltoken,
+        &renewal_body(Uuid::new_v4()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_renewal_rejects_invalid_terms(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let lease_id = seed_lease(&pool, landlord_id, tenant_id, "active").await;
+
+    let mut negative_rent = renewal_body(lease_id);
+    negative_rent["proposedRent"] = json!(-1.0);
+    let (s_rent, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/renewals",
+        &ltoken,
+        &negative_rent,
+    )
+    .await;
+    assert_eq!(s_rent, StatusCode::BAD_REQUEST);
+
+    let mut zero_term = renewal_body(lease_id);
+    zero_term["proposedTermMonths"] = json!(0);
+    let (s_term, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/renewals",
+        &ltoken,
+        &zero_term,
+    )
+    .await;
+    assert_eq!(s_term, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_renewal_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/renewals/{}", Uuid::new_v4()),
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_renewals_scoped_and_invalid_scope(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (tenant_id, ttoken) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let lease_id = seed_lease(&pool, landlord_id, tenant_id, "active").await;
+    create_renewal(&env, &ltoken, lease_id).await;
+
+    // Landlord scope.
+    let (s_landlord, l_body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/renewals?landlordId=me",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_landlord, StatusCode::OK);
+    assert_eq!(l_body.unwrap()["data"].as_array().unwrap().len(), 1);
+
+    // Tenant scope.
+    let (s_tenant, t_body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/renewals?tenantId=me",
+        &ttoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_tenant, StatusCode::OK);
+    assert_eq!(t_body.unwrap()["data"].as_array().unwrap().len(), 1);
+
+    // Anything but `me` is rejected.
+    let (s_invalid, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/renewals?landlordId=someone",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_invalid, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn respond_reject_moves_to_rejected(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (tenant_id, ttoken) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let lease_id = seed_lease(&pool, landlord_id, tenant_id, "active").await;
+    let renewal = create_renewal(&env, &ltoken, lease_id).await;
+    let id = renewal["id"].as_str().unwrap();
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/renewals/{id}/respond"),
+        &ttoken,
+        &json!({ "decision": "reject" }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.unwrap()["status"], "rejected");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn respond_requires_tenant_role(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let lease_id = seed_lease(&pool, landlord_id, tenant_id, "active").await;
+    let renewal = create_renewal(&env, &ltoken, lease_id).await;
+    let id = renewal["id"].as_str().unwrap();
+
+    // The landlord (wrong role) cannot respond.
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/renewals/{id}/respond"),
+        &ltoken,
+        &json!({ "decision": "accept" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn respond_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, ttoken) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/renewals/{}/respond", Uuid::new_v4()),
+        &ttoken,
+        &json!({ "decision": "accept" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn negotiations_rejected_for_non_party(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let (_, outsider) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let lease_id = seed_lease(&pool, landlord_id, tenant_id, "active").await;
+    let renewal = create_renewal(&env, &ltoken, lease_id).await;
+    let uri = format!(
+        "/api/v1/renewals/{}/negotiations",
+        renewal["id"].as_str().unwrap()
+    );
+
+    let (s_get, _) =
+        common::authed_request::<Value>(&env.server, &Method::GET, &uri, &outsider, &Value::Null)
+            .await;
+    assert_eq!(s_get, StatusCode::FORBIDDEN);
+
+    let (s_post, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &uri,
+        &outsider,
+        &json!({ "kind": "message", "body": "let me in" }),
+    )
+    .await;
+    assert_eq!(s_post, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn negotiation_payload_must_match_kind(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let lease_id = seed_lease(&pool, landlord_id, tenant_id, "active").await;
+    let renewal = create_renewal(&env, &ltoken, lease_id).await;
+    let uri = format!(
+        "/api/v1/renewals/{}/negotiations",
+        renewal["id"].as_str().unwrap()
+    );
+
+    // A message without a body is rejected.
+    let (s_msg, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &uri,
+        &ltoken,
+        &json!({ "kind": "message" }),
+    )
+    .await;
+    assert_eq!(s_msg, StatusCode::BAD_REQUEST);
+
+    // A counter-offer without proposed terms is rejected.
+    let (s_counter, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &uri,
+        &ltoken,
+        &json!({ "kind": "counter-offer" }),
+    )
+    .await;
+    assert_eq!(s_counter, StatusCode::BAD_REQUEST);
+}

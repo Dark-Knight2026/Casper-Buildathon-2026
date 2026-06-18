@@ -493,3 +493,651 @@ async fn list_scoped_to_landlord(pool: PgPool) {
     assert_eq!(data.len(), 1);
     assert_eq!(data[0]["id"], lease["id"]);
 }
+
+// Negative & branch coverage --------------------------------------------------
+
+/// A lease submitted for signing, with both parties' wallets and the canonical
+/// consent message ready to sign.
+struct PendingLease {
+    id: String,
+    landlord: LoggedSession,
+    ltoken: String,
+    tenant: LoggedSession,
+    ttoken: String,
+    message: String,
+}
+
+/// Drives a fresh lease to `pending_signatures` and returns everything the
+/// sign/commit tests need.
+async fn pending_lease(env: &TestEnv, pool: &PgPool) -> PendingLease {
+    let (landlord, ltoken) = wallet_user(env, pool, UserRole::Landlord).await;
+    let (tenant, ttoken) = wallet_user(env, pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(pool, landlord.user_id).await;
+    let lease = create_draft(env, &ltoken, property_id, tenant.user_id).await;
+    let id = lease["id"].as_str().unwrap().to_owned();
+    let (_, submitted) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{id}/submit"),
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    let message = consent_message(&submitted.unwrap());
+    PendingLease {
+        id,
+        landlord,
+        ltoken,
+        tenant,
+        ttoken,
+        message,
+    }
+}
+
+/// Posts a `/sign` request and returns the status.
+async fn post_sign(
+    env: &TestEnv,
+    token: &str,
+    lease_id: &str,
+    role: &str,
+    signature: &str,
+    signer_wallet: &str,
+) -> StatusCode {
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{lease_id}/sign"),
+        token,
+        &json!({ "role": role, "signature": signature, "signerWallet": signer_wallet }),
+    )
+    .await;
+    status
+}
+
+/// Signs `role`'s consent correctly with `session`'s wallet over `message`.
+async fn sign_consent(
+    env: &TestEnv,
+    token: &str,
+    lease_id: &str,
+    role: &str,
+    session: &LoggedSession,
+    message: &str,
+) -> StatusCode {
+    let signature = common::sign_with_prefix(message, &session.secret_key, &session.public_key);
+    post_sign(
+        env,
+        token,
+        lease_id,
+        role,
+        &signature,
+        &session.public_key.to_hex(),
+    )
+    .await
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_lease_rejects_zero_rent(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let mut body = lease_body(property_id, tenant_id);
+    body["monthlyRent"] = json!(0.0);
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/leases",
+        &token,
+        &body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_lease_rejects_unsupported_currency(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let mut body = lease_body(property_id, tenant_id);
+    body["currency"] = json!("XYZ");
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/leases",
+        &token,
+        &body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_lease_rejects_unknown_tenant(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    // Random tenant id that does not exist in `users`.
+    let body = lease_body(property_id, Uuid::new_v4());
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/leases",
+        &token,
+        &body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_lease_rejects_end_before_start(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let mut body = lease_body(property_id, tenant_id);
+    body["endDate"] = json!("2024-01-01");
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/leases",
+        &token,
+        &body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_lease_property_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    // Random property id.
+    let body = lease_body(Uuid::new_v4(), tenant_id);
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/leases",
+        &token,
+        &body,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_lease_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/leases/{}", Uuid::new_v4()),
+        &token,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_tenant_scope_and_invalid_scope(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (tenant_id, ttoken) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    create_draft(&env, &ltoken, property_id, tenant_id).await;
+
+    // tenantId=me returns the lease the caller is a tenant on.
+    let (s_tenant, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases?tenantId=me",
+        &ttoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_tenant, StatusCode::OK);
+    assert_eq!(body.unwrap()["data"].as_array().unwrap().len(), 1);
+
+    // Anything but `me` is rejected.
+    let (s_invalid, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases?tenantId=someone-else",
+        &ttoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_invalid, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_status_filter(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    create_draft(&env, &ltoken, property_id, tenant_id).await;
+
+    let (s_draft, draft_body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases?status=draft",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_draft, StatusCode::OK);
+    assert_eq!(draft_body.unwrap()["data"].as_array().unwrap().len(), 1);
+
+    // No active leases for this caller.
+    let (s_active, active_body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases?status=active",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_active, StatusCode::OK);
+    assert_eq!(active_body.unwrap()["data"].as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_rejected_for_non_owner(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_, other_landlord) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::PATCH,
+        &format!("/api/v1/leases/{}", lease["id"].as_str().unwrap()),
+        &other_landlord,
+        &json!({ "monthlyRent": 2500.0 }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::PATCH,
+        &format!("/api/v1/leases/{}", Uuid::new_v4()),
+        &token,
+        &json!({ "monthlyRent": 2500.0 }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_rejects_invalid_terms(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::PATCH,
+        &format!("/api/v1/leases/{}", lease["id"].as_str().unwrap()),
+        &ltoken,
+        &json!({ "monthlyRent": 0.0 }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn delete_rejected_for_non_owner(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_, other_landlord) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::DELETE,
+        &format!("/api/v1/leases/{}", lease["id"].as_str().unwrap()),
+        &other_landlord,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn delete_non_draft_conflicts(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+    let id = lease["id"].as_str().unwrap();
+
+    // Move past draft.
+    common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{id}/submit"),
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::DELETE,
+        &format!("/api/v1/leases/{id}"),
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn submit_non_draft_conflicts(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+    let id = lease["id"].as_str().unwrap();
+    let submit_uri = format!("/api/v1/leases/{id}/submit");
+
+    let (s_first, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &submit_uri,
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    let (s_second, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &submit_uri,
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(s_first, StatusCode::OK);
+    assert_eq!(s_second, StatusCode::CONFLICT);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn submit_rejected_for_non_owner(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_, other_landlord) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/submit", lease["id"].as_str().unwrap()),
+        &other_landlord,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn sign_rejects_invalid_signature(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+
+    // Correct wallet, but a signature over the wrong message: verification fails.
+    let bad_sig = common::sign_with_prefix(
+        "not the consent message",
+        &p.landlord.secret_key,
+        &p.landlord.public_key,
+    );
+    let status = post_sign(
+        &env,
+        &p.ltoken,
+        &p.id,
+        "landlord",
+        &bad_sig,
+        &p.landlord.public_key.to_hex(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn sign_rejects_wrong_wallet(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+
+    // A wallet that is not the caller's active wallet.
+    let (_, other_pk) = common::generate_random_ed25519();
+    let signature =
+        common::sign_with_prefix(&p.message, &p.landlord.secret_key, &p.landlord.public_key);
+    let status = post_sign(
+        &env,
+        &p.ltoken,
+        &p.id,
+        "landlord",
+        &signature,
+        &other_pk.to_hex(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn sign_rejects_non_party(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+    // A third wallet user who is neither the landlord nor the tenant.
+    let (outsider, otoken) = wallet_user(&env, &pool, UserRole::Landlord).await;
+
+    let signature =
+        common::sign_with_prefix(&p.message, &outsider.secret_key, &outsider.public_key);
+    let status = post_sign(
+        &env,
+        &otoken,
+        &p.id,
+        "landlord",
+        &signature,
+        &outsider.public_key.to_hex(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn sign_rejects_when_not_pending(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord, ltoken) = wallet_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord.user_id).await;
+    // Still a draft - never submitted.
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+    let id = lease["id"].as_str().unwrap();
+
+    let message = consent_message(&lease);
+    let status = sign_consent(&env, &ltoken, id, "landlord", &landlord, &message).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn sign_rejects_without_active_wallet(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    // Seeded users have no linked wallet.
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+    let id = lease["id"].as_str().unwrap();
+    common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{id}/submit"),
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+
+    // The signature/wallet values are irrelevant: the caller has no active wallet.
+    let status = post_sign(&env, &ltoken, id, "landlord", "deadbeef", "01abc").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_idempotent_when_already_active(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+    assert_eq!(
+        sign_consent(&env, &p.ltoken, &p.id, "landlord", &p.landlord, &p.message).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        sign_consent(&env, &p.ttoken, &p.id, "tenant", &p.tenant, &p.message).await,
+        StatusCode::OK
+    );
+    let commit_uri = format!("/api/v1/leases/{}/commit", p.id);
+    let commit_body = json!({
+        "onchainLeaseId": "0",
+        "nftTokenId": "1",
+        "commitTxHash": "deploy-test-1",
+    });
+
+    let (s_first, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &commit_uri,
+        &p.ltoken,
+        &commit_body,
+    )
+    .await;
+    // A second commit on an already-active lease returns it unchanged.
+    let (s_second, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &commit_uri,
+        &p.ltoken,
+        &commit_body,
+    )
+    .await;
+
+    assert_eq!(s_first, StatusCode::OK);
+    assert_eq!(s_second, StatusCode::OK);
+    assert_eq!(body.unwrap()["status"], "active");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_rejects_non_owner(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+    // A different landlord (has the role, but does not own the lease).
+    let (_, other_landlord) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", p.id),
+        &other_landlord,
+        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_rejects_invalid_onchain_id(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+    sign_consent(&env, &p.ltoken, &p.id, "landlord", &p.landlord, &p.message).await;
+    sign_consent(&env, &p.ttoken, &p.id, "tenant", &p.tenant, &p.message).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", p.id),
+        &p.ltoken,
+        &json!({ "onchainLeaseId": "not-a-number", "nftTokenId": "1", "commitTxHash": "x" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", Uuid::new_v4()),
+        &token,
+        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn document_rejected_for_non_party(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let (_, outsider) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/leases/{}/document", lease["id"].as_str().unwrap()),
+        &outsider,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn document_not_found(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/leases/{}/document", Uuid::new_v4()),
+        &token,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
