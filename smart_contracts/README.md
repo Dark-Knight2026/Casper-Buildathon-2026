@@ -16,69 +16,97 @@ Each contract is modular, upgradeable, and interacts with others through well-de
 2. `NFT` — `CEP-95` token. A non-fungible token compliant with the `CEP-95` standard. Represents unique on-chain assets
    such as property ownership certificates, lease-related NFTs, system-specific identity or asset representations.
 
-3. `Roles` - manages role-based access control across the protocol, defines and enforces permissions for actors such as
-   landlords, agents, managers, etc. Used by other contracts to restrict sensitive operations.
+3. `Roles` - legacy wallet-level role management (landlord, agent, manager). Still deployed for backward compatibility,
+   but leasing and property flows now use `UserRegistry` instead.
 
-4. `Treasury` - handles protocol-level funds in `BigCoin` token. Responsibilities include collecting fees,
+4. `UserRegistry` - canonical on-chain identity registry for protocol participants. Each user gets a stable `user_id`
+   linked to an opaque backend `identity_hash` (no PII), an active wallet, additive capability flags (tenant, landlord,
+   property manager), and a lifecycle status (`Active` or `Suspended`). An `IDENTITY_MANAGER` creates users, replaces
+   active wallets after off-chain identity checks, and suspends or reactivates accounts. A `USER_ROLE_MANAGER` updates
+   capability flags. `Lease`, `Escrow`, `PropertyRegistry`, and `CompliancePolicy` read this registry to authorize
+   actors and resolve user IDs to the current active wallet at execution time.
+
+5. `Treasury` - handles protocol-level funds in `BigCoin` token. Responsibilities include collecting fees,
    distributing them between the `Staking` contract as rewards and the `Treasury` contract itself as reserves for future
    incentives, managing authorized withdrawals of reserves.
 
-5. `Escrow` - manages secure, conditional fund locking. Used primarily for managing rent and invoice payments, releasing
-   or refunding funds based on lease conditions, ensures trustless settlement between landlords and tenants.
+6. `Escrow` - manages secure, conditional fund locking. Used primarily for managing rent and invoice payments, releasing
+   or refunding funds based on lease conditions, ensures trustless settlement between landlords and tenants. Invoice
+   buyers and sellers are stored as `UserRegistry` user IDs; payments and releases resolve to each user's active wallet
+   at call time so wallet rotation does not break in-flight leases.
 
-6. `Lease` - implements the property leasing logic. Key features include creation and lifecycle management of lease
+7. `Lease` - implements the property leasing logic. Key features include creation and lifecycle management of lease
    agreements, validation of lease periods and payment schedules, integration with the `Escrow` contract for invoice
-   generation and payments, emission of lease-related events. Supports optional equity options that grant tenants
-   eligibility for property-token distributions, emitting `EquityEligibilityGranted` events. Acts as the core contract
-   coordinating leasing mechanics.
+   generation and payments, emission of lease-related events. Lease parties are referenced by `UserRegistry` user IDs;
+   landlords, tenants, and property managers must be active users with the matching capability flags and must call from
+   their active wallet. Supports optional equity options that grant tenants eligibility for property-token
+   distributions, emitting `EquityEligibilityGranted` events. Acts as the core contract coordinating leasing mechanics.
 
-7. `Staking` - allows users to stake the `BigCoin` token to earn rewards in the `BigCoin` token. This
+8. `Staking` - allows users to stake the `BigCoin` token to earn rewards in the `BigCoin` token. This
    contract provides: stake/unstake functionality, rewards calculation and distribution, integration with the `Treasury`
    contract for rewards funding. Designed to incentivize long-term participation in the ecosystem.
 
-8. `ICO` - allows the owner to manage the `BigCoin` token sales in multiple currencies, including CSPR, USDC,
+9. `ICO` - allows the owner to manage the `BigCoin` token sales in multiple currencies, including CSPR, USDC,
    and USDT. It supports creating multiple ICO schedules with configurable start/end times, sale amounts, and token
    prices. Users can purchase `BigCoin` tokens during active ICO schedules, with payments automatically
    handled. The contract integrates with the Styks Price Feed Oracle to determine token prices in CSPR dynamically.
    Owners can also withdraw unsold tokens from finished ICO schedules and manage supported currencies.
 
-9. `Vesting` - manages time-based token vesting schedules for `BigCoin` tokens. The features include
-   creating vesting schedules with customizable cliff periods and vesting durations, linear vesting calculation,
-   whitelisted creator system (typically the ICO contract), per-user schedule tracking, and token claiming by
-   beneficiaries. The contract integrates with the Staking contract for auto-staking of vested tokens.
+10. `Vesting` - manages time-based token vesting schedules for `BigCoin` tokens. The features include
+    creating vesting schedules with customizable cliff periods and vesting durations, linear vesting calculation,
+    whitelisted creator system (typically the ICO contract), per-user schedule tracking, and token claiming by
+    beneficiaries. The contract integrates with the Staking contract for auto-staking of vested tokens.
 
-10. `InvestorRegistry` - stores the on-chain eligibility state used by tokenized real estate flows. It does not perform
+11. `InvestorRegistry` - stores the on-chain eligibility state used by tokenized real estate flows. It does not perform
     KYC and does not store personal data. Off-chain verification providers such as Sumsub are expected to produce a
     final approval result, and an authorized `VERIFICATION_MANAGER` writes only the wallet's verification status,
     expiry, jurisdiction code, and opaque identity hash. A separate `FREEZER` role can freeze or unfreeze investor
     wallets that have already been registered.
 
-11. `PropertyRegistry` - stores tokenized property records. Each property starts in `Draft` status, then a property
-    manager sets the property ownership token address and revenue distributor address before activating it. The registry
-    is the source of truth for property lifecycle status used by compliance checks.
+12. `PropertyRegistry` - stores tokenized property records. Each property starts in `Draft` status, then a property
+    manager sets the property ownership token address before activating it. Property managers are authorized through
+    `UserRegistry` (active wallet with the property-manager capability flag). The registry is the source of truth for
+    property lifecycle status used by compliance checks.
 
-12. `CompliancePolicy` - provides the minimal on-chain transfer gate for property ownership tokens. It reads
+13. `CompliancePolicy` - provides the minimal on-chain transfer gate for property ownership tokens. It reads
     `InvestorRegistry` to verify sender and recipient wallets, reads `PropertyRegistry` to ensure the property is
-    active, and checks whether transfers are enabled for that property. It does not move tokens or hold funds; property
-    token contracts call it before executing transfers.
+    active, reads `UserRegistry` and `Lease` to enforce equity-distribution eligibility when configured, and checks
+    whether transfers are enabled for that property. It does not move tokens or hold funds; property token contracts
+    call it before executing transfers.
+
+### User Registration Flow
+
+Leasing and property-management contracts identify participants by stable `UserRegistry` user IDs rather than raw wallet
+addresses:
+
+1. An `IDENTITY_MANAGER` creates a user with an opaque `identity_hash`, initial wallet, and starting capability flags
+   after off-chain identity checks. The contract stores no personal documents or raw KYC data.
+2. A `USER_ROLE_MANAGER` updates additive capability flags when a user should act as tenant, landlord, and/or property
+   manager.
+3. An `IDENTITY_MANAGER` can replace the active wallet or suspend a user without rewriting lease records — downstream
+   contracts resolve the current wallet from `UserRegistry` at execution time.
+4. `Lease` and `Escrow` reference user IDs in agreements and invoices; `PropertyRegistry` checks the caller's wallet
+   against `UserRegistry` before allowing property-manager actions.
 
 ### Tokenized Property Compliance Flow
 
 The tokenization contracts introduced in this PR are intentionally small and composable:
 
-1. A `VERIFICATION_MANAGER` records an investor wallet in `InvestorRegistry` after off-chain KYC/compliance approval.
+1. An `IDENTITY_MANAGER` registers protocol participants in `UserRegistry` with opaque identity hashes and capability
+   flags. Property managers must have the property-manager flag and call from their active wallet.
+2. A `VERIFICATION_MANAGER` records an investor wallet in `InvestorRegistry` after off-chain KYC/compliance approval.
    The contract stores only eligibility status and an opaque identity hash, never personal documents or raw KYC data.
-2. A `PROPERTY_MANAGER` creates a property in `PropertyRegistry`. The property remains in `Draft` status until both the
-   property token address and revenue distributor address are set.
-3. The `PROPERTY_MANAGER` activates the property. Activation fails unless the token and revenue distributor addresses
-   are already configured.
-4. A `COMPLIANCE_MANAGER` wires `CompliancePolicy` to the deployed `InvestorRegistry` and `PropertyRegistry` contracts.
-5. The `COMPLIANCE_MANAGER` enables transfers for a property by setting its `ComplianceConfig`. This
+3. A property manager creates a property in `PropertyRegistry`. The property remains in `Draft` status until the
+   property token address is set.
+4. The property manager activates the property. Activation fails unless the token address is already configured.
+5. A `COMPLIANCE_MANAGER` wires `CompliancePolicy` to the deployed `InvestorRegistry`, `PropertyRegistry`, `Lease`,
+   and `UserRegistry` contracts.
+6. The `COMPLIANCE_MANAGER` enables transfers for a property by setting its `ComplianceConfig`. This
    can optionally include an `equity_distribution_requires_lease_option` rule for primary distributions.
-6. A future `PropertyFractionToken` contract calls `CompliancePolicy.assert_can_transfer(property_id, from, to, amount)`
+7. A future `PropertyFractionToken` contract calls `CompliancePolicy.assert_can_transfer(property_id, from, to, amount)`
    before moving ownership balances. The transfer is rejected if the property is inactive, transfers are disabled, the
    amount is zero, either non-exempt party is not currently verified, or if it's an equity distribution to a recipient
-   without a valid lease equity option (when that rule is enabled).
+   without a valid lease equity option and active `UserRegistry` wallet (when that rule is enabled).
 
 Example transfer pre-check:
 
@@ -151,6 +179,7 @@ Error codes are allocated in blocks of 100 per contract:
 | 800-899   | InvestorRegistry | Investor verification and freeze state    |
 | 900-999   | PropertyRegistry | Tokenized property records and lifecycle  |
 | 1000-1099 | CompliancePolicy | Property token transfer compliance checks |
+| 1200-1299 | UserRegistry     | User identity, wallets, and role flags    |
 
 When adding new contracts or error codes, use the next available block of 100 codes and follow the existing naming
 conventions.
