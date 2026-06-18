@@ -30,14 +30,22 @@ export type { SurroundingPOI, SurroundingCategory } from '@/types/property';
  * legacy lowercase `PropertyType` (apartment/house/studio/loft) in
  * `property.ts`.
  */
-export type RealPropertyType =
-  | 'single_family'
-  | 'multi_family'
-  | 'apartment'
-  | 'condo'
-  | 'townhouse'
-  | 'commercial'
-  | 'other';
+/**
+ * The RESO property-type value set — single source of truth. Used for the type
+ * union, the create/edit `z.enum`, and the search/filter option lists, so the
+ * list lives in exactly one place.
+ */
+export const REAL_PROPERTY_TYPES = [
+  'single_family',
+  'multi_family',
+  'apartment',
+  'condo',
+  'townhouse',
+  'commercial',
+  'other',
+] as const;
+
+export type RealPropertyType = (typeof REAL_PROPERTY_TYPES)[number];
 
 /** One row per real-world property, deduped by `normalizedAddress + parcelApn`. */
 export interface PropertyAsset {

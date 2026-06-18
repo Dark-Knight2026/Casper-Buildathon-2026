@@ -65,17 +65,7 @@ import {
 import { SurroundingAreaFields } from '@/components/listing/SurroundingAreaFields';
 import { CustomAmenitiesField } from '@/components/listing/CustomAmenitiesField';
 import { logger } from '@/utils/logger';
-import type { RealPropertyType } from '@/types/listingContract';
-
-const PROPERTY_TYPES: RealPropertyType[] = [
-  'single_family',
-  'multi_family',
-  'apartment',
-  'condo',
-  'townhouse',
-  'commercial',
-  'other',
-];
+import { REAL_PROPERTY_TYPES } from '@/types/listingContract';
 
 // Form validation schema
 const propertyFormSchema = z.object({
@@ -86,15 +76,7 @@ const propertyFormSchema = z.object({
   city: z.string().min(2, 'City is required'),
   state: z.string().length(2, 'State must be 2 characters'),
   zipCode: z.string().regex(/^\d{5}(-\d{4})?$/, 'Invalid ZIP code'),
-  propertyType: z.enum([
-    'single_family',
-    'multi_family',
-    'apartment',
-    'condo',
-    'townhouse',
-    'commercial',
-    'other',
-  ]),
+  propertyType: z.enum(REAL_PROPERTY_TYPES),
 
   // Step 2: Details
   bedrooms: z.coerce.number().min(0, 'Bedrooms must be 0 or more'),
@@ -451,7 +433,7 @@ export default function PropertyCreate() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {PROPERTY_TYPES.map((type) => (
+                          {REAL_PROPERTY_TYPES.map((type) => (
                             <SelectItem key={type} value={type}>
                               {formatPropertyType(type)}
                             </SelectItem>

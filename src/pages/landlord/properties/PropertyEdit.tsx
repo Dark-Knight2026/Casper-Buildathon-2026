@@ -11,7 +11,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import {
   ArrowLeft,
   Save,
@@ -53,12 +52,15 @@ import { useToast } from '@/hooks/use-toast';
 import { getListing, updateListing } from '@/services/listingService';
 import { updateProperty } from '@/services/propertyAssetService';
 import { uploadMedia, updateMedia } from '@/services/listingMediaService';
-import { formatPropertyType } from '@/lib/listingDisplay';
 import { logger } from '@/utils/logger';
 import { ApiClient } from '@/lib/api-client';
-import { surroundingAreaSchema } from '@/lib/listingForm';
 import { SurroundingAreaFields } from '@/components/listing/SurroundingAreaFields';
 import { CustomAmenitiesField } from '@/components/listing/CustomAmenitiesField';
+import { PropertyDetailsFields } from '@/components/property/PropertyDetailsFields';
+import {
+  listingFormSchema,
+  type ListingFormValues,
+} from '@/lib/propertyEditForm';
 import {
   ALL_AMENITIES,
   UTILITIES,
@@ -67,7 +69,6 @@ import {
 } from '@/types/property';
 import type {
   RentLtrTerms,
-  RealPropertyType,
   MediaRef,
   MediaModerationStatus,
 } from '@/types/listingContract';
@@ -77,54 +78,6 @@ const MEDIA_STATUS_STYLE: Record<MediaModerationStatus, string> = {
   approved: 'bg-green-600',
   rejected: 'bg-red-500',
 };
-
-const PROPERTY_TYPES: RealPropertyType[] = [
-  'single_family',
-  'multi_family',
-  'apartment',
-  'condo',
-  'townhouse',
-  'commercial',
-  'other',
-];
-
-const listingFormSchema = z.object({
-  // Physical property (PUT /properties/{id})
-  addressLine1: z.string().min(1, 'Address is required'),
-  addressLine2: z.string().optional(),
-  city: z.string().min(1, 'City is required'),
-  stateOrProvince: z.string().min(1, 'State is required'),
-  postalCode: z.string().min(1, 'Postal code is required'),
-  propertyType: z.enum([
-    'single_family',
-    'multi_family',
-    'apartment',
-    'condo',
-    'townhouse',
-    'commercial',
-    'other',
-  ]),
-  bedroomsTotal: z.coerce.number().min(0, 'Must be 0 or more'),
-  bathroomsTotal: z.coerce.number().min(0, 'Must be 0 or more'),
-  livingArea: z.coerce.number().min(0, 'Must be 0 or more'),
-  yearBuilt: z.coerce.number().min(0, 'Must be 0 or more'),
-  // Listing offer (PUT /listings/{id})
-  title: z.string().min(5, 'Title must be at least 5 characters'),
-  description: z.string().min(20, 'Description must be at least 20 characters'),
-  availableDate: z.string().min(1, 'Available date is required'),
-  rent: z.coerce.number().min(1, 'Rent must be greater than 0'),
-  securityDeposit: z.coerce
-    .number()
-    .min(0, 'Security deposit must be 0 or more'),
-  leaseTerms: z.array(z.string()).min(1, 'Select at least one lease term'),
-  amenities: z.array(z.string()),
-  utilitiesIncluded: z.array(z.string()),
-  petPolicy: z.string(),
-  furnished: z.boolean(),
-  surroundingArea: surroundingAreaSchema,
-});
-
-type ListingFormValues = z.infer<typeof listingFormSchema>;
 
 export default function PropertyEdit() {
   const { id } = useParams<{ id: string }>();
@@ -374,166 +327,7 @@ export default function PropertyEdit() {
             className="space-y-6"
           >
             {/* Property — physical asset (PUT /properties/{id}) */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Property</CardTitle>
-                <CardDescription>
-                  Basic info for the physical property. Changing the address
-                  re-checks for duplicates; this affects every listing on this
-                  property.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="addressLine1"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Street Address</FormLabel>
-                      <FormControl>
-                        <Input placeholder="123 Main St" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="addressLine2"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Unit / Suite (optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Apt 4B" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="city"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>City</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="stateOrProvince"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>State</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="postalCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>ZIP</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="propertyType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Type</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {PROPERTY_TYPES.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {formatPropertyType(type)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="bedroomsTotal"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bedrooms</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="0" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="bathroomsTotal"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bathrooms</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="0" step="0.5" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="livingArea"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Square Feet</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="0" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="yearBuilt"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Year Built</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="0" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <PropertyDetailsFields control={form.control} />
 
             {/* Listing Details */}
             <Card>

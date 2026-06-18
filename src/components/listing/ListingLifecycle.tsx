@@ -89,11 +89,10 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
       } else {
         await transitionListingState(listing.id, action.to);
       }
-      await queryClient.invalidateQueries({
-        queryKey: ['listing', listing.id],
-      });
-      // Refresh the landlord's list too, so a withdraw / state change is
-      // reflected when they navigate back (the list is keyed on its own query).
+      // Refresh both the detail query and the landlord list (so a withdraw /
+      // state change shows when they navigate back). Fire-and-forget — the toast
+      // shouldn't wait on a background refetch.
+      queryClient.invalidateQueries({ queryKey: ['listing', listing.id] });
       queryClient.invalidateQueries({ queryKey: ['landlord-listings'] });
       toast({ title: 'Listing updated' });
     } catch (error) {

@@ -21,6 +21,8 @@ import type {
   ListingSortBy,
   RealPropertyType,
 } from '@/types/listingContract';
+import { REAL_PROPERTY_TYPES } from '@/types/listingContract';
+import { formatPropertyType } from '@/lib/listingDisplay';
 import { InHomeAmenitiesFilter } from '@/components/search/InHomeAmenitiesFilter';
 import {
   Select,
@@ -69,16 +71,14 @@ const SORT_OPTIONS: FilterOption[] = [
 ];
 
 // RESO-aligned property types — the value set the backend `GET /listings`
-// filter accepts (NOT the legacy apartment/house/studio/loft set).
+// filter accepts (NOT the legacy apartment/house/studio/loft set). Derived from
+// the single source of truth so the option list can't drift.
 const PROPERTY_TYPE_OPTIONS: FilterOption[] = [
   { value: 'all', label: 'All Types' },
-  { value: 'single_family', label: 'Single Family' },
-  { value: 'multi_family', label: 'Multi Family' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'condo', label: 'Condo' },
-  { value: 'townhouse', label: 'Townhouse' },
-  { value: 'commercial', label: 'Commercial' },
-  { value: 'other', label: 'Other' },
+  ...REAL_PROPERTY_TYPES.map((value) => ({
+    value,
+    label: formatPropertyType(value),
+  })),
 ];
 
 function Stepper({
