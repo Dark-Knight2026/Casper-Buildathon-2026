@@ -47,10 +47,12 @@ pub use openapi::ApiDoc;
 #[cfg(feature = "enabled")]
 pub use providers::{
     ContentPinner, EmailError, EmailMessage, EmailSender, FairHousingError, FairHousingScreen,
-    FakeKycProvider, FakePinner, KycError, KycOutcome, KycProvider, LoggingEmailSender,
-    MediaStorage, MetadataStripper, NoopMetadataStripper, PinError, PostmarkSender, S3MediaStorage,
-    ScreenOutcome, SharedContentPinner, SharedFairHousingScreen, SharedKycProvider,
-    SharedMediaStorage, SharedMetadataStripper, StubFairHousingScreen, StubMediaStorage,
+    FakeKycProvider, FakeLeaseChainReader, FakePinner, KycError, KycOutcome, KycProvider,
+    LeaseChainError, LeaseChainReader, LeaseChainResult, LoggingEmailSender, MediaStorage,
+    MetadataStripper, NoopMetadataStripper, OnchainLeaseAgreement, PinError, PostmarkSender,
+    S3MediaStorage, ScreenOutcome, SharedContentPinner, SharedFairHousingScreen, SharedKycProvider,
+    SharedLeaseChainReader, SharedMediaStorage, SharedMetadataStripper, StubFairHousingScreen,
+    StubMediaStorage,
 };
 #[cfg(feature = "enabled")]
 pub use services::auth::AuthUser;

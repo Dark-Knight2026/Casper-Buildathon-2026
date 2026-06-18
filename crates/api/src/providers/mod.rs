@@ -17,6 +17,8 @@
 //!   `FakePinner`).
 //! - [`metadata_stripper`] - image metadata stripping (`MetadataStripper`,
 //!   `NoopMetadataStripper`).
+//! - [`lease_chain`] - on-chain Lease-contract reconciliation
+//!   (`LeaseChainReader`, `FakeLeaseChainReader`).
 //!
 //! New external-service adapters (SMS, payment processors) belong
 //! here, not in [`common`](crate::common): `common` is reserved for
@@ -31,6 +33,8 @@ pub mod email;
 pub mod fair_housing;
 /// Identity-verification (KYC) abstraction.
 pub mod kyc;
+/// On-chain Lease-contract reconciliation abstraction.
+pub mod lease_chain;
 /// Image metadata-stripping abstraction.
 pub mod metadata_stripper;
 /// Media-storage abstraction.
@@ -43,6 +47,10 @@ pub use fair_housing::{
     StubFairHousingScreen,
 };
 pub use kyc::{FakeKycProvider, KycError, KycOutcome, KycProvider, KycResult, SharedKycProvider};
+pub use lease_chain::{
+    FakeLeaseChainReader, LeaseChainError, LeaseChainReader, LeaseChainResult,
+    OnchainLeaseAgreement, SharedLeaseChainReader,
+};
 pub use metadata_stripper::{MetadataStripper, NoopMetadataStripper, SharedMetadataStripper};
 pub use storage::{
     MediaStorage, S3MediaStorage, SharedMediaStorage, StorageError, StubMediaStorage,

@@ -29,10 +29,11 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, ContentPinner, EmailSender, FairHousingScreen, FakeKycProvider, FakePinner,
-    KycProvider, LoggingEmailSender, MetadataStripper, NoopMetadataStripper, PostmarkSender,
-    RedisStore, S3MediaStorage, ServerConfig, ServerError, SharedMediaStorage,
-    StubFairHousingScreen, StubMediaStorage, onchain, services, workers,
+    ApiDoc, AppState, ContentPinner, EmailSender, FairHousingScreen, FakeKycProvider,
+    FakeLeaseChainReader, FakePinner, KycProvider, LeaseChainReader, LoggingEmailSender,
+    MetadataStripper, NoopMetadataStripper, PostmarkSender, RedisStore, S3MediaStorage,
+    ServerConfig, ServerError, SharedMediaStorage, StubFairHousingScreen, StubMediaStorage,
+    onchain, services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -244,6 +245,17 @@ pub async fn main() -> Result<(), ServerError> {
         Arc::new(NoopMetadataStripper::new())
     };
 
+    // No real CSPR RPC reader exists yet, so `/commit` reconciliation trusts the
+    // landlord's submitted params via a fake that reports every deposit/invoice
+    // as paid. A real Lease/Escrow RPC reader will be selected here by config.
+    let lease_chain_reader: Arc<dyn LeaseChainReader> = {
+        tracing::warn!(
+            event = "lease_chain_reader_stub",
+            "No real LeaseChainReader configured - using FakeLeaseChainReader (treats every commit as consistent, no on-chain check). Production MUST wire a real CSPR RPC reader before lease activation can be trusted."
+        );
+        Arc::new(FakeLeaseChainReader::new())
+    };
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
@@ -254,6 +266,7 @@ pub async fn main() -> Result<(), ServerError> {
         fair_housing,
         content_pinner,
         metadata_stripper,
+        lease_chain_reader,
         config: config.clone(),
     });
 

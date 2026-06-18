@@ -11,7 +11,8 @@ use crate::{
     ServerError,
     common::RedisStore,
     providers::{
-        ContentPinner, EmailSender, FairHousingScreen, KycProvider, MediaStorage, MetadataStripper,
+        ContentPinner, EmailSender, FairHousingScreen, KycProvider, LeaseChainReader, MediaStorage,
+        MetadataStripper,
     },
 };
 
@@ -235,15 +236,15 @@ impl ServerConfig {
     /// - `CORS_ORIGIN` doesn't start with `http://` or `https://`
     #[inline]
     pub fn from_env() -> Result<Self, ServerError> {
-        let raw: RawEnvConfig = Config::builder()
+        let raw = Config::builder()
             .add_source(Environment::default().try_parsing(true).ignore_empty(true))
             .build()
-            .and_then(Config::try_deserialize)
+            .and_then(Config::try_deserialize::<RawEnvConfig>)
             .map_err(|e| ServerError::EnvVar(e.to_string()))?;
 
         let ico_fallback = match (raw.ico_price_usd, raw.ico_total_allocation) {
             (Some(price_str), Some(total_allocation)) => {
-                let price_usd: Decimal = price_str.parse().map_err(|_| {
+                let price_usd = price_str.parse::<Decimal>().map_err(|_| {
                     ServerError::EnvVar(format!(
                         "ICO_PRICE_USD must be a valid decimal, got \"{price_str}\""
                     ))
@@ -444,6 +445,10 @@ pub struct AppState {
     /// can swap `NoopMetadataStripper` (hackathon) for a real EXIF/GPS stripper
     /// without touching call sites.
     pub metadata_stripper: Arc<dyn MetadataStripper>,
+    /// On-chain Lease-contract reader for `/commit` reconciliation. Boxed-trait
+    /// so the bootstrap can swap `FakeLeaseChainReader` (hackathon) for a real
+    /// CSPR RPC reader without touching call sites.
+    pub lease_chain_reader: Arc<dyn LeaseChainReader>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -460,6 +465,7 @@ impl core::fmt::Debug for AppState {
             .field("fair_housing", &"FairHousingScreen")
             .field("content_pinner", &"ContentPinner")
             .field("metadata_stripper", &"MetadataStripper")
+            .field("lease_chain_reader", &"LeaseChainReader")
             .field("config", &self.config)
             .finish()
     }
