@@ -19,4 +19,5 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::list_renewals))
         .routes(routes!(handlers::create_renewal))
         .routes(routes!(handlers::get_renewal))
+        .routes(routes!(handlers::respond_renewal))
 }

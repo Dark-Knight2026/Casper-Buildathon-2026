@@ -12,11 +12,14 @@ use uuid::Uuid;
 use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
     services::{
-        auth::{AuthUser, LandlordRole, RoleUser},
+        auth::{AuthUser, LandlordRole, RoleUser, TenantRole},
         leases::db as leases_db,
         renewals::{
             db::{self, NewRenewal},
-            models::{CreateRenewalRequest, Renewal, RenewalListParams},
+            models::{
+                CreateRenewalRequest, Renewal, RenewalDecision, RenewalListParams, RenewalStatus,
+                RespondRenewalRequest,
+            },
         },
     },
 };
@@ -163,4 +166,76 @@ pub async fn list_renewals(
     .await?;
     let renewals = rows.into_iter().map(Renewal::from).collect();
     Ok(Json(PaginatedResponse::new(renewals, total, &pagination)))
+}
+
+// `POST /api/v1/renewals/{id}/respond`
+//
+/// Records the tenant's response to a renewal offer.
+///
+/// Tenant-only (the tenant on the renewal). Drives the offer
+/// `sent`/`under_review` -> `accepted` | `rejected` | `countered`. A `counter`
+/// requires a `counterOffer` body. On `accepted` the offer becomes the landlord's
+/// signal to run `prolong_lease_agreement` on-chain (the indexer reflects the new
+/// end date); the lease itself is not changed here. Responding to an offer that
+/// already has a response is `409`.
+///
+/// # Errors
+///
+/// Returns `400` when countering without a `counterOffer`, `403` when not the
+/// renewal tenant, `404` when the renewal is missing, `409` when the offer is no
+/// longer awaiting a response.
+#[utoipa::path(
+    post,
+    path = "/renewals/{id}/respond",
+    tag = "Renewals",
+    params(
+        ("id" = Uuid, Path, description = "Renewal id")
+    ),
+    request_body = RespondRenewalRequest,
+    responses(
+        (status = 200, description = "Response recorded", body = Renewal),
+        (status = 400, description = "Missing counter offer", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the renewal tenant", body = ErrorResponse),
+        (status = 404, description = "Renewal not found", body = ErrorResponse),
+        (status = 409, description = "Renewal is not awaiting a response", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn respond_renewal(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<TenantRole>,
+    Path(renewal_id): Path<Uuid>,
+    Json(payload): Json<RespondRenewalRequest>,
+) -> ApiResult<Json<Renewal>> {
+    let current = db::fetch_renewal(&state.db, renewal_id).await?;
+    if current.tenant_id != user.0.sub {
+        return Err(ApiError::Forbidden("not_the_renewal_tenant".to_owned()));
+    }
+    if !matches!(
+        current.status,
+        RenewalStatus::Sent | RenewalStatus::UnderReview
+    ) {
+        return Err(ApiError::Conflict(
+            "renewal is not awaiting a response".to_owned(),
+        ));
+    }
+    let (status, counter_offer) = match payload.decision {
+        RenewalDecision::Accept => ("accepted", None),
+        RenewalDecision::Reject => ("rejected", None),
+        RenewalDecision::Counter => {
+            let offer = payload.counter_offer.ok_or_else(|| {
+                ApiError::BadRequest("counterOffer is required when decision is counter".to_owned())
+            })?;
+            let value = serde_json::to_value(offer)
+                .map_err(|_| ApiError::Internal("failed to encode counter offer".to_owned()))?;
+            ("countered", Some(value))
+        }
+    };
+    let row = db::update_renewal_response(&state.db, renewal_id, status, counter_offer).await?;
+    Ok(Json(Renewal::from(row)))
 }

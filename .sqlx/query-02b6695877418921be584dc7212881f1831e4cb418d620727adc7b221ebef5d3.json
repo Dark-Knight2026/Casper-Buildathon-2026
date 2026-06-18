@@ -1,0 +1,169 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE lease_renewals SET\n                status = $2,\n                counter_offer = $3\n            WHERE id = $1 AND status IN ('sent', 'under_review') AND deleted_at IS NULL\n            RETURNING\n                id, lease_id, landlord_id, tenant_id,\n                proposed_rent::float8 AS \"proposed_rent!\",\n                proposed_term_months,\n                proposed_start_date,\n                rent_increase_reason,\n                response_deadline,\n                status,\n                counter_offer AS \"counter_offer?: Json<Value>\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "lease_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "lease_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landlord_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "landlord_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "proposed_rent!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "proposed_term_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "proposed_term_months"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "proposed_start_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "proposed_start_date"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "rent_increase_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "rent_increase_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "response_deadline",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "response_deadline"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "status",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "counter_offer?: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "counter_offer"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "lease_renewals",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "02b6695877418921be584dc7212881f1831e4cb418d620727adc7b221ebef5d3"
+}

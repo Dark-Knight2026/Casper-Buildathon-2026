@@ -110,6 +110,9 @@ use crate::{
             // Renewals models
             renewals::models::Renewal,
             renewals::models::CreateRenewalRequest,
+            renewals::models::RespondRenewalRequest,
+            renewals::models::RenewalDecision,
+            renewals::models::CounterOffer,
             renewals::models::RenewalStatus,
             // Favorites models
             favorites::models::AddFavoriteRequest,

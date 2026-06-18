@@ -5,8 +5,6 @@
 //! while its DB string form is snake_case (CHECK), so serde and strum diverge by
 //! design - mirrors [`super::super::leases::models::LeaseStatus`].
 
-use core::str::FromStr;
-
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -135,6 +133,40 @@ impl RenewalListParams {
     }
 }
 
+/// The tenant's decision on a renewal offer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum RenewalDecision {
+    /// Accept the offer as proposed.
+    Accept,
+    /// Reject the offer.
+    Reject,
+    /// Counter with different terms.
+    Counter,
+}
+
+/// Tenant counter-offer terms, stored as the `counterOffer` JSONB payload.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CounterOffer {
+    /// Counter-proposed monthly rent.
+    pub proposed_rent: f64,
+    /// Counter-proposed term in whole months.
+    pub proposed_term_months: i32,
+    /// Optional free-text note.
+    pub notes: Option<String>,
+}
+
+/// Respond-to-a-renewal payload. The tenant accepts, rejects, or counters.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RespondRenewalRequest {
+    /// Accept, reject, or counter.
+    pub decision: RenewalDecision,
+    /// Counter terms; required when `decision = counter`, ignored otherwise.
+    pub counter_offer: Option<CounterOffer>,
+}
+
 /// A lease-renewal offer (public wire shape).
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -185,7 +217,7 @@ impl From<RenewalRow> for Renewal {
             proposed_start_date: row.proposed_start_date,
             rent_increase_reason: row.rent_increase_reason,
             response_deadline: row.response_deadline,
-            status: RenewalStatus::from_str(&row.status).unwrap_or(RenewalStatus::Draft),
+            status: row.status,
             counter_offer: row.counter_offer.map(|json| json.0),
             created_at: row.created_at,
             updated_at: row.updated_at,
