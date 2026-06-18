@@ -46,7 +46,9 @@ class DocumentService {
     // Title
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('RESIDENTIAL LEASE AGREEMENT', 105, yPosition, { align: 'center' });
+    doc.text('RESIDENTIAL LEASE AGREEMENT', 105, yPosition, {
+      align: 'center',
+    });
     yPosition += 15;
 
     // Property Information
@@ -80,13 +82,29 @@ class DocumentService {
 
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Start Date: ${new Date(lease.startDate).toLocaleDateString()}`, 20, yPosition);
+    doc.text(
+      `Start Date: ${new Date(lease.startDate).toLocaleDateString()}`,
+      20,
+      yPosition
+    );
     yPosition += 7;
-    doc.text(`End Date: ${new Date(lease.endDate).toLocaleDateString()}`, 20, yPosition);
+    doc.text(
+      `End Date: ${new Date(lease.endDate).toLocaleDateString()}`,
+      20,
+      yPosition
+    );
     yPosition += 7;
-    doc.text(`Monthly Rent: $${lease.monthlyRent.toLocaleString()}`, 20, yPosition);
+    doc.text(
+      `Monthly Rent: $${lease.monthlyRent.toLocaleString()}`,
+      20,
+      yPosition
+    );
     yPosition += 7;
-    doc.text(`Security Deposit: $${lease.securityDeposit.toLocaleString()}`, 20, yPosition);
+    doc.text(
+      `Security Deposit: $${lease.securityDeposit.toLocaleString()}`,
+      20,
+      yPosition
+    );
     yPosition += 10;
 
     // Terms and Conditions
@@ -124,12 +142,20 @@ class DocumentService {
     doc.text('Tenant:', 20, yPosition);
     doc.line(20, yPosition + 15, 90, yPosition + 15);
     doc.text(lease.signatures.tenant.name, 20, yPosition + 20);
-    doc.text(`Date: ${new Date(lease.signatures.tenant.date).toLocaleDateString()}`, 20, yPosition + 27);
+    doc.text(
+      `Date: ${new Date(lease.signatures.tenant.date).toLocaleDateString()}`,
+      20,
+      yPosition + 27
+    );
 
     doc.text('Landlord:', 110, yPosition);
     doc.line(110, yPosition + 15, 180, yPosition + 15);
     doc.text(lease.signatures.landlord.name, 110, yPosition + 20);
-    doc.text(`Date: ${new Date(lease.signatures.landlord.date).toLocaleDateString()}`, 110, yPosition + 27);
+    doc.text(
+      `Date: ${new Date(lease.signatures.landlord.date).toLocaleDateString()}`,
+      110,
+      yPosition + 27
+    );
 
     // Save PDF
     doc.save(`Lease_Agreement_${lease.leaseId}.pdf`);
@@ -155,7 +181,11 @@ class DocumentService {
     yPosition += 10;
     doc.text(`Transaction ID: ${receipt.transactionId}`, 20, yPosition);
     yPosition += 10;
-    doc.text(`Date: ${new Date(receipt.date).toLocaleDateString()}`, 20, yPosition);
+    doc.text(
+      `Date: ${new Date(receipt.date).toLocaleDateString()}`,
+      20,
+      yPosition
+    );
     yPosition += 15;
 
     // Tenant Information
@@ -187,7 +217,9 @@ class DocumentService {
     // Thank you message
     doc.setFontSize(11);
     doc.setFont('helvetica', 'italic');
-    doc.text('Thank you for your payment!', 105, yPosition, { align: 'center' });
+    doc.text('Thank you for your payment!', 105, yPosition, {
+      align: 'center',
+    });
 
     // Save PDF
     doc.save(`Payment_Receipt_${receipt.id}.pdf`);
@@ -209,52 +241,105 @@ class DocumentService {
   /**
    * Generate property comparison report PDF
    */
-  async downloadComparisonReport(properties: PropertyComparison[]): Promise<void> {
+  async downloadComparisonReport(
+    properties: PropertyComparison[]
+  ): Promise<void> {
     const doc = new jsPDF('landscape');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 20;
+    const labelX = marginX;
+    const firstColX = 75; // properties start here; label column is labelX..firstColX
+    const lineHeight = 5;
+    // Fit every property column within the page; cap the width when there are few.
+    const colWidth = Math.min(
+      65,
+      (pageWidth - marginX - firstColX) / Math.max(properties.length, 1)
+    );
+
     let yPosition = 20;
 
     // Title
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
-    doc.text('PROPERTY COMPARISON REPORT', 148, yPosition, { align: 'center' });
+    doc.text('PROPERTY COMPARISON REPORT', pageWidth / 2, yPosition, {
+      align: 'center',
+    });
     yPosition += 15;
 
-    // Headers
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    const colWidth = 60;
-    doc.text('Feature', 20, yPosition);
-    properties.forEach((_, index) => {
-      doc.text(`Property ${index + 1}`, 80 + index * colWidth, yPosition);
-    });
-    yPosition += 7;
-
-    // Draw line
-    doc.line(20, yPosition, 280, yPosition);
-    yPosition += 5;
-
-    // Comparison data
-    doc.setFont('helvetica', 'normal');
-    const features: Array<{ key: keyof PropertyComparison; label: string; format?: (v: number | boolean | string) => string }> = [
-      { key: 'address', label: 'Address' },
-      { key: 'rent', label: 'Monthly Rent', format: (v) => `$${(v as number).toLocaleString()}` },
-      { key: 'bedrooms', label: 'Bedrooms' },
-      { key: 'bathrooms', label: 'Bathrooms' },
-      { key: 'sqft', label: 'Square Feet', format: (v) => `${(v as number).toLocaleString()} sqft` },
-      { key: 'available', label: 'Available', format: (v) => ((v as boolean) ? 'Yes' : 'No') },
-    ];
-
-    features.forEach((feature) => {
-      doc.text(feature.label, 20, yPosition);
-      properties.forEach((property, index) => {
-        const value = property[feature.key];
-        const displayValue = feature.format ? feature.format(value) : String(value);
-        doc.text(displayValue, 80 + index * colWidth, yPosition);
+    const drawHeader = () => {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Feature', labelX, yPosition);
+      properties.forEach((_, index) => {
+        doc.text(
+          `Property ${index + 1}`,
+          firstColX + index * colWidth,
+          yPosition
+        );
       });
       yPosition += 7;
+      doc.line(marginX, yPosition, pageWidth - marginX, yPosition);
+      yPosition += 5;
+      doc.setFont('helvetica', 'normal');
+    };
+    drawHeader();
+
+    // Every field shown on screen — array fields joined; long values wrap.
+    const features: Array<{
+      label: string;
+      value: (p: PropertyComparison) => string;
+    }> = [
+      { label: 'Address', value: (p) => p.address },
+      { label: 'Monthly Rent', value: (p) => `$${p.rent.toLocaleString()}` },
+      { label: 'Bedrooms', value: (p) => String(p.bedrooms) },
+      { label: 'Bathrooms', value: (p) => String(p.bathrooms) },
+      { label: 'Square Feet', value: (p) => `${p.sqft.toLocaleString()} sqft` },
+      { label: 'Available', value: (p) => (p.available ? 'Yes' : 'No') },
+      { label: 'Pet Friendly', value: (p) => (p.petFriendly ? 'Yes' : 'No') },
+      { label: 'Parking', value: (p) => p.parking },
+      { label: 'Utilities', value: (p) => p.utilities },
+      {
+        label: 'Amenities',
+        value: (p) => (p.amenities.length ? p.amenities.join(', ') : '—'),
+      },
+      {
+        label: 'Lease Terms',
+        value: (p) => (p.leaseTerms.length ? p.leaseTerms.join(', ') : '—'),
+      },
+    ];
+
+    doc.setFontSize(10);
+    features.forEach((feature) => {
+      const labelLines: string[] = doc.splitTextToSize(
+        feature.label,
+        firstColX - labelX - 4
+      );
+      const cells = properties.map(
+        (p) => doc.splitTextToSize(feature.value(p), colWidth - 4) as string[]
+      );
+      const maxLines = Math.max(
+        labelLines.length,
+        ...cells.map((lines) => lines.length)
+      );
+      const rowHeight = maxLines * lineHeight;
+
+      // Start a new page when the row wouldn't fit.
+      if (yPosition + rowHeight > pageHeight - 15) {
+        doc.addPage();
+        yPosition = 20;
+        drawHeader();
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.text(labelLines, labelX, yPosition);
+      doc.setFont('helvetica', 'normal');
+      cells.forEach((lines, index) => {
+        doc.text(lines, firstColX + index * colWidth, yPosition);
+      });
+      yPosition += rowHeight + 2;
     });
 
-    // Save PDF
     doc.save('Property_Comparison.pdf');
   }
 }
