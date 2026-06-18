@@ -1,20 +1,22 @@
 //! `Lease` contract events.
 //!
-//! `LeaseAgreementProlonged` is intentionally absent: the event carries only a
-//! `prolonged_at` timestamp, not the new end date, so the lease's `end_date`
-//! cannot be reconciled from the event alone (it needs a `get_lease_agreement_by_id`
-//! RPC read). It is added with the renewals track, where the new term lives.
-//! Until then it falls through as an unindexed event (stored raw, not failed).
+//! `LeaseAgreementProlonged` is indexed log-only: the event carries only a
+//! `prolonged_at` timestamp, not the new end date, so `leases.end_date` is not
+//! reconciled here (the new term lives in `LeaseAgreement` on-chain, readable
+//! only via `get_lease_agreement_by_id`). The handler marks the event handled
+//! and logs it; persisting the new term waits for a chain reader.
 
 pub mod equity_eligibility_granted;
 pub mod equity_eligibility_revoked;
 pub mod lease_agreement_created;
 pub mod lease_agreement_finished;
+pub mod lease_agreement_prolonged;
 
 pub use equity_eligibility_granted::EquityEligibilityGranted;
 pub use equity_eligibility_revoked::EquityEligibilityRevoked;
 pub use lease_agreement_created::LeaseAgreementCreated;
 pub use lease_agreement_finished::LeaseAgreementFinished;
+pub use lease_agreement_prolonged::LeaseAgreementProlonged;
 
 use core::str::FromStr;
 
@@ -27,6 +29,7 @@ use crate::{
 pub static CES_SCHEMAS: &[EventSchema] = &[
     <LeaseAgreementCreated as CesEvent>::SCHEMA,
     <LeaseAgreementFinished as CesEvent>::SCHEMA,
+    <LeaseAgreementProlonged as CesEvent>::SCHEMA,
     <EquityEligibilityGranted as CesEvent>::SCHEMA,
     <EquityEligibilityRevoked as CesEvent>::SCHEMA,
 ];
@@ -38,6 +41,8 @@ pub enum LeaseEventType {
     LeaseAgreementCreated,
     /// Emitted when a lease agreement is finalised via `finalize_lease_agreement`.
     LeaseAgreementFinished,
+    /// Emitted when a lease term is extended via `prolong_lease_agreement`.
+    LeaseAgreementProlonged,
     /// Emitted when a lease-to-own agreement grants the tenant equity eligibility.
     EquityEligibilityGranted,
     /// Emitted when a finalised lease-to-own agreement revokes equity eligibility.
@@ -52,6 +57,7 @@ impl LeaseEventType {
         match self {
             Self::LeaseAgreementCreated => "LeaseAgreementCreated",
             Self::LeaseAgreementFinished => "LeaseAgreementFinished",
+            Self::LeaseAgreementProlonged => "LeaseAgreementProlonged",
             Self::EquityEligibilityGranted => "EquityEligibilityGranted",
             Self::EquityEligibilityRevoked => "EquityEligibilityRevoked",
         }
@@ -66,6 +72,7 @@ impl FromStr for LeaseEventType {
         match s {
             "LeaseAgreementCreated" => Ok(Self::LeaseAgreementCreated),
             "LeaseAgreementFinished" => Ok(Self::LeaseAgreementFinished),
+            "LeaseAgreementProlonged" => Ok(Self::LeaseAgreementProlonged),
             "EquityEligibilityGranted" => Ok(Self::EquityEligibilityGranted),
             "EquityEligibilityRevoked" => Ok(Self::EquityEligibilityRevoked),
             _ => Err(IndexerError::InvalidEventName(s.to_owned())),

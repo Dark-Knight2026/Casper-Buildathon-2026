@@ -177,6 +177,7 @@ impl EventRegistry {
             EventType::UserRegistry(UserRegistryEventType::UserCreated) => user_registry::UserCreated,
             EventType::Lease(LeaseEventType::LeaseAgreementCreated) => lease::LeaseAgreementCreated,
             EventType::Lease(LeaseEventType::LeaseAgreementFinished) => lease::LeaseAgreementFinished,
+            EventType::Lease(LeaseEventType::LeaseAgreementProlonged) => lease::LeaseAgreementProlonged,
             EventType::Lease(LeaseEventType::EquityEligibilityGranted) => lease::EquityEligibilityGranted,
             EventType::Lease(LeaseEventType::EquityEligibilityRevoked) => lease::EquityEligibilityRevoked,
         )
