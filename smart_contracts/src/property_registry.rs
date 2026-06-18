@@ -75,6 +75,7 @@ pub mod events {
         pub property_id: U256,
         pub issuer: U256,
         pub total_supply: U256,
+        pub metadata_uri: String,
     }
 
     #[odra::event]
@@ -328,6 +329,7 @@ impl PropertyRegistry {
         let property_id = self.properties_count.next_value();
         let issuer = params.issuer;
         let total_supply = params.total_supply;
+        let metadata_uri = params.metadata_uri;
 
         self.properties.set(
             &property_id,
@@ -335,7 +337,7 @@ impl PropertyRegistry {
                 issuer,
                 token: None,
                 total_supply,
-                metadata_uri: params.metadata_uri,
+                metadata_uri: metadata_uri.clone(),
                 status: PropertyStatus::Draft,
             },
         );
@@ -344,6 +346,7 @@ impl PropertyRegistry {
             property_id,
             issuer,
             total_supply,
+            metadata_uri,
         });
 
         property_id
