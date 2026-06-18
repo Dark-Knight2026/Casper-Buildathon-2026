@@ -3,7 +3,12 @@
  * Provides robust API communication with automatic retries, timeout handling, and error recovery
  */
 
-import { retryAsync, getUserFriendlyError, isNetworkError, isAuthError } from './validation';
+import {
+  retryAsync,
+  getUserFriendlyError,
+  isNetworkError,
+  isAuthError,
+} from './validation';
 import { parseProfileApiErrorBody } from './api-errors';
 import { logger } from '@/utils/logger';
 
@@ -62,7 +67,7 @@ export class ApiError extends Error {
     message: string,
     public statusCode?: number,
     public originalError?: unknown,
-    code?: string,
+    code?: string
   ) {
     super(message);
     this.name = 'ApiError';
@@ -79,7 +84,7 @@ export class ApiError extends Error {
  */
 function buildRequestBody(
   data: unknown,
-  callerHeaders: HeadersInit | undefined,
+  callerHeaders: HeadersInit | undefined
 ): { body: BodyInit | undefined; headers: HeadersInit } {
   if (data === undefined || data === null) {
     return { body: undefined, headers: { ...(callerHeaders ?? {}) } };
@@ -137,7 +142,9 @@ export class ApiClient {
     const timeout = options.timeout || this.timeout;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
-    const signals = [controller.signal, options.signal].filter(Boolean) as AbortSignal[];
+    const signals = [controller.signal, options.signal].filter(
+      Boolean
+    ) as AbortSignal[];
     const combinedSignal =
       signals.length === 1
         ? signals[0]
@@ -215,6 +222,14 @@ export class ApiClient {
       // user-facing copy.
       const rawBody = await response.text().catch(() => '');
       const envelope = parseProfileApiErrorBody(rawBody);
+      // A non-empty body that doesn't match the `{ error }` contract signals
+      // backend schema drift. Log the fact + status only (never the raw body —
+      // see above) so it surfaces in dev/staging instead of silently coarsening.
+      if (rawBody && !envelope) {
+        logger.warn('Unexpected API error envelope shape', {
+          status: response.status,
+        });
+      }
       const code = envelope?.error;
       const message = envelope?.error ?? defaultStatusMessage(response.status);
       throw new ApiError(message, response.status, undefined, code);
@@ -255,7 +270,12 @@ export class ApiClient {
           return await request();
         }
         if (this.onAuthError && !options.skipAuthError) this.onAuthError();
-      } else if (err instanceof ApiError && err.statusCode === 401 && this.onAuthError && !options.skipAuthError) {
+      } else if (
+        err instanceof ApiError &&
+        err.statusCode === 401 &&
+        this.onAuthError &&
+        !options.skipAuthError
+      ) {
         this.onAuthError();
       }
       throw err;
@@ -289,7 +309,9 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for GET ${url}:`, { error: error.message });
+          logger.warn(`Retry attempt ${attempt} for GET ${url}:`, {
+            error: error.message,
+          });
         },
       });
     }
@@ -300,7 +322,11 @@ export class ApiClient {
   /**
    * Make POST request
    */
-  async post<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
+  async post<T>(
+    url: string,
+    data?: unknown,
+    options: RequestOptions = {}
+  ): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
     // POST is non-idempotent: retry only when explicitly requested to avoid duplicate mutations.
     const shouldRetry = options.retry === true;
@@ -325,7 +351,9 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for POST ${url}:`, { error: error.message });
+          logger.warn(`Retry attempt ${attempt} for POST ${url}:`, {
+            error: error.message,
+          });
         },
       });
     }
@@ -336,7 +364,11 @@ export class ApiClient {
   /**
    * Make PUT request
    */
-  async put<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
+  async put<T>(
+    url: string,
+    data?: unknown,
+    options: RequestOptions = {}
+  ): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
     // PUT mutates state: retry only when explicitly requested to avoid unintended repeated writes.
     const shouldRetry = options.retry === true;
@@ -361,7 +393,9 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for PUT ${url}:`, { error: error.message });
+          logger.warn(`Retry attempt ${attempt} for PUT ${url}:`, {
+            error: error.message,
+          });
         },
       });
     }
@@ -373,7 +407,11 @@ export class ApiClient {
    * Make PATCH request. Same shape as PUT — partial updates default to no
    * retry so a transient error does not double-apply a delta.
    */
-  async patch<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
+  async patch<T>(
+    url: string,
+    data?: unknown,
+    options: RequestOptions = {}
+  ): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
     const shouldRetry = options.retry === true;
     const maxRetries = options.maxRetries || this.maxRetries;
@@ -397,7 +435,9 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for PATCH ${url}:`, { error: error.message });
+          logger.warn(`Retry attempt ${attempt} for PATCH ${url}:`, {
+            error: error.message,
+          });
         },
       });
     }
@@ -435,7 +475,9 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for DELETE ${url}:`, { error: error.message });
+          logger.warn(`Retry attempt ${attempt} for DELETE ${url}:`, {
+            error: error.message,
+          });
         },
       });
     }

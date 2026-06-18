@@ -253,9 +253,14 @@ export default function ApplicationForm() {
     }
 
     setLoading(true);
+    // Editing a draft is two calls (PATCH the draft, then POST to submit). Track
+    // the PATCH so a submit-only failure can reassure the user their edits were
+    // saved rather than implying everything was lost.
+    let draftPatched = false;
     try {
       if (draftId) {
         await updateDraftApplication(draftId, buildBody(true));
+        draftPatched = true;
         if (!asDraft) await submitDraftApplication(draftId);
       } else {
         await submitApplication(listingId, buildBody(asDraft));
@@ -274,14 +279,26 @@ export default function ApplicationForm() {
       // Surface the backend's actual message (e.g. validation / already-applied
       // / listing-not-active) in a toast rather than a silent inline alert.
       const message = ApiClient.handleError(err);
-      setError(message);
-      toast({
-        title: asDraft
-          ? 'Could not save draft'
-          : 'Could not submit application',
-        description: message,
-        variant: 'destructive',
-      });
+      if (draftPatched && !asDraft) {
+        // PATCH succeeded, only the submit step failed — the edits are safe.
+        setError(
+          'Your changes were saved as a draft, but submission failed. You can retry from My Applications.'
+        );
+        toast({
+          title: 'Submission failed — draft saved',
+          description: message,
+          variant: 'destructive',
+        });
+      } else {
+        setError(message);
+        toast({
+          title: asDraft
+            ? 'Could not save draft'
+            : 'Could not submit application',
+          description: message,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
     }
