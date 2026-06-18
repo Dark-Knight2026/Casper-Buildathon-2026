@@ -99,10 +99,14 @@ async fn property_created_tokenizes_matching_property(pool: PgPool) {
     .await
     .unwrap();
 
-    let (is_tokenized, nft_token_id, has_tokenized_at) =
-        sqlx::query_as::<_, (bool, Option<String>, bool)>(
+    let (is_tokenized, nft_token_id, onchain_property_id, has_tokenized_at) =
+        sqlx::query_as::<_, (bool, Option<String>, Option<String>, bool)>(
             r"
-                SELECT is_tokenized, nft_token_id, tokenized_at IS NOT NULL
+                SELECT
+                    is_tokenized,
+                    nft_token_id,
+                    onchain_property_id::text,
+                    tokenized_at IS NOT NULL
                 FROM properties
                 WHERE metadata_uri = $1
             ",
@@ -114,6 +118,7 @@ async fn property_created_tokenizes_matching_property(pool: PgPool) {
 
     assert!(is_tokenized, "property must be marked tokenized");
     assert_eq!(nft_token_id.as_deref(), Some("42"));
+    assert_eq!(onchain_property_id.as_deref(), Some("42"));
     assert!(has_tokenized_at, "tokenized_at must be stamped");
 }
 

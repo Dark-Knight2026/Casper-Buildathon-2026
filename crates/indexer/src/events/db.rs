@@ -1207,8 +1207,13 @@ pub async fn set_user_onchain_id(
 /// and the frontend passed verbatim into `create_property`, the one key shared
 /// by both sides (the event carries no backend id). Idempotent: the
 /// `is_tokenized = FALSE` guard makes a re-processed event (or a concurrent
-/// writer) a no-op, and writing `nft_token_id` alongside the flag satisfies the
-/// `tokenization_consistency` CHECK.
+/// writer) a no-op.
+///
+/// Writes the contract id to two columns: `onchain_property_id` (NUMERIC) is the
+/// public field the API returns, mirroring `users.onchain_user_id`; `nft_token_id`
+/// keeps the legacy tokenization flag consistent (the `tokenization_consistency`
+/// CHECK requires it set whenever `is_tokenized` is TRUE). The `$2::TEXT::NUMERIC`
+/// cast binds the U256 decimal string straight into the NUMERIC column.
 ///
 /// Returns `true` when a row was updated, `false` when no live, untokenized
 /// property carries that `metadata_uri` (backend state has not caught up, or it
@@ -1227,6 +1232,7 @@ pub async fn set_property_tokenized(
         r"
             UPDATE properties
             SET nft_token_id = $2,
+                onchain_property_id = $2::TEXT::NUMERIC,
                 is_tokenized = TRUE,
                 tokenized_at = NOW()
             WHERE metadata_uri = $1
