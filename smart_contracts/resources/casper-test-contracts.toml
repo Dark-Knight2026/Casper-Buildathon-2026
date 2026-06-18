@@ -53,4 +53,4 @@ package_hash = "hash-29cd2d0ae790bed5feca98b5f0b725f8a8dda423726bcfbd06b81278e91
 [[contracts]]
 name = "PropertyRegistry"
 package_name = "PropertyRegistry"
-package_hash = "hash-6f78c4bb92cf0e9f1bc949539eeb09389df9521a11c493992accd862194cc4ab"
+package_hash = "hash-661269fb3c7b6e0934a3350a0aad5633dd80f902cb59e7612337ee09620098ca"
