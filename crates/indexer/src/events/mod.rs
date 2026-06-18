@@ -8,6 +8,7 @@ pub mod cep18;
 pub mod db;
 pub mod ico;
 pub mod lease;
+pub mod property_registry;
 pub mod staking;
 pub mod user_registry;
 pub mod vesting;
@@ -19,7 +20,8 @@ use crate::{
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
     events::{
-        cep18::Cep18EventType, ico::IcoEventType, lease::LeaseEventType, staking::StakingEventType,
+        cep18::Cep18EventType, ico::IcoEventType, lease::LeaseEventType,
+        property_registry::PropertyRegistryEventType, staking::StakingEventType,
         user_registry::UserRegistryEventType, vesting::VestingEventType,
     },
 };
@@ -40,6 +42,8 @@ pub enum EventType {
     UserRegistry(UserRegistryEventType),
     /// An event emitted by the `Lease` contract.
     Lease(LeaseEventType),
+    /// An event emitted by the `PropertyRegistry` contract.
+    PropertyRegistry(PropertyRegistryEventType),
 }
 
 impl EventType {
@@ -85,6 +89,10 @@ impl EventType {
             ContractType::Lease => event_name
                 .parse::<LeaseEventType>()
                 .map(Self::Lease)
+                .map_err(|_| unknown()),
+            ContractType::PropertyRegistry => event_name
+                .parse::<PropertyRegistryEventType>()
+                .map(Self::PropertyRegistry)
                 .map_err(|_| unknown()),
 
             _ => Err(unknown()),
@@ -175,6 +183,7 @@ impl EventRegistry {
             EventType::Staking(StakingEventType::RewardsClaimed) => staking::RewardsClaimed,
             EventType::Staking(StakingEventType::StakerSnapshot) => staking::StakerSnapshot,
             EventType::UserRegistry(UserRegistryEventType::UserCreated) => user_registry::UserCreated,
+            EventType::PropertyRegistry(PropertyRegistryEventType::PropertyCreated) => property_registry::PropertyCreated,
             EventType::Lease(LeaseEventType::LeaseAgreementCreated) => lease::LeaseAgreementCreated,
             EventType::Lease(LeaseEventType::LeaseAgreementFinished) => lease::LeaseAgreementFinished,
             EventType::Lease(LeaseEventType::LeaseAgreementProlonged) => lease::LeaseAgreementProlonged,

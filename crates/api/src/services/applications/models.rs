@@ -8,17 +8,25 @@ use core::str::FromStr;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use strum::{Display, EnumString};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult},
+    common::{ApiError, ApiResult, Pagination},
     services::{
-        applications::db::{ApplicationRow, NewApplication},
+        applications::db::{
+            ApplicationNoteRow, ApplicationRow, BackgroundCheckRow, LandlordApplicationFilter,
+            NewApplication,
+        },
         listings::models::Listing,
     },
 };
+// The check-type/status vocabulary is owned by the provider port but is part of
+// the wire contract, so re-export it here as the application models' own - this
+// keeps the OpenAPI schema registry uniformly `models::`-sourced.
+pub use crate::providers::background_check::{BackgroundCheckStatus, BackgroundCheckType};
 
 /// Lifecycle status of an application. Stored as TEXT (CHECK) in the DB; parsed
 /// into this enum at the model boundary.
@@ -28,12 +36,39 @@ use crate::{
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum ApplicationStatus {
-    /// Awaiting landlord review.
+    /// Being filled in by the applicant, before submission.
+    Draft,
+    /// Submitted, awaiting landlord review.
     Pending,
+    /// The landlord is actively reviewing.
+    UnderReview,
+    /// Conditionally approved, pending stated conditions.
+    Conditional,
     /// Approved by the landlord.
     Approved,
     /// Rejected by the landlord.
     Rejected,
+}
+
+impl ApplicationStatus {
+    /// Whether a landlord review may move an application from `self` to `target`.
+    ///
+    /// The open review states - `pending`, `under_review`, `conditional` - may
+    /// advance to `under_review`, `conditional`, `approved` or `rejected`.
+    /// `draft` is pre-review and `approved`/`rejected` are terminal, so neither
+    /// is a valid source; `draft`/`pending` are never review targets (a review
+    /// decides, it does not unsubmit). Returning to `pending` is the separate
+    /// request-info action, not a review.
+    #[inline]
+    #[must_use]
+    pub fn can_review_to(self, target: Self) -> bool {
+        let open_source = matches!(self, Self::Pending | Self::UnderReview | Self::Conditional);
+        let review_target = matches!(
+            target,
+            Self::UnderReview | Self::Conditional | Self::Approved | Self::Rejected
+        );
+        open_source && review_target
+    }
 }
 
 /// A rental application as returned on the wire.
@@ -192,9 +227,14 @@ pub struct SubmitApplicationRequest {
     /// Whether the applicant consents to a background check.
     #[serde(default)]
     pub background_check_consent: bool,
+    /// Create as an editable draft instead of submitting immediately.
+    #[serde(default)]
+    pub as_draft: bool,
 }
 
-impl SubmitApplicationRequest {
+impl TryFrom<SubmitApplicationRequest> for NewApplication {
+    type Error = ApiError;
+
     /// Validates the payload and maps it into a [`NewApplication`].
     ///
     /// # Errors
@@ -203,23 +243,23 @@ impl SubmitApplicationRequest {
     /// email is obviously malformed, or `monthlyIncome` is not a positive
     /// finite number.
     #[inline]
-    pub fn into_validated(self) -> ApiResult<NewApplication> {
-        let full_name = required("fullName", &self.full_name)?;
-        let email = required("email", &self.email)?;
+    fn try_from(request: SubmitApplicationRequest) -> ApiResult<Self> {
+        let full_name = required("fullName", &request.full_name)?;
+        let email = required("email", &request.email)?;
         if !email.contains('@') {
             return Err(ApiError::BadRequest("email is invalid".to_owned()));
         }
-        let phone = required("phone", &self.phone)?;
-        let current_address = required("currentAddress", &self.current_address)?;
-        let current_city = required("currentCity", &self.current_city)?;
-        let current_state = required("currentState", &self.current_state)?;
-        let current_zip = required("currentZip", &self.current_zip)?;
-        let employer = required("employer", &self.employer)?;
-        let job_title = required("jobTitle", &self.job_title)?;
-        let employment_length = required("employmentLength", &self.employment_length)?;
-        let reference1_name = required("reference1Name", &self.reference1_name)?;
-        let reference1_phone = required("reference1Phone", &self.reference1_phone)?;
-        if !self.monthly_income.is_finite() || self.monthly_income <= 0.0 {
+        let phone = required("phone", &request.phone)?;
+        let current_address = required("currentAddress", &request.current_address)?;
+        let current_city = required("currentCity", &request.current_city)?;
+        let current_state = required("currentState", &request.current_state)?;
+        let current_zip = required("currentZip", &request.current_zip)?;
+        let employer = required("employer", &request.employer)?;
+        let job_title = required("jobTitle", &request.job_title)?;
+        let employment_length = required("employmentLength", &request.employment_length)?;
+        let reference1_name = required("reference1Name", &request.reference1_name)?;
+        let reference1_phone = required("reference1Phone", &request.reference1_phone)?;
+        if !request.monthly_income.is_finite() || request.monthly_income <= 0.0 {
             return Err(ApiError::BadRequest(
                 "monthlyIncome must be a positive number".to_owned(),
             ));
@@ -229,24 +269,24 @@ impl SubmitApplicationRequest {
             full_name,
             email,
             phone,
-            date_of_birth: self.date_of_birth,
+            date_of_birth: request.date_of_birth,
             current_address,
             current_city,
             current_state,
             current_zip,
-            move_in_date: self.move_in_date,
+            move_in_date: request.move_in_date,
             employer,
             job_title,
             employment_length,
-            monthly_income: self.monthly_income,
+            monthly_income: request.monthly_income,
             reference1_name,
             reference1_phone,
-            reference2_name: optional(self.reference2_name),
-            reference2_phone: optional(self.reference2_phone),
-            pets: self.pets,
-            pet_description: optional(self.pet_description),
-            additional_info: optional(self.additional_info),
-            background_check_consent: self.background_check_consent,
+            reference2_name: optional(request.reference2_name),
+            reference2_phone: optional(request.reference2_phone),
+            pets: request.pets,
+            pet_description: optional(request.pet_description),
+            additional_info: optional(request.additional_info),
+            background_check_consent: request.background_check_consent,
         })
     }
 }
@@ -255,26 +295,227 @@ impl SubmitApplicationRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewApplicationRequest {
-    /// Decision: `approved` or `rejected` (`pending` is not a valid target).
+    /// Review target: `under_review`, `conditional`, `approved` or `rejected`.
     pub status: ApplicationStatus,
 }
 
-impl ReviewApplicationRequest {
-    /// Validates that the requested status is a terminal review decision.
+impl TryFrom<ReviewApplicationRequest> for ApplicationStatus {
+    type Error = ApiError;
+
+    /// Validates that the requested status is a reachable review target.
     ///
     /// # Errors
     ///
-    /// Returns [`ApiError::BadRequest`] when the target is `pending` (a review
-    /// can only approve or reject).
+    /// Returns [`ApiError::BadRequest`] for `draft`/`pending`, which a review
+    /// cannot set. Whether the target is reachable from the application's
+    /// current state is checked against that state in the db layer.
     #[inline]
-    pub fn into_validated(self) -> ApiResult<ApplicationStatus> {
-        if self.status == ApplicationStatus::Pending {
+    fn try_from(request: ReviewApplicationRequest) -> ApiResult<Self> {
+        match request.status {
+            ApplicationStatus::Draft | ApplicationStatus::Pending => Err(ApiError::BadRequest(
+                "status must be 'under_review', 'conditional', 'approved' or 'rejected'".to_owned(),
+            )),
+            target => Ok(target),
+        }
+    }
+}
+
+/// Landlord cross-listing application search (`GET /applications/landlord`).
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct LandlordApplicationParams {
+    /// Filter by review status.
+    pub status: Option<ApplicationStatus>,
+    /// ILIKE over applicant name + email.
+    pub search: Option<String>,
+    /// Restrict to applications on one listing.
+    #[param(value_type = Uuid)]
+    pub listing_id: Option<Uuid>,
+    /// Submitted on/after this date, inclusive (`YYYY-MM-DD`).
+    pub date_from: Option<NaiveDate>,
+    /// Submitted on/before this date, inclusive (`YYYY-MM-DD`).
+    pub date_to: Option<NaiveDate>,
+}
+
+impl LandlordApplicationParams {
+    /// Validates the filters and resolves them into a
+    /// [`LandlordApplicationFilter`], folding in the page window.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when `dateFrom` is after `dateTo`.
+    #[inline]
+    pub fn into_validated(self, pagination: &Pagination) -> ApiResult<LandlordApplicationFilter> {
+        if let (Some(from), Some(to)) = (self.date_from, self.date_to)
+            && from > to
+        {
             return Err(ApiError::BadRequest(
-                "status must be 'approved' or 'rejected'".to_owned(),
+                "dateFrom must not be after dateTo".to_owned(),
             ));
         }
-        Ok(self.status)
+        Ok(LandlordApplicationFilter {
+            status: self.status,
+            search: self.search.filter(|term| !term.trim().is_empty()),
+            listing_id: self.listing_id,
+            date_from: self.date_from,
+            date_to: self.date_to,
+            limit: pagination.page_size(),
+            offset: pagination.offset(),
+        })
     }
+}
+
+/// A private landlord note on an application, as returned on the wire.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationNote {
+    /// Note id.
+    #[schema(value_type = Uuid)]
+    pub id: Uuid,
+    /// Application the note annotates.
+    #[schema(value_type = Uuid)]
+    pub application_id: Uuid,
+    /// Author (reviewing landlord) user id.
+    #[schema(value_type = Uuid)]
+    pub author_id: Uuid,
+    /// Note text.
+    pub body: String,
+    /// Creation timestamp.
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<ApplicationNoteRow> for ApplicationNote {
+    /// Builds the wire shape from a stored row.
+    #[inline]
+    fn from(row: ApplicationNoteRow) -> Self {
+        Self {
+            id: row.id,
+            application_id: row.application_id,
+            author_id: row.author_id,
+            body: row.body,
+            created_at: row.created_at,
+        }
+    }
+}
+
+/// Add-a-note payload (`POST /applications/{id}/notes`).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddNoteRequest {
+    /// Note text.
+    pub body: String,
+}
+
+impl TryFrom<AddNoteRequest> for String {
+    type Error = ApiError;
+
+    /// Validates and trims the note body into a stored note body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the body is blank.
+    #[inline]
+    fn try_from(request: AddNoteRequest) -> ApiResult<Self> {
+        let body = request.body.trim();
+        if body.is_empty() {
+            return Err(ApiError::BadRequest("note body cannot be empty".to_owned()));
+        }
+        Ok(body.to_owned())
+    }
+}
+
+/// A background check on an application, as returned on the wire.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundCheck {
+    /// Check id.
+    #[schema(value_type = Uuid)]
+    pub id: Uuid,
+    /// Application the check ran against.
+    #[schema(value_type = Uuid)]
+    pub application_id: Uuid,
+    /// Requesting landlord user id.
+    #[schema(value_type = Uuid)]
+    pub requested_by: Uuid,
+    /// Check type.
+    pub check_type: BackgroundCheckType,
+    /// Lifecycle status.
+    pub status: BackgroundCheckStatus,
+    /// Bureau report, absent until resolved.
+    #[schema(value_type = Option<Object>)]
+    pub result: Option<Value>,
+    /// Bureau-side reference, when available.
+    pub reference: Option<String>,
+    /// Request timestamp.
+    pub created_at: DateTime<Utc>,
+    /// Resolution timestamp, absent while pending.
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+impl From<BackgroundCheckRow> for BackgroundCheck {
+    /// Builds the wire shape from a stored row, parsing the TEXT enums.
+    #[inline]
+    fn from(row: BackgroundCheckRow) -> Self {
+        Self {
+            id: row.id,
+            application_id: row.application_id,
+            requested_by: row.requested_by,
+            check_type: BackgroundCheckType::from_str(&row.check_type)
+                .unwrap_or(BackgroundCheckType::Credit),
+            status: BackgroundCheckStatus::from_str(&row.status)
+                .unwrap_or(BackgroundCheckStatus::Pending),
+            result: row.result.map(|json| json.0),
+            reference: row.reference,
+            created_at: row.created_at,
+            completed_at: row.completed_at,
+        }
+    }
+}
+
+/// Request-a-check payload (`POST /applications/{id}/background-checks`).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestBackgroundCheckRequest {
+    /// Which check to run.
+    pub check_type: BackgroundCheckType,
+}
+
+/// One weighted factor in an applicant's score.
+#[derive(Debug, Clone, Copy, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScoreFactorKind {
+    /// Monthly income relative to rent.
+    Income,
+    /// Credit background check.
+    Credit,
+    /// Length of employment.
+    Employment,
+    /// Supplied references.
+    References,
+    /// Criminal/eviction background checks.
+    Background,
+}
+
+/// A single factor's contribution to an applicant's score.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoreFactor {
+    /// Which factor this is.
+    pub factor: ScoreFactorKind,
+    /// The factor's maximum contribution.
+    pub weight: i32,
+    /// Points awarded, `0..=weight`.
+    pub score: i32,
+}
+
+/// A computed applicant score with its weighted breakdown (out of 100).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationScore {
+    /// Total score, `0..=100`.
+    pub total: i32,
+    /// Per-factor contributions, summing to `total`.
+    pub breakdown: Vec<ScoreFactor>,
 }
 
 /// Trims a required free-text field, rejecting a blank value.

@@ -46,13 +46,15 @@ pub use common::{
 pub use openapi::ApiDoc;
 #[cfg(feature = "enabled")]
 pub use providers::{
-    ContentPinner, EmailError, EmailMessage, EmailSender, FairHousingError, FairHousingScreen,
-    FakeKycProvider, FakeLeaseChainReader, FakePinner, KycError, KycOutcome, KycProvider,
-    LeaseChainError, LeaseChainReader, LeaseChainResult, LeaseDocumentData, LeaseDocumentError,
+    BackgroundCheckError, BackgroundCheckProvider, BackgroundCheckStatus, BackgroundCheckType,
+    CheckOutcome, CheckSubject, ContentPinner, EmailError, EmailMessage, EmailSender,
+    FairHousingError, FairHousingScreen, FakeBackgroundCheckProvider, FakeKycProvider,
+    FakeLeaseChainReader, FakePinner, KycError, KycOutcome, KycProvider, LeaseChainError,
+    LeaseChainReader, LeaseChainResult, LeaseDocumentData, LeaseDocumentError,
     LeaseDocumentRenderer, LeaseDocumentResult, LoggingEmailSender, MediaStorage, MetadataStripper,
     NoopMetadataStripper, OnchainLeaseAgreement, PinError, PostmarkSender, S3MediaStorage,
-    ScreenOutcome, SharedContentPinner, SharedFairHousingScreen, SharedKycProvider,
-    SharedLeaseChainReader, SharedLeaseDocumentRenderer, SharedMediaStorage,
+    ScreenOutcome, SharedBackgroundCheckProvider, SharedContentPinner, SharedFairHousingScreen,
+    SharedKycProvider, SharedLeaseChainReader, SharedLeaseDocumentRenderer, SharedMediaStorage,
     SharedMetadataStripper, SimpleLeaseDocumentRenderer, StubFairHousingScreen, StubMediaStorage,
 };
 #[cfg(feature = "enabled")]

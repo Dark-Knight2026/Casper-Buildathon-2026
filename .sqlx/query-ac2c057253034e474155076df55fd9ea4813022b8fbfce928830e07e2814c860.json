@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, normalized_address, parcel_id, address_line1, address_line2,\n                city, state, zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type, bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet, year_built, parking_features,\n                created_at AS \"created_at!\", updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = ANY($1) AND deleted_at IS NULL\n        ",
+  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE deleted_at IS NULL\n              AND ($3::float8 IS NULL OR ST_DWithin(\n                    geog,\n                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,\n                    $3::float8 * 1609.34\n                  ))\n              AND ($4::float8 IS NULL OR ST_Intersects(\n                    geog,\n                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography\n                  ))\n            ORDER BY\n                CASE\n                    WHEN $1::float8 IS NOT NULL AND $2::float8 IS NOT NULL\n                    THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography)\n                    ELSE NULL\n                END ASC NULLS LAST,\n                created_at DESC\n            LIMIT $8 OFFSET $9\n        ",
   "describe": {
     "columns": [
       {
@@ -166,6 +166,23 @@
       },
       {
         "ordinal": 16,
+        "name": "metadata_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "metadata_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "onchain_property_id?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -176,7 +193,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 19,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -189,7 +206,15 @@
     ],
     "parameters": {
       "Left": [
-        "UuidArray"
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -210,8 +235,10 @@
       true,
       true,
       true,
+      null,
+      true,
       true
     ]
   },
-  "hash": "e9d65e038bc203559db94b10b92c6432f3b9e8637933386aa39f01956e354810"
+  "hash": "ac2c057253034e474155076df55fd9ea4813022b8fbfce928830e07e2814c860"
 }

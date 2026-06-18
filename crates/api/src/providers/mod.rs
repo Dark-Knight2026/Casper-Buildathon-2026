@@ -21,12 +21,16 @@
 //!   (`LeaseChainReader`, `FakeLeaseChainReader`).
 //! - [`lease_document`] - lease-document rendering
 //!   (`LeaseDocumentRenderer`, `SimpleLeaseDocumentRenderer`).
+//! - [`background_check`] - tenant screening (`BackgroundCheckProvider`,
+//!   `FakeBackgroundCheckProvider`).
 //!
 //! New external-service adapters (SMS, payment processors) belong
 //! here, not in [`common`](crate::common): `common` is reserved for
 //! passive shared types (config, errors, models) that have no
 //! trait-and-implementation shape.
 
+/// Tenant background-check abstraction.
+pub mod background_check;
 /// Content-pinning (IPFS) abstraction.
 pub mod content_pinner;
 /// Email-sending abstraction.
@@ -44,6 +48,11 @@ pub mod metadata_stripper;
 /// Media-storage abstraction.
 pub mod storage;
 
+pub use background_check::{
+    BackgroundCheckError, BackgroundCheckProvider, BackgroundCheckResult, BackgroundCheckStatus,
+    BackgroundCheckType, CheckOutcome, CheckSubject, FakeBackgroundCheckProvider,
+    SharedBackgroundCheckProvider,
+};
 pub use content_pinner::{ContentPinner, FakePinner, PinError, PinResult, SharedContentPinner};
 pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender, PostmarkSender};
 pub use fair_housing::{

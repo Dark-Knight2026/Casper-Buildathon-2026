@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
+  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -166,6 +166,23 @@
       },
       {
         "ordinal": 16,
+        "name": "metadata_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "metadata_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "onchain_property_id?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -176,7 +193,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 19,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -210,8 +227,10 @@
       true,
       true,
       true,
+      null,
+      true,
       true
     ]
   },
-  "hash": "3c93c3d0a5f05518edc56b518791e50713ac51ddddda7e1482a7a6a0867bf13f"
+  "hash": "24dfcbf6111ba8901b9f17bc22c5d7e35f71ec642c58ca63ab2a42f413c6e520"
 }

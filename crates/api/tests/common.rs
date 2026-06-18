@@ -43,9 +43,9 @@ use api::{
         VerificationLevel, tokens,
     },
     providers::{
-        EmailError, EmailMessage, EmailSender, FakeKycProvider, FakeLeaseChainReader, FakePinner,
-        KycOutcome, KycProvider, KycResult, NoopMetadataStripper, SharedMediaStorage,
-        SimpleLeaseDocumentRenderer, StubFairHousingScreen, StubMediaStorage,
+        EmailError, EmailMessage, EmailSender, FakeBackgroundCheckProvider, FakeKycProvider,
+        FakeLeaseChainReader, FakePinner, KycOutcome, KycProvider, KycResult, NoopMetadataStripper,
+        SharedMediaStorage, SimpleLeaseDocumentRenderer, StubFairHousingScreen, StubMediaStorage,
     },
     server,
 };
@@ -247,6 +247,7 @@ pub async fn setup_test_server_with(
         metadata_stripper: Arc::new(NoopMetadataStripper::new()),
         lease_chain_reader: Arc::new(FakeLeaseChainReader::new()),
         lease_document_renderer: Arc::new(SimpleLeaseDocumentRenderer::new()),
+        background_check: Arc::new(FakeBackgroundCheckProvider::new()),
         config,
     });
 

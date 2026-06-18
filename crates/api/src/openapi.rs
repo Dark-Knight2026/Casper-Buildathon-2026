@@ -41,6 +41,7 @@ use crate::{
             crate::common::UserRole,
             crate::common::UserStatus,
             crate::common::VerificationLevel,
+            crate::common::Pagination,
             // Auth models
             auth::models::ForgotPasswordRequest,
             auth::models::ForgotPasswordResponse,
@@ -125,6 +126,15 @@ use crate::{
             applications::models::RentalApplication,
             applications::models::SubmitApplicationRequest,
             applications::models::ReviewApplicationRequest,
+            applications::models::ApplicationNote,
+            applications::models::AddNoteRequest,
+            applications::models::BackgroundCheck,
+            applications::models::RequestBackgroundCheckRequest,
+            applications::models::BackgroundCheckType,
+            applications::models::BackgroundCheckStatus,
+            applications::models::ApplicationScore,
+            applications::models::ScoreFactor,
+            applications::models::ScoreFactorKind,
             // Viewings models
             viewings::models::Viewing,
             viewings::models::ViewingStatus,
@@ -141,8 +151,6 @@ use crate::{
             // Analytics models
             analytics::models::PropertyPerformanceRequest,
             analytics::models::PropertyPerformanceReport,
-            // Pagination
-            crate::common::Pagination,
             // Transaction models
             transactions::models::TransactionResponse,
             transactions::models::TxType,

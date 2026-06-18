@@ -1,0 +1,347 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE rental_applications\n            SET status = 'pending'\n            WHERE id = $1\n            RETURNING\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "listing_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "listing_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "landlord_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "landlord_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "full_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "full_name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "phone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "phone"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "date_of_birth",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "date_of_birth"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "current_address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "current_address"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "current_city",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "current_city"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "current_state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "current_state"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "current_zip",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "current_zip"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "move_in_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "move_in_date"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "employer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "employer"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "job_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "job_title"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "employment_length",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "employment_length"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "monthly_income!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 17,
+        "name": "reference1_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "reference1_name"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "reference1_phone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "reference1_phone"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "reference2_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "reference2_name"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "reference2_phone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "reference2_phone"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "pets",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "pets"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "pet_description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "pet_description"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "additional_info",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "additional_info"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "background_check_consent",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "background_check_consent"
+          }
+        }
+      },
+      {
+        "ordinal": 25,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 26,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 27,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f3f19cae3815f1f8a2b6b39739272771d786d95f89167f8ca88b97dc1bfe73b2"
+}

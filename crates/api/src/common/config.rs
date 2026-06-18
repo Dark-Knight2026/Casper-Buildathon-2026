@@ -11,8 +11,8 @@ use crate::{
     ServerError,
     common::RedisStore,
     providers::{
-        ContentPinner, EmailSender, FairHousingScreen, KycProvider, LeaseChainReader,
-        LeaseDocumentRenderer, MediaStorage, MetadataStripper,
+        BackgroundCheckProvider, ContentPinner, EmailSender, FairHousingScreen, KycProvider,
+        LeaseChainReader, LeaseDocumentRenderer, MediaStorage, MetadataStripper,
     },
 };
 
@@ -453,6 +453,10 @@ pub struct AppState {
     /// bootstrap can swap `SimpleLeaseDocumentRenderer` (hackathon) for a real
     /// templated-PDF renderer without touching call sites.
     pub lease_document_renderer: Arc<dyn LeaseDocumentRenderer>,
+    /// Tenant background-check provider for application screening. Boxed-trait
+    /// so the bootstrap can swap `FakeBackgroundCheckProvider` (hackathon) for
+    /// a real bureau (TransUnion/Checkr) without touching call sites.
+    pub background_check: Arc<dyn BackgroundCheckProvider>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -471,6 +475,7 @@ impl core::fmt::Debug for AppState {
             .field("metadata_stripper", &"MetadataStripper")
             .field("lease_chain_reader", &"LeaseChainReader")
             .field("lease_document_renderer", &"LeaseDocumentRenderer")
+            .field("background_check", &"BackgroundCheckProvider")
             .field("config", &self.config)
             .finish()
     }

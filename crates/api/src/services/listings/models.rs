@@ -595,25 +595,33 @@ pub struct RentLtrTerms {
     pub furnished: bool,
 }
 
-impl RentLtrTerms {
+impl TryFrom<RentLtrTerms> for Value {
+    type Error = ApiError;
+
     /// Validates the terms and serializes them to a JSONB value.
-    fn into_value(self) -> ApiResult<Value> {
-        if !self.rent_monthly.is_finite() || self.rent_monthly <= 0.0 {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when rent is non-positive, the deposit
+    /// is negative, or no lease term is offered.
+    #[inline]
+    fn try_from(terms: RentLtrTerms) -> ApiResult<Self> {
+        if !terms.rent_monthly.is_finite() || terms.rent_monthly <= 0.0 {
             return Err(ApiError::BadRequest(
                 "terms.rentMonthly must be a positive number".to_owned(),
             ));
         }
-        if !self.security_deposit.is_finite() || self.security_deposit < 0.0 {
+        if !terms.security_deposit.is_finite() || terms.security_deposit < 0.0 {
             return Err(ApiError::BadRequest(
                 "terms.securityDeposit must be a non-negative number".to_owned(),
             ));
         }
-        if self.lease_terms_offered.is_empty() {
+        if terms.lease_terms_offered.is_empty() {
             return Err(ApiError::BadRequest(
                 "terms.leaseTermsOffered must not be empty".to_owned(),
             ));
         }
-        serde_json::to_value(self)
+        serde_json::to_value(terms)
             .map_err(|_| ApiError::Internal("failed to serialize terms".to_owned()))
     }
 }
@@ -644,7 +652,9 @@ pub struct CreateListingRequest {
     pub terms: RentLtrTerms,
 }
 
-impl CreateListingRequest {
+impl TryFrom<CreateListingRequest> for NewListing {
+    type Error = ApiError;
+
     /// Validates and maps the payload into a [`NewListing`].
     ///
     /// # Errors
@@ -652,19 +662,19 @@ impl CreateListingRequest {
     /// Returns [`ApiError::BadRequest`] on empty title, over-long text, or
     /// invalid terms.
     #[inline]
-    pub fn into_validated(self) -> ApiResult<NewListing> {
-        let title = validate_title(&self.title)?;
-        let description = validate_description(&self.description.unwrap_or_default())?;
-        let terms = self.terms.into_value()?;
-        Ok(NewListing {
-            property_id: self.property_id,
+    fn try_from(request: CreateListingRequest) -> ApiResult<Self> {
+        let title = validate_title(&request.title)?;
+        let description = validate_description(&request.description.unwrap_or_default())?;
+        let terms = Value::try_from(request.terms)?;
+        Ok(Self {
+            property_id: request.property_id,
             title,
             description,
-            amenities: clean_list(self.amenities.unwrap_or_default()),
-            utilities_included: clean_list(self.utilities_included.unwrap_or_default()),
-            pet_policy: clean_optional(self.pet_policy),
-            available_date: self.available_date,
-            surrounding_area: self
+            amenities: clean_list(request.amenities.unwrap_or_default()),
+            utilities_included: clean_list(request.utilities_included.unwrap_or_default()),
+            pet_policy: clean_optional(request.pet_policy),
+            available_date: request.available_date,
+            surrounding_area: request
                 .surrounding_area
                 .unwrap_or_else(|| Value::Array(Vec::new())),
             terms,
@@ -695,7 +705,9 @@ pub struct UpdateListingRequest {
     pub terms: Option<RentLtrTerms>,
 }
 
-impl UpdateListingRequest {
+impl TryFrom<UpdateListingRequest> for ListingPatch {
+    type Error = ApiError;
+
     /// Validates and maps the payload into a [`ListingPatch`].
     ///
     /// # Errors
@@ -703,20 +715,20 @@ impl UpdateListingRequest {
     /// Returns [`ApiError::BadRequest`] on empty title, over-long text, or
     /// invalid terms.
     #[inline]
-    pub fn into_patch(self) -> ApiResult<ListingPatch> {
-        Ok(ListingPatch {
-            title: self.title.as_deref().map(validate_title).transpose()?,
-            description: self
+    fn try_from(request: UpdateListingRequest) -> ApiResult<Self> {
+        Ok(Self {
+            title: request.title.as_deref().map(validate_title).transpose()?,
+            description: request
                 .description
                 .as_deref()
                 .map(validate_description)
                 .transpose()?,
-            amenities: self.amenities.map(clean_list),
-            utilities_included: self.utilities_included.map(clean_list),
-            pet_policy: self.pet_policy.map(|policy| policy.trim().to_owned()),
-            available_date: self.available_date,
-            surrounding_area: self.surrounding_area,
-            terms: self.terms.map(RentLtrTerms::into_value).transpose()?,
+            amenities: request.amenities.map(clean_list),
+            utilities_included: request.utilities_included.map(clean_list),
+            pet_policy: request.pet_policy.map(|policy| policy.trim().to_owned()),
+            available_date: request.available_date,
+            surrounding_area: request.surrounding_area,
+            terms: request.terms.map(Value::try_from).transpose()?,
         })
     }
 }

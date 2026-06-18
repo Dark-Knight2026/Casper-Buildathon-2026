@@ -15,6 +15,7 @@ use crate::{
         auth::{LandlordRole, RoleUser},
         properties::{
             db::{self, PropertyUpdate},
+            metadata,
             models::{
                 CreatePropertyRequest, Property, PropertyListingSummary, PropertySearchParams,
                 UpdatePropertyRequest,
@@ -58,7 +59,10 @@ pub async fn create_property(
     Json(payload): Json<CreatePropertyRequest>,
 ) -> ApiResult<(StatusCode, Json<Property>)> {
     let new_property = payload.try_into()?;
-    let (row, was_inserted) = db::upsert_property(&state.db, user.0.sub, new_property).await?;
+    let (mut row, was_inserted) = db::upsert_property(&state.db, user.0.sub, new_property).await?;
+    let metadata_uri = metadata::pin_property_metadata(state.content_pinner.as_ref(), &row).await?;
+    db::set_property_metadata_uri(&state.db, row.id, &metadata_uri).await?;
+    row.metadata_uri = Some(metadata_uri);
     let status = if was_inserted {
         StatusCode::CREATED
     } else {
@@ -114,7 +118,13 @@ pub async fn update_property(
 ) -> ApiResult<Json<Property>> {
     let patch = payload.try_into()?;
     match db::update_property(&state.db, property_id, user.0.sub, patch).await? {
-        PropertyUpdate::Updated(row) => Ok(Json(Property::from(*row))),
+        PropertyUpdate::Updated(mut row) => {
+            let metadata_uri =
+                metadata::pin_property_metadata(state.content_pinner.as_ref(), &row).await?;
+            db::set_property_metadata_uri(&state.db, row.id, &metadata_uri).await?;
+            row.metadata_uri = Some(metadata_uri);
+            Ok(Json(Property::from(*row)))
+        }
         PropertyUpdate::NotFound => Err(ApiError::NotFound("property not found".to_owned())),
         PropertyUpdate::Forbidden => Err(ApiError::Forbidden("not_property_owner".to_owned())),
     }

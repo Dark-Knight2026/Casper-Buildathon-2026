@@ -9,6 +9,8 @@
 pub mod db;
 /// HTTP request handlers for property endpoints.
 pub mod handlers;
+/// Off-chain metadata pinned to IPFS for on-chain registration.
+pub mod metadata;
 /// Request/response models for property endpoints.
 pub mod models;
 /// Router configuration for property endpoints.

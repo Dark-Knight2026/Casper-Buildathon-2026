@@ -143,6 +143,17 @@ async fn create_property_returns_201_with_reso_fields(pool: PgPool) {
         "100marketstdenverco80202"
     );
 
+    // The on-chain id is always part of the response shape, and null until the
+    // indexer observes a PropertyCreated event and writes the contract id.
+    assert!(
+        body.get("onchainPropertyId").is_some(),
+        "onchainPropertyId must be part of the property shape"
+    );
+    assert!(
+        body["onchainPropertyId"].is_null(),
+        "onchainPropertyId must be null before on-chain registration"
+    );
+
     // The row is owned by the caller's `sub`.
     let owner = sqlx::query_scalar::<_, Uuid>("SELECT landlord_id FROM properties WHERE id = $1")
         .bind(Uuid::parse_str(body["id"].as_str().unwrap()).unwrap())
@@ -852,4 +863,80 @@ async fn update_property_revalidates_listings(pool: PgPool) {
         assert!(!identity);
         assert!(!fair_housing);
     }
+}
+
+// metadataUri pinning (IPFS) --------------------------------------------------
+
+/// `POST` pins the property metadata and returns the resulting `ipfs://{cid}`
+/// pointer, which is also persisted on the row.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_property_persists_metadata_uri(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, body) = post_property(&env, &token, &valid_payload()).await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let metadata_uri = body["metadataUri"].as_str().expect("metadataUri present");
+    assert!(
+        metadata_uri.starts_with("ipfs://"),
+        "metadataUri must be an ipfs pointer, got {metadata_uri}"
+    );
+
+    let property_id = Uuid::parse_str(body["id"].as_str().unwrap()).unwrap();
+    let stored = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT metadata_uri FROM properties WHERE id = $1",
+    )
+    .bind(property_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.as_deref(), Some(metadata_uri));
+}
+
+/// `PUT` re-pins after an edit: a seeded property starts with no pointer, the
+/// first edit pins one, and a second edit that changes the metadata yields a
+/// different pointer (the CID tracks the descriptors, not a fixed placeholder).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_property_refreshes_metadata_uri(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    // The direct SQL seed leaves the pointer NULL until the first pin.
+    let before = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT metadata_uri FROM properties WHERE id = $1",
+    )
+    .bind(property_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(before, None);
+
+    let (status, first) =
+        put_property(&env, &token, property_id, &json!({ "bedroomsTotal": 5 })).await;
+    assert_eq!(status, StatusCode::OK);
+    let uri_first = first["metadataUri"]
+        .as_str()
+        .expect("metadataUri present")
+        .to_owned();
+    assert!(uri_first.starts_with("ipfs://"));
+
+    let (status, second) =
+        put_property(&env, &token, property_id, &json!({ "bedroomsTotal": 6 })).await;
+    assert_eq!(status, StatusCode::OK);
+    let uri_second = second["metadataUri"].as_str().expect("metadataUri present");
+    assert_ne!(
+        uri_first, uri_second,
+        "changing metadata must re-pin to a new CID"
+    );
+
+    let stored = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT metadata_uri FROM properties WHERE id = $1",
+    )
+    .bind(property_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.as_deref(), Some(uri_second));
 }

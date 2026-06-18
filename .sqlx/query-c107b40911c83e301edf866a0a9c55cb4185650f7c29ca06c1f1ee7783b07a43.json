@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n            FROM rental_applications\n            WHERE listing_id = $1\n            ORDER BY created_at DESC\n            LIMIT $2 OFFSET $3\n        ",
+  "query": "\n            UPDATE rental_applications\n            SET full_name = $2, email = $3, phone = $4, date_of_birth = $5,\n                current_address = $6, current_city = $7, current_state = $8,\n                current_zip = $9, move_in_date = $10, employer = $11,\n                job_title = $12, employment_length = $13,\n                monthly_income = $14::float8::numeric, reference1_name = $15,\n                reference1_phone = $16, reference2_name = $17,\n                reference2_phone = $18, pets = $19, pet_description = $20,\n                additional_info = $21, background_check_consent = $22\n            WHERE id = $1\n            RETURNING\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n        ",
   "describe": {
     "columns": [
       {
@@ -310,8 +310,27 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Int8",
-        "Int8"
+        "Text",
+        "Text",
+        "Text",
+        "Date",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Date",
+        "Text",
+        "Text",
+        "Text",
+        "Float8",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Text",
+        "Text",
+        "Bool"
       ]
     },
     "nullable": [
@@ -345,5 +364,5 @@
       false
     ]
   },
-  "hash": "b3d976a8fdeb06e3735624aee0d061440749a7f84db9ce981631863e9d0a6c62"
+  "hash": "c107b40911c83e301edf866a0a9c55cb4185650f7c29ca06c1f1ee7783b07a43"
 }
