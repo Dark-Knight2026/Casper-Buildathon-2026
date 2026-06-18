@@ -36,6 +36,69 @@ function RequiredMark() {
   );
 }
 
+interface ApplicationFormValues {
+  fullName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+  currentAddress: string;
+  currentCity: string;
+  currentState: string;
+  currentZip: string;
+  moveInDate: string;
+  employer: string;
+  jobTitle: string;
+  employmentLength: string;
+  monthlyIncome: string;
+  reference1Name: string;
+  reference1Phone: string;
+  backgroundCheckConsent: boolean;
+}
+
+const REQUIRED_FIELDS: { key: keyof ApplicationFormValues; label: string }[] = [
+  { key: 'fullName', label: 'Full name' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'dateOfBirth', label: 'Date of birth' },
+  { key: 'currentAddress', label: 'Street address' },
+  { key: 'currentCity', label: 'City' },
+  { key: 'currentState', label: 'State' },
+  { key: 'currentZip', label: 'ZIP code' },
+  { key: 'moveInDate', label: 'Desired move-in date' },
+  { key: 'employer', label: 'Employer' },
+  { key: 'jobTitle', label: 'Job title' },
+  { key: 'employmentLength', label: 'Length of employment' },
+  { key: 'monthlyIncome', label: 'Monthly income' },
+  { key: 'reference1Name', label: 'Reference 1 name' },
+  { key: 'reference1Phone', label: 'Reference 1 phone' },
+];
+
+/**
+ * Client-side validation mirroring the backend, run before we hit the API — so
+ * the tenant gets an immediate, specific message instead of a 400 toast (and so
+ * "Save as draft", which bypasses native form validation, is also checked).
+ * Returns the first problem, or null. Consent is only required for a real submit.
+ */
+function validateApplication(
+  data: ApplicationFormValues,
+  requireConsent: boolean
+): string | null {
+  for (const { key, label } of REQUIRED_FIELDS) {
+    if (!String(data[key] ?? '').trim()) return `${label} is required.`;
+  }
+  if (!/^\S+@\S+\.\S+$/.test(data.email.trim())) {
+    return 'Enter a valid email address.';
+  }
+  const income = Number.parseFloat(data.monthlyIncome);
+  if (!Number.isFinite(income) || income <= 0) {
+    return 'Monthly income must be a number greater than 0.';
+  }
+  if (requireConsent && !data.backgroundCheckConsent) {
+    return 'You must consent to a background check to submit.';
+  }
+  return null;
+}
+
 export default function ApplicationForm() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -166,14 +229,17 @@ export default function ApplicationForm() {
       setError('You must be logged in to submit an application');
       return;
     }
-    if (!asDraft && !formData.backgroundCheckConsent) {
-      setError('You must consent to a background check to proceed');
-      return;
-    }
     if (!draftId && !listingId) {
       setError(
         'Listing information is missing. Please return to the listing page and try again.'
       );
+      return;
+    }
+    // Validate the fields up front — the backend requires them even for a draft;
+    // consent is only enforced on a real submit.
+    const validationError = validateApplication(formData, !asDraft);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 

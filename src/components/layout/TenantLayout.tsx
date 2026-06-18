@@ -4,6 +4,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ProfileNudgeDialog } from '@/components/auth/ProfileNudgeDialog';
 import {
   LayoutDashboard,
@@ -15,12 +21,15 @@ import {
   RefreshCw,
   MessageSquare,
   Heart,
+  ClipboardList,
+  ChevronDown,
   User,
   Menu,
   X,
   LogOut,
   HelpCircle,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { User as UserType } from '@/types/user';
 
 // The placeholder backend stamps onto wallet-only rows on first login
@@ -66,21 +75,49 @@ function HeaderAvatar({
   );
 }
 
+type NavLink = { to: string; label: string; icon: LucideIcon };
+type NavGroup = { label: string; icon: LucideIcon; children: NavLink[] };
+type NavEntry = NavLink | NavGroup;
+
+const isGroup = (entry: NavEntry): entry is NavGroup => 'children' in entry;
+
+// Two dropdowns keep the header uncrowded: "Browse" = the discovery surfaces
+// (search / saved / applications), "My Rental" = the active-tenancy surfaces.
 // /tenant/score and /tenant/recommended are intentionally absent: they are
-// reached only via the dashboard widgets (TenantScoreCard "View details",
-// RecommendedProperties "See all") so the sidebar stays focused on the
-// core tenant workflow surfaces.
-const NAV_LINKS = [
+// reached only via the dashboard widgets.
+const NAV: NavEntry[] = [
   { to: '/tenant/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/tenant/properties', label: 'My Properties', icon: Home },
-  { to: '/tenant/property-search', label: 'Browse', icon: Search },
-  { to: '/tenant/saved-properties', label: 'Saved', icon: Heart },
-  { to: '/tenant/leases', label: 'Leases', icon: FileText },
-  { to: '/tenant/payments', label: 'Payments', icon: CreditCard },
-  { to: '/tenant/maintenance', label: 'Maintenance', icon: Wrench },
-  { to: '/tenant/renewals', label: 'Renewals', icon: RefreshCw },
+  {
+    label: 'Browse',
+    icon: Search,
+    children: [
+      { to: '/tenant/property-search', label: 'Browse listings', icon: Search },
+      { to: '/tenant/saved-properties', label: 'Saved', icon: Heart },
+      {
+        to: '/tenant/my-applications',
+        label: 'Applications',
+        icon: ClipboardList,
+      },
+    ],
+  },
+  {
+    label: 'My Rental',
+    icon: Home,
+    children: [
+      { to: '/tenant/properties', label: 'My Properties', icon: Home },
+      { to: '/tenant/leases', label: 'Leases', icon: FileText },
+      { to: '/tenant/payments', label: 'Payments', icon: CreditCard },
+      { to: '/tenant/maintenance', label: 'Maintenance', icon: Wrench },
+      { to: '/tenant/renewals', label: 'Renewals', icon: RefreshCw },
+    ],
+  },
   { to: '/tenant/messages', label: 'Messages', icon: MessageSquare },
 ];
+
+// Mobile uses a flat list (no grouping) — the full-screen menu has room for all.
+const FLAT_NAV: NavLink[] = NAV.flatMap((entry) =>
+  isGroup(entry) ? entry.children : [entry]
+);
 
 export default function TenantLayout() {
   const { profile, signOut } = useAuth();
@@ -103,6 +140,8 @@ export default function TenantLayout() {
 
   const isActive = (to: string) =>
     pathname === to || pathname.startsWith(to + '/');
+  const groupActive = (group: NavGroup) =>
+    group.children.some((child) => isActive(child.to));
 
   useEffect(() => {
     const onResize = () => {
@@ -122,19 +161,51 @@ export default function TenantLayout() {
 
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-8">
-            {NAV_LINKS.map(({ to, label }) => (
-              <Link
-                key={to}
-                to={to}
-                className={`text-sm transition-colors ${
-                  isActive(to)
-                    ? 'text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
+            {NAV.map((entry) =>
+              isGroup(entry) ? (
+                // modal={false}: don't lock body scroll / strip the scrollbar —
+                // that pads the body and shifts the centered fixed header on open.
+                <DropdownMenu key={entry.label} modal={false}>
+                  <DropdownMenuTrigger
+                    className={`flex items-center gap-1 text-sm outline-none transition-colors ${
+                      groupActive(entry)
+                        ? 'text-foreground font-medium'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {entry.label}
+                    <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    {entry.children.map((child) => (
+                      <DropdownMenuItem key={child.to} asChild>
+                        <Link
+                          to={child.to}
+                          className={`flex w-full items-center justify-start! text-left ${
+                            isActive(child.to) ? 'font-medium' : ''
+                          }`}
+                        >
+                          <child.icon className="h-4 w-4 mr-2 shrink-0" />
+                          {child.label}
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Link
+                  key={entry.to}
+                  to={entry.to}
+                  className={`text-sm transition-colors ${
+                    isActive(entry.to)
+                      ? 'text-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {entry.label}
+                </Link>
+              )
+            )}
           </nav>
 
           {/* Desktop right side */}
@@ -175,7 +246,7 @@ export default function TenantLayout() {
       {mobileOpen && window.innerWidth < 1024 && (
         <div className="fixed top-16 left-0 right-0 bottom-0 z-40 bg-background flex flex-col px-6 py-8 overflow-y-auto">
           <nav className="flex flex-col gap-1 flex-1">
-            {NAV_LINKS.map(({ to, label }) => (
+            {FLAT_NAV.map(({ to, label }) => (
               <Link
                 key={to}
                 to={to}

@@ -188,12 +188,12 @@ export default function MyApplications() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-4 border-t gap-4">
+                    <div className="flex flex-col gap-3 pt-4 border-t sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                       <div className="text-sm text-gray-600">
                         <span className="font-medium">Status:</span>{' '}
                         {STATUS_MESSAGE[application.status]}
                       </div>
-                      <div className="flex gap-2 shrink-0">
+                      <div className="flex flex-wrap gap-2 sm:shrink-0">
                         {application.status === 'draft' && (
                           <>
                             <Button
