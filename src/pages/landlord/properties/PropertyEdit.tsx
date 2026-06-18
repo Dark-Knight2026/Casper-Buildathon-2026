@@ -11,16 +11,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  ArrowLeft,
-  Save,
-  X,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { ArrowLeft, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -57,9 +49,11 @@ import { ApiClient } from '@/lib/api-client';
 import { SurroundingAreaFields } from '@/components/listing/SurroundingAreaFields';
 import { CustomAmenitiesField } from '@/components/listing/CustomAmenitiesField';
 import { PropertyDetailsFields } from '@/components/property/PropertyDetailsFields';
+import { ListingPhotosEditor } from '@/components/property/ListingPhotosEditor';
+import { useListingMedia } from '@/hooks/useListingMedia';
 import {
-  listingFormSchema,
-  type ListingFormValues,
+  propertyEditFormSchema,
+  type PropertyEditFormValues,
 } from '@/lib/propertyEditForm';
 import {
   ALL_AMENITIES,
@@ -67,17 +61,7 @@ import {
   LEASE_TERMS,
   PET_POLICIES,
 } from '@/types/property';
-import type {
-  RentLtrTerms,
-  MediaRef,
-  MediaModerationStatus,
-} from '@/types/listingContract';
-
-const MEDIA_STATUS_STYLE: Record<MediaModerationStatus, string> = {
-  pending: 'bg-yellow-500',
-  approved: 'bg-green-600',
-  rejected: 'bg-red-500',
-};
+import type { RentLtrTerms } from '@/types/listingContract';
 
 export default function PropertyEdit() {
   const { id } = useParams<{ id: string }>();
@@ -89,14 +73,11 @@ export default function PropertyEdit() {
   const [confirmSave, setConfirmSave] = useState(false);
   // Holds the zod-validated (coerced) values between confirming the dialog and
   // submitting — `form.getValues()` would return raw strings, unparsed numbers.
-  const [pendingData, setPendingData] = useState<ListingFormValues | null>(
+  const [pendingData, setPendingData] = useState<PropertyEditFormValues | null>(
     null
   );
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  // Existing photos as a local working copy — remove/reorder mutate this and are
-  // committed (via `updateMedia`) on save, alongside the form.
-  const [media, setMedia] = useState<MediaRef[]>([]);
 
   const {
     data: listing,
@@ -108,8 +89,17 @@ export default function PropertyEdit() {
     enabled: !!id,
   });
 
-  const form = useForm<ListingFormValues>({
-    resolver: zodResolver(listingFormSchema),
+  // Existing-photo working copy + the save diff — remove/reorder mutate it and
+  // are committed via `updateMedia` on save.
+  const {
+    media,
+    remove: removeExistingPhoto,
+    move: movePhoto,
+    buildUpdate: buildMediaUpdate,
+  } = useListingMedia(listing);
+
+  const form = useForm<PropertyEditFormValues>({
+    resolver: zodResolver(propertyEditFormSchema),
     defaultValues: {
       addressLine1: '',
       addressLine2: '',
@@ -136,10 +126,9 @@ export default function PropertyEdit() {
   });
 
   const { reset } = form;
-  // Populate the form + media working copy once the listing resolves.
+  // Populate the form once the listing resolves (media is owned by the hook).
   useEffect(() => {
     if (!listing) return;
-    setMedia([...listing.media].sort((a, b) => a.position - b.position));
     const terms =
       listing.intent === 'rent_ltr' ? (listing.terms as RentLtrTerms) : null;
     const asset = listing.property;
@@ -183,19 +172,7 @@ export default function PropertyEdit() {
     setImagePreviews(imagePreviews.filter((_, i) => i !== index));
   };
 
-  const removeExistingPhoto = (mediaId: string) =>
-    setMedia((prev) => prev.filter((m) => m.id !== mediaId));
-
-  const movePhoto = (index: number, dir: -1 | 1) =>
-    setMedia((prev) => {
-      const next = [...prev];
-      const target = index + dir;
-      if (target < 0 || target >= next.length) return prev;
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-
-  const onSubmit = async (data: ListingFormValues) => {
+  const onSubmit = async (data: PropertyEditFormValues) => {
     if (!id || !listing) return;
     setSaving(true);
     try {
@@ -233,19 +210,9 @@ export default function PropertyEdit() {
       });
 
       // Commit existing-photo removals / reorders before appending new uploads.
-      const originalIds = [...listing.media]
-        .sort((a, b) => a.position - b.position)
-        .map((m) => m.id);
-      const currentIds = media.map((m) => m.id);
-      const removed = originalIds.filter((mid) => !currentIds.includes(mid));
-      const orderChanged =
-        currentIds.length !== originalIds.length ||
-        currentIds.some((mid, i) => mid !== originalIds[i]);
-      if (removed.length || orderChanged) {
-        await updateMedia(id, {
-          order: currentIds.length ? currentIds : undefined,
-          remove: removed.length ? removed : undefined,
-        });
+      const mediaUpdate = buildMediaUpdate();
+      if (mediaUpdate) {
+        await updateMedia(id, mediaUpdate);
       }
 
       if (uploadedImages.length > 0) {
@@ -627,63 +594,11 @@ export default function PropertyEdit() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {media.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">Current Photos</p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {media.map((item, index) => (
-                        <div key={item.id} className="relative group">
-                          <img
-                            src={item.url}
-                            alt="Listing"
-                            className="w-full h-32 object-cover rounded-lg"
-                          />
-                          {item.moderationStatus !== 'approved' && (
-                            <Badge
-                              className={`absolute top-2 left-2 capitalize ${MEDIA_STATUS_STYLE[item.moderationStatus]}`}
-                            >
-                              {item.moderationStatus}
-                            </Badge>
-                          )}
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => removeExistingPhoto(item.id)}
-                            aria-label="Remove photo"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                          <div className="absolute bottom-2 left-2 right-2 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="icon"
-                              className="h-7 w-7"
-                              disabled={index === 0}
-                              onClick={() => movePhoto(index, -1)}
-                              aria-label="Move photo earlier"
-                            >
-                              <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="icon"
-                              className="h-7 w-7"
-                              disabled={index === media.length - 1}
-                              onClick={() => movePhoto(index, 1)}
-                              aria-label="Move photo later"
-                            >
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <ListingPhotosEditor
+                  media={media}
+                  onRemove={removeExistingPhoto}
+                  onMove={movePhoto}
+                />
 
                 {imagePreviews.length > 0 && (
                   <div>

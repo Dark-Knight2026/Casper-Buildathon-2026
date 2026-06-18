@@ -8,7 +8,7 @@ import { surroundingAreaSchema } from '@/lib/listingForm';
  * here (not in the page) so the page and the extracted `PropertyDetailsFields`
  * can share the inferred type without a circular import.
  */
-export const listingFormSchema = z.object({
+export const propertyEditFormSchema = z.object({
   // Physical property
   addressLine1: z.string().min(1, 'Address is required'),
   addressLine2: z.string().optional(),
@@ -36,4 +36,4 @@ export const listingFormSchema = z.object({
   surroundingArea: surroundingAreaSchema,
 });
 
-export type ListingFormValues = z.infer<typeof listingFormSchema>;
+export type PropertyEditFormValues = z.infer<typeof propertyEditFormSchema>;

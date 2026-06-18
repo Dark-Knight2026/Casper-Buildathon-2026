@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { REAL_PROPERTY_TYPES } from '@/types/listingContract';
 import { formatPropertyType } from '@/lib/listingDisplay';
-import type { ListingFormValues } from '@/lib/propertyEditForm';
+import type { PropertyEditFormValues } from '@/lib/propertyEditForm';
 
 /**
  * The physical-property card of the `PropertyEdit` form (`PUT /properties/{id}`)
@@ -34,7 +34,7 @@ import type { ListingFormValues } from '@/lib/propertyEditForm';
 export function PropertyDetailsFields({
   control,
 }: {
-  control: Control<ListingFormValues>;
+  control: Control<PropertyEditFormValues>;
 }) {
   return (
     <Card>
