@@ -63,9 +63,14 @@ export interface SignatureProgressEntry {
   timestamp: string | null;
 }
 
+/**
+ * Per-party signing state. The backend only seeds the `landlord`/`tenant`
+ * entries on `submit` — a `draft` lease carries an empty `{}`, so both entries
+ * are optional.
+ */
 export interface SignatureProgress {
-  landlord: SignatureProgressEntry;
-  tenant: SignatureProgressEntry;
+  landlord?: SignatureProgressEntry;
+  tenant?: SignatureProgressEntry;
 }
 
 /** The raw Casper-message signature captured per party. */
@@ -75,8 +80,8 @@ export interface ConsentSignatureEntry {
 }
 
 export interface ConsentSignatures {
-  landlord: ConsentSignatureEntry;
-  tenant: ConsentSignatureEntry;
+  landlord?: ConsentSignatureEntry;
+  tenant?: ConsentSignatureEntry;
 }
 
 /** Links to the generated and signed lease documents (note the PDF casing). */

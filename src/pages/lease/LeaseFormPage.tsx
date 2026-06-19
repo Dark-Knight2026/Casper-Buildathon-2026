@@ -44,7 +44,9 @@ import { LEASE_TYPE_LABEL } from '@/lib/leaseDisplay';
 import type { Clause, CreateLeaseBody, LeaseType } from '@/types/leaseContract';
 
 const LEASE_TYPES = Object.keys(LEASE_TYPE_LABEL) as LeaseType[];
-const CURRENCIES = ['cUSD', 'CSPR'] as const;
+// The backend's allow-list. `CSPR` = native (on-chain `currency: None`); `USDC`/
+// `USDT` are the CEP-18 stablecoins the platform actually has contracts for.
+const CURRENCIES = ['USDC', 'USDT', 'CSPR', 'cUSD', 'USD'] as const;
 const MS_PER_DAY = 86_400_000;
 
 // Monotonic key source for clause rows (stable across add/remove; session-local).
@@ -65,7 +67,7 @@ interface FormState {
   tenantId: string;
   type: LeaseType;
   startDate: string;
-  endDate: string;
+  termMonths: string;
   monthlyRent: string;
   securityDeposit: string;
   currency: string;
@@ -80,26 +82,36 @@ const EMPTY_FORM: FormState = {
   tenantId: '',
   type: 'fixed-term',
   startDate: '',
-  endDate: '',
+  termMonths: '12',
   monthlyRent: '',
   securityDeposit: '',
-  currency: 'cUSD',
+  currency: 'USDC',
   propertyManagerId: '',
   propertyManagerBps: '0',
   equityPropertyId: '',
   clauses: [],
 };
 
-/** Backend requires `(end - start)` to be a positive whole number of 30-day months. */
-function validateDuration(start: string, end: string): string | null {
-  if (!start || !end) return 'Start and end dates are required.';
+/**
+ * End date = start + term × 30 days, as `YYYY-MM-DD`. Empty when inputs are
+ * incomplete. The backend requires `(end - start)` to be a whole multiple of 30
+ * days, so deriving the end from a term count makes every value valid by
+ * construction (no calendar-year off-by-5-days trap).
+ */
+function computeEndDate(start: string, termMonths: string): string {
+  const months = Number(termMonths);
+  if (!start || !Number.isInteger(months) || months <= 0) return '';
+  const d = new Date(`${start}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + months * 30);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Months (× 30 days) between two ISO dates — to seed the term when editing. */
+function termMonthsBetween(start: string, end: string): number {
   const days = Math.round(
     (new Date(end).getTime() - new Date(start).getTime()) / MS_PER_DAY
   );
-  if (days <= 0) return 'End date must be after the start date.';
-  if (days % 30 !== 0)
-    return 'Lease duration must be a whole number of 30-day months.';
-  return null;
+  return Math.max(1, Math.round(days / 30));
 }
 
 function mapSubmitError(err: unknown, isEdit: boolean): string {
@@ -137,6 +149,8 @@ export default function LeaseFormPage() {
     propertyId?: string;
     tenantId?: string;
     tenantName?: string;
+    monthlyRent?: number;
+    securityDeposit?: number;
   };
   const prefillTenantName = prefill.tenantName;
 
@@ -147,6 +161,12 @@ export default function LeaseFormPage() {
       : {
           propertyId: prefill.propertyId ?? '',
           tenantId: prefill.tenantId ?? '',
+          monthlyRent:
+            prefill.monthlyRent != null ? String(prefill.monthlyRent) : '',
+          securityDeposit:
+            prefill.securityDeposit != null
+              ? String(prefill.securityDeposit)
+              : '',
         }),
   }));
 
@@ -207,10 +227,12 @@ export default function LeaseFormPage() {
       tenantId: existing.tenantIds[0] ?? '',
       type: existing.type,
       startDate: existing.startDate.slice(0, 10),
-      endDate: existing.endDate.slice(0, 10),
+      termMonths: String(
+        termMonthsBetween(existing.startDate, existing.endDate)
+      ),
       monthlyRent: String(existing.monthlyRent),
       securityDeposit: String(existing.securityDeposit),
-      currency: existing.currency ?? 'cUSD',
+      currency: existing.currency ?? 'USDC',
       propertyManagerId: existing.propertyManagerId ?? '',
       propertyManagerBps: String(existing.propertyManagerBps ?? 0),
       equityPropertyId: existing.equityPropertyId ?? '',
@@ -249,7 +271,7 @@ export default function LeaseFormPage() {
         propertyId: form.propertyId,
         type: form.type,
         startDate: form.startDate,
-        endDate: form.endDate,
+        endDate: computeEndDate(form.startDate, form.termMonths),
         monthlyRent: Number(form.monthlyRent),
         securityDeposit: Number(form.securityDeposit),
         currency: form.currency,
@@ -297,11 +319,12 @@ export default function LeaseFormPage() {
       });
       return;
     }
-    const durationError = validateDuration(form.startDate, form.endDate);
-    if (durationError) {
+    const months = Number(form.termMonths);
+    if (!form.startDate || !Number.isInteger(months) || months <= 0) {
       toast({
-        title: 'Invalid dates',
-        description: durationError,
+        title: 'Invalid term',
+        description:
+          'Enter a start date and a whole number of months (each month = 30 days).',
         variant: 'destructive',
       });
       return;
@@ -498,19 +521,28 @@ export default function LeaseFormPage() {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="endDate">End Date</Label>
+                <Label htmlFor="termMonths">Term (months)</Label>
                 <Input
-                  id="endDate"
-                  type="date"
-                  value={form.endDate}
-                  onChange={(e) => set('endDate', e.target.value)}
+                  id="termMonths"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={form.termMonths}
+                  onChange={(e) => set('termMonths', e.target.value)}
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  Duration must be a whole number of 30-day months.
+                  Each month = 30 days (e.g. 12 = 360 days).
                 </p>
               </div>
             </div>
+
+            <p className="text-sm text-muted-foreground">
+              End date:{' '}
+              <span className="font-medium text-foreground">
+                {computeEndDate(form.startDate, form.termMonths) || '—'}
+              </span>
+            </p>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="flex flex-col gap-2">

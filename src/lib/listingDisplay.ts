@@ -48,6 +48,16 @@ export function listingRentMonthly(listing: Listing): number {
 }
 
 /**
+ * Security deposit for a `rent_ltr` listing (0 for any other, dormant intent).
+ * Mirrors {@link listingRentMonthly} — used to seed a lease draft from a listing.
+ */
+export function listingSecurityDeposit(listing: Listing): number {
+  return listing.intent === 'rent_ltr'
+    ? (listing.terms as RentLtrTerms).securityDeposit
+    : 0;
+}
+
+/**
  * Public-facing media, ordered by `position`. Public reads already exclude
  * non-approved images, but owner reads do not — so the approved filter keeps
  * pending/rejected images out of any gallery regardless of the caller.

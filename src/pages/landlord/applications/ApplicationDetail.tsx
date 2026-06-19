@@ -42,6 +42,10 @@ import {
   type BackgroundCheckStatus,
 } from '@/services/applicationService';
 import { ApiClient } from '@/lib/api-client';
+import {
+  listingRentMonthly,
+  listingSecurityDeposit,
+} from '@/lib/listingDisplay';
 
 /** Statuses a landlord can still act on (the backend's `can_review_to` sources). */
 const OPEN_STATUSES = ['pending', 'under_review', 'conditional'];
@@ -285,6 +289,15 @@ export default function ApplicationDetail() {
                           propertyId: application.listing?.propertyId,
                           tenantId: application.userId,
                           tenantName: application.fullName,
+                          // Seed the financials from the listing's rent terms.
+                          monthlyRent:
+                            application.listing?.intent === 'rent_ltr'
+                              ? listingRentMonthly(application.listing)
+                              : undefined,
+                          securityDeposit:
+                            application.listing?.intent === 'rent_ltr'
+                              ? listingSecurityDeposit(application.listing)
+                              : undefined,
                         },
                       })
                     }

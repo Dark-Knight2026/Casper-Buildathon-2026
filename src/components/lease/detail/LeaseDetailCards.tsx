@@ -9,9 +9,12 @@ import {
   DollarSign,
   FileText,
   Link2,
+  Loader2,
+  RefreshCw,
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
@@ -22,6 +25,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
+import { getLeaseDocument } from '@/services/leaseService';
 import { ICO_CONFIG } from '@/constants/ico';
 import {
   formatLeaseDateLong,
@@ -120,7 +125,9 @@ export function SignatureProgressCard({ lease }: { lease: Lease }) {
       </CardHeader>
       <CardContent className="space-y-2">
         {(['landlord', 'tenant'] as const).map((role) => {
-          const entry = sp[role];
+          // A draft's progress is an empty `{}` until submitted, so an entry
+          // can be missing — treat that as not-yet-signed.
+          const entry = sp?.[role];
           return (
             <div
               key={role}
@@ -128,7 +135,7 @@ export function SignatureProgressCard({ lease }: { lease: Lease }) {
             >
               <span className="text-sm capitalize">{role}</span>
               <span className="text-xs text-muted-foreground">
-                {entry.signed
+                {entry?.signed
                   ? `Signed${entry.timestamp ? ` · ${formatLeaseDateTime(entry.timestamp)}` : ''}`
                   : 'Awaiting signature'}
               </span>

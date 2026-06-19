@@ -31,6 +31,7 @@ import {
   PartiesCard,
   SignatureProgressCard,
 } from '@/components/lease/detail/LeaseDetailCards';
+import { LeaseSigningCard } from '@/components/lease/LeaseSigningCard';
 
 /** Both submit and delete fail with `409` on a status conflict, `403` if not the landlord. */
 function mapActionError(err: unknown): string {
@@ -209,6 +210,7 @@ export const LeaseDetailsPage = () => {
       </div>
 
       <SignatureProgressCard lease={lease} />
+      <LeaseSigningCard lease={lease} />
       <OnchainCard lease={lease} />
       <ClausesCard lease={lease} />
       <DocumentCard lease={lease} />
