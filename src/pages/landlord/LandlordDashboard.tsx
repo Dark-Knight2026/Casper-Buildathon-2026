@@ -1,4 +1,12 @@
-import { useEffect, useState, useCallback } from 'react';
+/**
+ * Landlord Dashboard. The KPI cards (properties, tenants, active leases, monthly
+ * revenue) and the expiring-leases alert are computed from real data
+ * (`GET /listings/landlord` + `GET /leases?landlordId=me`). The portfolio table
+ * and recent-activity feed have no backend yet (no payments/maintenance API) and
+ * are clearly marked "Demo".
+ */
+
+import { useQuery } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
@@ -38,19 +46,27 @@ import {
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { getLandlordListings } from '@/services/listingService';
+import { listLeases } from '@/services/leaseService';
 import {
-  MOCK_LANDLORD_DASHBOARD_STATS,
   MOCK_LANDLORD_RECENT_ACTIVITIES,
   MOCK_LANDLORD_PORTFOLIO,
-  MOCK_LANDLORD_LOAD_MS,
-  type LandlordDashboardStats,
   type LandlordRecentActivity,
   type LandlordPortfolioRow,
 } from '@/data/landlordMockData';
 
-// Status pill styling — color AND icon (WCAG color-independence). The pill is a
-// link affordance per design §2.4. "late" stays red (genuine escalation); the
-// amber-not-red rule applies to the Outstanding metric, not to late rows.
+/** Small marker for sections that aren't backend-wired yet. */
+function DemoBadge() {
+  return (
+    <Badge
+      variant="outline"
+      className="border-orange-500 text-orange-500 text-[10px] uppercase tracking-wide"
+    >
+      Demo
+    </Badge>
+  );
+}
+
 const PORTFOLIO_STATUS_STYLES: Record<
   LandlordPortfolioRow['status'],
   { className: string; icon: typeof Check }
@@ -65,11 +81,7 @@ const PORTFOLIO_STATUS_STYLES: Record<
 function PortfolioStatusPill({ row }: { row: LandlordPortfolioRow }) {
   const { className, icon: Icon } = PORTFOLIO_STATUS_STYLES[row.status];
   return (
-    <Link
-      to={row.statusHref}
-      className="inline-flex"
-      aria-label={`${row.property}: ${row.statusLabel}`}
-    >
+    <Link to={row.statusHref} className="inline-flex">
       <Badge className={`gap-1 ${className}`}>
         <Icon className="h-3 w-3" aria-hidden="true" />
         {row.statusLabel}
@@ -78,9 +90,6 @@ function PortfolioStatusPill({ row }: { row: LandlordPortfolioRow }) {
   );
 }
 
-// Recent-activity status pills: icon + color, and a link to the relevant view
-// (design §2.4). "overdue" stays red as a specific escalated item, mirroring the
-// portfolio "late" row.
 const ACTIVITY_STATUS_STYLES: Record<
   string,
   { className: string; icon: typeof Check }
@@ -109,7 +118,6 @@ function ActivityStatusPill({
     <Link
       to={ACTIVITY_TYPE_HREF[activity.type]}
       className="inline-flex shrink-0"
-      aria-label={`${activity.title} — ${activity.status}`}
     >
       {style ? (
         <Badge className={`gap-1 capitalize ${style.className}`}>
@@ -126,49 +134,19 @@ function ActivityStatusPill({
 }
 
 export default function LandlordDashboard() {
-  const [stats, setStats] = useState<LandlordDashboardStats>({
-    totalProperties: 0,
-    occupiedProperties: 0,
-    totalTenants: 0,
-    activeLeases: 0,
-    monthlyRevenue: 0,
-    pendingMaintenance: 0,
-    overduePayments: 0,
-    expiringLeases: 0,
+  const listingsQuery = useQuery({
+    queryKey: ['landlord-dashboard-listings'],
+    queryFn: () => getLandlordListings({ pageSize: 100 }),
   });
-  const [recentActivities, setRecentActivities] = useState<
-    LandlordRecentActivity[]
-  >([]);
-  const [portfolio, setPortfolio] = useState<LandlordPortfolioRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const leasesQuery = useQuery({
+    queryKey: ['landlord-dashboard-leases'],
+    queryFn: () => listLeases({ landlordId: 'me', pageSize: 100 }),
+  });
 
-  // TODO(BE): replace MOCK_* with GET /api/v1/landlord/dashboard — BE-blocked
-  // (LeaseFi MVP spec §3.7). The loading/error states are kept intact so the
-  // real fetch drops straight in. Mock data shipped here is intentional
-  // demo/preview content (same accepted pattern as the tenant pages), not a
-  // deferred bug.
-  const loadDashboardData = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    const timer = setTimeout(() => {
-      setStats(MOCK_LANDLORD_DASHBOARD_STATS);
-      setRecentActivities(MOCK_LANDLORD_RECENT_ACTIVITIES);
-      setPortfolio(MOCK_LANDLORD_PORTFOLIO);
-      setLoading(false);
-    }, MOCK_LANDLORD_LOAD_MS);
-    return () => clearTimeout(timer);
-  }, []);
+  // Demo content (no payments/maintenance API yet).
+  const portfolio = MOCK_LANDLORD_PORTFOLIO;
+  const recentActivities = MOCK_LANDLORD_RECENT_ACTIVITIES;
 
-  useEffect(() => {
-    const cleanup = loadDashboardData();
-    return cleanup;
-  }, [loadDashboardData]);
-
-  // Export the portfolio table to CSV (design §2 header affordance). Mapped to
-  // plain records so the CSV has readable headers, and because an `interface`
-  // (unlike a `type`) has no implicit index signature and isn't assignable to
-  // the exporter's `Record<string, unknown>` parameter.
   const handleExportPortfolio = () => {
     const rows = portfolio.map((r) => ({
       Property: r.property,
@@ -179,36 +157,52 @@ export default function LandlordDashboard() {
     exportService.exportToCSV(rows, 'portfolio.csv');
   };
 
-  if (loading) {
+  if (listingsQuery.isLoading || leasesQuery.isLoading) {
     return <DashboardSkeleton />;
   }
 
-  if (error) {
+  if (listingsQuery.isError || leasesQuery.isError) {
     return (
       <ErrorBoundary>
         <div className="container mx-auto p-6">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>
+              Couldn’t load your dashboard. Please try again.
+            </AlertDescription>
           </Alert>
-          <div className="mt-4">
-            <Button
-              onClick={loadDashboardData}
-              aria-label="Retry loading dashboard"
-            >
-              Try Again
-            </Button>
-          </div>
         </div>
       </ErrorBoundary>
     );
   }
 
+  // Real KPIs derived from the landlord's listings + leases.
+  const listings = listingsQuery.data?.data ?? [];
+  const leases = leasesQuery.data?.data ?? [];
+  const activeLeases = leases.filter((l) => l.status === 'active');
+  const propertyIds = new Set(listings.map((l) => l.propertyId));
+  const occupiedIds = new Set(activeLeases.map((l) => l.propertyId));
+  const tenantIds = new Set(activeLeases.flatMap((l) => l.tenantIds));
+  const monthlyRevenue = activeLeases.reduce(
+    (sum, l) => sum + l.monthlyRent,
+    0
+  );
+  const expiringLeases = leases.filter(
+    (l) => l.status === 'expiring-soon'
+  ).length;
+
+  const stats = {
+    totalProperties: propertyIds.size,
+    occupiedProperties: occupiedIds.size,
+    totalTenants: tenantIds.size,
+    activeLeases: activeLeases.length,
+    monthlyRevenue,
+    expiringLeases,
+  };
+
   return (
     <ErrorBoundary>
       <div className="container mx-auto p-6 space-y-6">
-        {/* Mobile: title block on top, actions stacked below in a column.
-            ≥sm: original single row (title left, actions right). */}
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold">Landlord Dashboard</h1>
@@ -235,99 +229,36 @@ export default function LandlordDashboard() {
           </div>
         </div>
 
-        {/* Alert Cards */}
-        {(stats.overduePayments > 0 ||
-          stats.expiringLeases > 0 ||
-          stats.pendingMaintenance > 0) && (
-          <div className="grid gap-4 md:grid-cols-3">
-            {/* Outstanding/overdue is a warning-state metric → amber, not red.
-                Red is reserved for true escalation (e.g. a "late" row in the
-                portfolio table). Design §2.3. */}
-            {stats.overduePayments > 0 && (
-              <Card className="border-amber-200 bg-amber-50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-amber-900">
-                    Overdue Payments
-                  </CardTitle>
-                  <AlertCircle
-                    className="h-4 w-4 text-amber-600"
-                    aria-hidden="true"
-                  />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-amber-900">
-                    {stats.overduePayments}
-                  </div>
-                  <Button
-                    asChild
-                    variant="link"
-                    className="text-amber-700 p-0 h-auto"
-                  >
-                    <Link to="/landlord/payments?filter=overdue">
-                      View Details →
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-            {stats.expiringLeases > 0 && (
-              <Card className="border-yellow-200 bg-yellow-50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-yellow-900">
-                    Expiring Leases
-                  </CardTitle>
-                  <AlertCircle
-                    className="h-4 w-4 text-yellow-600"
-                    aria-hidden="true"
-                  />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-yellow-900">
-                    {stats.expiringLeases}
-                  </div>
-                  <Button
-                    asChild
-                    variant="link"
-                    className="text-yellow-600 p-0 h-auto"
-                  >
-                    <Link to="/landlord/leases?filter=expiring">
-                      Review Renewals →
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-            {stats.pendingMaintenance > 0 && (
-              <Card className="border-orange-200 bg-orange-50">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-orange-900">
-                    Pending Maintenance
-                  </CardTitle>
-                  <Wrench
-                    className="h-4 w-4 text-orange-600"
-                    aria-hidden="true"
-                  />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-orange-900">
-                    {stats.pendingMaintenance}
-                  </div>
-                  <Button
-                    asChild
-                    variant="link"
-                    className="text-orange-600 p-0 h-auto"
-                  >
-                    <Link to="/landlord/maintenance?filter=pending">
-                      Assign Tasks →
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+        {/* Expiring-leases alert (real) */}
+        {stats.expiringLeases > 0 && (
+          <Card className="border-yellow-200 bg-yellow-50 md:max-w-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-yellow-900">
+                Expiring Leases
+              </CardTitle>
+              <AlertCircle
+                className="h-4 w-4 text-yellow-600"
+                aria-hidden="true"
+              />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-900">
+                {stats.expiringLeases}
+              </div>
+              <Button
+                asChild
+                variant="link"
+                className="text-yellow-600 p-0 h-auto"
+              >
+                <Link to="/landlord/leases?filter=expiring">
+                  Review Renewals →
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Stats Grid */}
+        {/* Stats Grid (real) */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -383,11 +314,13 @@ export default function LandlordDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${stats.monthlyRevenue.toLocaleString()}
+                {stats.monthlyRevenue.toLocaleString()}
               </div>
-              <p className="text-xs text-muted-foreground">Current month</p>
+              <p className="text-xs text-muted-foreground">
+                from active leases
+              </p>
               <Button asChild variant="link" className="p-0 h-auto mt-2">
-                <Link to="/landlord/payments">View Payments →</Link>
+                <Link to="/landlord/leases">View Leases →</Link>
               </Button>
             </CardContent>
           </Card>
@@ -414,12 +347,13 @@ export default function LandlordDashboard() {
           </Card>
         </div>
 
-        {/* Portfolio table — the central PM surface (design §2: "Table is the
-            surface. Don't bury data in cards"). Status pills carry icon + color
-            and link to the relevant detail view. */}
+        {/* Portfolio table (Demo — no payments API) */}
         <Card>
           <CardHeader>
-            <CardTitle>Portfolio</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle>Portfolio</CardTitle>
+              <DemoBadge />
+            </div>
             <CardDescription>
               Properties, tenants, and rent status at a glance
             </CardDescription>
@@ -485,64 +419,52 @@ export default function LandlordDashboard() {
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
+        {/* Recent Activity (Demo — no payments/maintenance API) */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle>Recent Activity</CardTitle>
+              <DemoBadge />
+            </div>
             <CardDescription>
               Latest updates from your properties
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {recentActivities.length === 0 ? (
-              <EmptyState
-                icon={FileText}
-                title="No Recent Activity"
-                description="Activity from your properties will appear here. Get started by adding properties and creating leases."
-                action={{
-                  label: 'Add Property',
-                  onClick: () =>
-                    (window.location.href = '/landlord/properties/create'),
-                }}
-              />
-            ) : (
-              <div className="space-y-4">
-                {recentActivities.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className="flex flex-col gap-2 border-b pb-4 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-0"
-                    role="article"
-                    aria-label={`${activity.title}: ${activity.description}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1" aria-hidden="true">
-                        {activity.type === 'payment' && (
-                          <DollarSign className="h-4 w-4 text-green-600" />
-                        )}
-                        {activity.type === 'maintenance' && (
-                          <Wrench className="h-4 w-4 text-orange-600" />
-                        )}
-                        {activity.type === 'lease' && (
-                          <FileText className="h-4 w-4 text-blue-600" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-medium">{activity.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {activity.description}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(activity.timestamp).toLocaleString()}
-                        </p>
-                      </div>
+            <div className="space-y-4">
+              {recentActivities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className="flex flex-col gap-2 border-b pb-4 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-0"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1" aria-hidden="true">
+                      {activity.type === 'payment' && (
+                        <DollarSign className="h-4 w-4 text-green-600" />
+                      )}
+                      {activity.type === 'maintenance' && (
+                        <Wrench className="h-4 w-4 text-orange-600" />
+                      )}
+                      {activity.type === 'lease' && (
+                        <FileText className="h-4 w-4 text-blue-600" />
+                      )}
                     </div>
-                    <div className="pl-7 sm:pl-0">
-                      <ActivityStatusPill activity={activity} />
+                    <div>
+                      <p className="font-medium">{activity.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {activity.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(activity.timestamp).toLocaleString()}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="pl-7 sm:pl-0">
+                    <ActivityStatusPill activity={activity} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -565,15 +487,6 @@ export default function LandlordDashboard() {
               </Button>
               <Button asChild variant="outline" className="h-auto py-4">
                 <Link
-                  to="/landlord/tenants/new"
-                  className="flex flex-col items-center gap-2"
-                >
-                  <Users className="h-6 w-6" aria-hidden="true" />
-                  <span>Add Tenant</span>
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="h-auto py-4">
-                <Link
                   to="/landlord/leases/create"
                   className="flex flex-col items-center gap-2"
                 >
@@ -583,11 +496,20 @@ export default function LandlordDashboard() {
               </Button>
               <Button asChild variant="outline" className="h-auto py-4">
                 <Link
-                  to="/landlord/payments/reports"
+                  to="/landlord/renewals/create"
                   className="flex flex-col items-center gap-2"
                 >
                   <TrendingUp className="h-6 w-6" aria-hidden="true" />
-                  <span>View Reports</span>
+                  <span>Create Renewal</span>
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="h-auto py-4">
+                <Link
+                  to="/landlord/applications"
+                  className="flex flex-col items-center gap-2"
+                >
+                  <Users className="h-6 w-6" aria-hidden="true" />
+                  <span>Applications</span>
                 </Link>
               </Button>
             </div>

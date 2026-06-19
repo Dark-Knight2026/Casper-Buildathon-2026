@@ -1,10 +1,12 @@
 /**
- * Tenant Dashboard
- * Main dashboard for tenant users showing lease overview, payments, and quick actions
- * Enhanced with loading states, error handling, and empty states
+ * Tenant Dashboard. The active-lease hero, quick-stats, current-lease card and
+ * renewal banners are wired to real data (`GET /api/v1/leases?tenantId=me` plus
+ * the property). Payments, lease-activity, recommendations and the tenant score
+ * have no backend yet and are clearly marked "Demo".
  */
 
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import {
   Home,
@@ -33,67 +35,36 @@ import {
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import type { LeaseAgreement, UtilityResponsibility } from '@/types/lease';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { Payment } from '@/services/paymentService';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
-import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
 import { TenantScoreCard } from '@/components/tenant/TenantScoreCard';
 import { useTenantScore } from '@/hooks/useTenantScore';
-import { CURRENT_TENANT_ID, getMyCurrentProperties } from '@/data/tenantLeases';
 import { daysUntil } from '@/lib/date-utils';
+import { listLeases } from '@/services/leaseService';
+import { getProperty } from '@/services/propertyAssetService';
+import {
+  LEASE_TYPE_LABEL,
+  LEASE_STATUS_BADGE,
+  formatLeaseMoney,
+} from '@/lib/leaseDisplay';
 
-// TODO: remove when backend /api/v1/leases is ready
-const MOCK_LEASE: LeaseAgreement & {
-  propertyAddress: string;
-  paymentDueDay: number;
-} = {
-  id: 'mock-lease-1',
-  propertyId: 'mock-prop-1',
-  landlordId: 'mock-landlord-1',
-  tenantIds: ['mock-tenant-1'],
-  type: 'residential-long-term',
-  status: 'active',
-  startDate: new Date('2025-10-01'),
-  endDate: new Date('2026-09-30'),
-  monthlyRent: 1500,
-  securityDeposit: 3000,
-  utilities: [
-    {
-      utilityType: 'water',
-      responsibleParty: 'landlord',
-    } as UtilityResponsibility,
-    {
-      utilityType: 'internet',
-      responsibleParty: 'tenant',
-    } as UtilityResponsibility,
-  ],
-  propertyAddress: '123 Demo Street, New York, NY 10001',
-  paymentDueDay: 1,
-  clauses: [],
-  addendums: [],
-  createdByRole: 'landlord',
-  approvalStatus: 'approved' as LeaseAgreement['approvalStatus'],
-  approvalHistory: [],
-  signatureStatus: 'signed',
-  signatureProgress: {} as LeaseAgreement['signatureProgress'],
-  documentLinks: {} as LeaseAgreement['documentLinks'],
-  complianceScore: 100,
-  complianceIssues: [],
-  stateSpecificRules: [],
-  versionHistory: [],
-  currentVersion: 1,
-  comments: [],
-  signingWorkflow: {} as LeaseAgreement['signingWorkflow'],
-  signatures: [],
-  createdAt: new Date('2025-09-15'),
-  updatedAt: new Date('2025-10-01'),
-  createdBy: 'mock-landlord-1',
-  lastModifiedBy: 'mock-landlord-1',
-};
+/** Small marker for sections that aren't backend-wired yet. */
+function DemoBadge() {
+  return (
+    <Badge
+      variant="outline"
+      className="border-orange-500 text-orange-500 text-[10px] uppercase tracking-wide"
+    >
+      Demo
+    </Badge>
+  );
+}
 
+// Demo fixtures — no backend for payments / lease-activity yet.
 const MOCK_PAYMENTS: Payment[] = [
   {
     id: 'p1',
@@ -111,19 +82,8 @@ const MOCK_PAYMENTS: Payment[] = [
     paymentStatus: 'completed',
     leaseId: 'mock-lease-1',
   } as Payment,
-  {
-    id: 'p3',
-    amount: 1500,
-    paymentDate: new Date('2025-10-01'),
-    paymentMethod: 'credit_card',
-    paymentStatus: 'completed',
-    leaseId: 'mock-lease-1',
-  } as Payment,
 ];
 
-// Lease-lifecycle activity. Unlike payments, this captures on-chain milestones
-// (lease signed, deposit funded) per the design reference §1 "Recent activity".
-// TODO: replace with GET /leases/:id/activity (or indexer feed) when ready.
 type ActivityItem = {
   id: string;
   label: string;
@@ -150,83 +110,71 @@ const MOCK_ACTIVITY: ActivityItem[] = [
   },
 ];
 
-export function TenantDashboard() {
-  // TODO: replace with API calls when backend is ready
-  const currentLease = MOCK_LEASE;
-  const recentPayments = MOCK_PAYMENTS;
-  const recentActivity = MOCK_ACTIVITY;
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+    amount
+  );
 
+const formatDate = (date: Date | string) =>
+  new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(date));
+
+const getPaymentStatusBadge = (status: string) => {
+  const statusStyles: Record<
+    string,
+    { className: string; icon: typeof Check }
+  > = {
+    completed: { className: 'bg-green-100 text-green-800', icon: Check },
+    pending: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
+    processing: { className: 'bg-blue-100 text-blue-800', icon: Loader2 },
+    failed: { className: 'bg-red-100 text-red-800', icon: AlertTriangle },
+    refunded: { className: 'bg-gray-100 text-gray-800', icon: RotateCcw },
+    cancelled: { className: 'bg-gray-100 text-gray-800', icon: AlertTriangle },
+  };
+  const { className, icon: Icon } =
+    statusStyles[status] || statusStyles.pending;
+  return (
+    <Badge className={`gap-1 ${className}`}>
+      <Icon className="h-3 w-3" aria-hidden="true" />
+      {status.toUpperCase()}
+    </Badge>
+  );
+};
+
+export function TenantDashboard() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { score: tenantScore } = useTenantScore();
-
-  // Name is mandatory at registration, so firstName is normally present;
-  // fall back to a neutral greeting only if the profile hasn't loaded yet.
   const greetingName = profile?.firstName?.trim();
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+  // Real active lease (+ its property for the address).
+  const { data, isLoading } = useQuery({
+    queryKey: ['tenant-dashboard-lease'],
+    queryFn: async () => {
+      const page = await listLeases({ tenantId: 'me', pageSize: 50 });
+      const active =
+        page.data.find(
+          (l) => l.status === 'active' || l.status === 'expiring-soon'
+        ) ?? null;
+      const property = active
+        ? await getProperty(active.propertyId).catch(() => null)
+        : null;
+      return { lease: active, property };
+    },
+  });
 
-  const formatDate = (date: Date): string => {
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    }).format(new Date(date));
-  };
-
-  // WCAG 2.1 AA color-independence: every status carries an icon, not color
-  // alone. Mirrors the design reference (§1) status-pill rule.
-  const getPaymentStatusBadge = (status: string) => {
-    const statusStyles: Record<
-      string,
-      { className: string; icon: typeof Check }
-    > = {
-      completed: { className: 'bg-green-100 text-green-800', icon: Check },
-      pending: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
-      processing: { className: 'bg-blue-100 text-blue-800', icon: Loader2 },
-      failed: { className: 'bg-red-100 text-red-800', icon: AlertTriangle },
-      refunded: { className: 'bg-gray-100 text-gray-800', icon: RotateCcw },
-      cancelled: {
-        className: 'bg-gray-100 text-gray-800',
-        icon: AlertTriangle,
-      },
-    };
-
-    const { className, icon: Icon } =
-      statusStyles[status] || statusStyles.pending;
-
-    return (
-      <Badge className={`gap-1 ${className}`}>
-        <Icon className="h-3 w-3" aria-hidden="true" />
-        {status.toUpperCase()}
-      </Badge>
-    );
-  };
-
-  const daysUntilExpiration = daysUntil(currentLease.endDate);
-  const showExpirationWarning = daysUntilExpiration <= 60;
-  const [firstCurrentProperty] = getMyCurrentProperties(CURRENT_TENANT_ID);
-
-  // Next rent due date = next occurrence of the lease's payment-due day.
-  // Computed FE-side; no backend call needed (design plan §1, task 5).
-  const getNextRentDueDate = (dueDay: number): Date => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let due = new Date(today.getFullYear(), today.getMonth(), dueDay);
-    if (due < today) {
-      due = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
-    }
-    return due;
-  };
-  const rentDueInDays = daysUntil(
-    getNextRentDueDate(currentLease.paymentDueDay)
-  );
-  const isLeaseActive = currentLease.status === 'active';
+  const lease = data?.lease ?? null;
+  const property = data?.property ?? null;
+  const propertyAddress = property
+    ? `${property.addressLine1}, ${property.city}, ${property.stateOrProvince}`
+    : lease
+      ? `Property ${lease.propertyId.slice(0, 8)}…`
+      : '';
+  const daysUntilExpiration = lease ? daysUntil(new Date(lease.endDate)) : 0;
+  const showExpirationWarning = lease != null && daysUntilExpiration <= 60;
 
   return (
     <ErrorBoundary>
@@ -250,48 +198,36 @@ export function TenantDashboard() {
           </Alert>
         )}
 
-        {currentLease.status === 'active' && (
+        {lease && (
           <div className="mb-6 space-y-3">
             <LeaseExtensionBanner
-              leaseId={currentLease.id}
-              endDate={currentLease.endDate}
-              propertyAddress={currentLease.propertyAddress}
+              leaseId={lease.id}
+              endDate={new Date(lease.endDate)}
+              propertyAddress={propertyAddress}
             />
             <LeaseDecisionBanner
-              leaseId={currentLease.id}
-              endDate={currentLease.endDate}
-              propertyAddress={currentLease.propertyAddress}
+              leaseId={lease.id}
+              endDate={new Date(lease.endDate)}
+              propertyAddress={propertyAddress}
             />
           </div>
         )}
 
-        {/* Task 7 — Tenant Score (Phase 1, read-only). Sits above the
-            recommendations so the tenant sees their reputation metric
-            before scrolling into property listings. */}
+        {/* Tenant score (Demo — no backend) */}
         <div className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs uppercase tracking-wide text-gray-400">
+              Tenant score
+            </span>
+            <DemoBadge />
+          </div>
           <TenantScoreCard score={tenantScore} variant="compact" />
         </div>
 
-        {/* Task 6 — recommendations within 180 days of lease end. The dashboard's
-            MOCK_LEASE is a stripped-down LeaseAgreement; for the recommendations
-            section we need a real Property object, so we source the first active
-            tenant lease via getMyCurrentProperties (same demo seed as MyProperties). */}
-        {firstCurrentProperty && (
-          <div className="mb-8">
-            <RecommendedProperties
-              tenantId={CURRENT_TENANT_ID}
-              leaseEndDate={firstCurrentProperty.lease.endDate}
-              monthlyRent={firstCurrentProperty.lease.monthlyRent}
-              currentProperty={firstCurrentProperty.property}
-              variant="compact"
-            />
-          </div>
-        )}
-
-        {/* Active-lease hero — single primary action (design plan §1; tasks 2/3/5/7).
-            Empty state replaces the card entirely when there is no active lease,
-            rather than rendering a card with a disabled CTA. */}
-        {isLeaseActive ? (
+        {/* Active-lease hero */}
+        {isLoading ? (
+          <Skeleton className="h-48 w-full rounded-lg mb-8" />
+        ) : lease ? (
           <Card className="mb-8">
             <CardContent className="p-6">
               <div className="flex items-start justify-between gap-4">
@@ -304,25 +240,27 @@ export function TenantDashboard() {
                       className="h-4 w-4 text-gray-400"
                       aria-hidden="true"
                     />
-                    {currentLease.propertyAddress}
+                    {propertyAddress}
                   </p>
                 </div>
                 <Badge className="gap-1 bg-green-100 text-green-800">
                   <Check className="h-3 w-3" aria-hidden="true" />
-                  Active
+                  {LEASE_STATUS_BADGE[lease.status].label}
                 </Badge>
               </div>
 
               <div className="mt-6">
                 <p className="text-sm text-gray-600">
-                  {rentDueInDays > 0
-                    ? `Next rent due in ${rentDueInDays} days`
-                    : rentDueInDays === 0
-                      ? 'Rent due today'
-                      : `Rent overdue by ${Math.abs(rentDueInDays)} days`}
+                  {daysUntilExpiration > 0
+                    ? `Lease ends in ${daysUntilExpiration} days`
+                    : 'Lease term has ended'}
                 </p>
                 <p className="mt-1 text-4xl font-bold tracking-tight">
-                  {formatCurrency(currentLease.monthlyRent)}
+                  {formatLeaseMoney(lease.monthlyRent, lease.currency)}
+                  <span className="text-base font-normal text-gray-500">
+                    {' '}
+                    / month
+                  </span>
                 </p>
               </div>
 
@@ -353,189 +291,180 @@ export function TenantDashboard() {
         )}
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Monthly Rent
-              </CardTitle>
-              <DollarSign
-                className="h-4 w-4 text-gray-400"
-                aria-hidden="true"
-              />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(currentLease.monthlyRent)}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Due on day {currentLease.paymentDueDay} of each month
-              </p>
-            </CardContent>
-          </Card>
+        {lease && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Monthly Rent
+                </CardTitle>
+                <DollarSign
+                  className="h-4 w-4 text-gray-400"
+                  aria-hidden="true"
+                />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatLeaseMoney(lease.monthlyRent, lease.currency)}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">per month</p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Lease Expires
-              </CardTitle>
-              <Calendar className="h-4 w-4 text-gray-400" aria-hidden="true" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatDate(currentLease.endDate)}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {daysUntilExpiration} days remaining
-              </p>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Lease Expires
+                </CardTitle>
+                <Calendar
+                  className="h-4 w-4 text-gray-400"
+                  aria-hidden="true"
+                />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatDate(lease.endDate)}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {daysUntilExpiration} days remaining
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Security Deposit
-              </CardTitle>
-              <CreditCard
-                className="h-4 w-4 text-gray-400"
-                aria-hidden="true"
-              />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {formatCurrency(currentLease.securityDeposit)}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Refundable at lease end
-              </p>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Security Deposit
+                </CardTitle>
+                <CreditCard
+                  className="h-4 w-4 text-gray-400"
+                  aria-hidden="true"
+                />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatLeaseMoney(lease.securityDeposit, lease.currency)}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Refundable at lease end
+                </p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Lease Status
-              </CardTitle>
-              <FileText className="h-4 w-4 text-gray-400" aria-hidden="true" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold capitalize">
-                {currentLease.status}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {currentLease.type.replace('-', ' ')} lease
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Lease Status
+                </CardTitle>
+                <FileText
+                  className="h-4 w-4 text-gray-400"
+                  aria-hidden="true"
+                />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {LEASE_STATUS_BADGE[lease.status].label}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {LEASE_TYPE_LABEL[lease.type]} lease
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Current Lease & Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Current Lease</CardTitle>
-              <CardDescription>
-                Your active rental agreement details
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Property Address</p>
-                  <p className="text-sm text-gray-600">
-                    {currentLease.propertyAddress}
-                  </p>
+        {lease && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Current Lease</CardTitle>
+                <CardDescription>
+                  Your active rental agreement details
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Property Address</p>
+                    <p className="text-sm text-gray-600">{propertyAddress}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/tenant/leases/${lease.id}`)}
+                    aria-label="View lease details"
+                  >
+                    View Details
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/tenant/leases/${currentLease.id}`)}
-                  aria-label="View lease details"
-                >
-                  View Details
-                </Button>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium">Lease Start</p>
-                  <p className="text-sm text-gray-600">
-                    {formatDate(currentLease.startDate)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Lease End</p>
-                  <p className="text-sm text-gray-600">
-                    {formatDate(currentLease.endDate)}
-                  </p>
-                </div>
-              </div>
-
-              {currentLease.utilities && currentLease.utilities.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium mb-2">Utilities Included</p>
-                  <div className="flex flex-wrap gap-2">
-                    {currentLease.utilities.map((utility, index) => (
-                      <Badge key={index} variant="secondary">
-                        {utility.utilityType}
-                      </Badge>
-                    ))}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium">Lease Start</p>
+                    <p className="text-sm text-gray-600">
+                      {formatDate(lease.startDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Lease End</p>
+                    <p className="text-sm text-gray-600">
+                      {formatDate(lease.endDate)}
+                    </p>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Common tasks and shortcuts</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => navigate('/tenant/maintenance')}
-                aria-label="Request maintenance"
-              >
-                <Wrench className="mr-2 h-4 w-4" aria-hidden="true" />
-                Request Maintenance
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => navigate(`/tenant/leases/${currentLease.id}`)}
-                aria-label="View lease documents"
-              >
-                <FileText className="mr-2 h-4 w-4" aria-hidden="true" />
-                View Lease Documents
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => navigate('/tenant/profile')}
-                aria-label="Update profile"
-              >
-                <Home className="mr-2 h-4 w-4" aria-hidden="true" />
-                Update Profile
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+                <CardDescription>Common tasks and shortcuts</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => navigate('/tenant/maintenance')}
+                >
+                  <Wrench className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Request Maintenance
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => navigate(`/tenant/leases/${lease.id}`)}
+                >
+                  <FileText className="mr-2 h-4 w-4" aria-hidden="true" />
+                  View Lease Documents
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => navigate('/tenant/profile')}
+                >
+                  <Home className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Update Profile
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-        {/* Recent Activity — lease-lifecycle milestones (design ref §1).
-            Captures on-chain events (lease signed, deposit funded) that the
-            payments list alone doesn't surface. */}
+        {/* Recent Activity (Demo — no backend) */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle>Recent Activity</CardTitle>
+              <DemoBadge />
+            </div>
             <CardDescription>
               Lease milestones and on-chain events
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="divide-y">
-              {recentActivity.map((item) => (
+              {MOCK_ACTIVITY.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
@@ -562,81 +491,67 @@ export function TenantDashboard() {
           </CardContent>
         </Card>
 
-        {/* Recent Payments */}
+        {/* Recent Payments (Demo — no backend) */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Recent Payments</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle>Recent Payments</CardTitle>
+                  <DemoBadge />
+                </div>
                 <CardDescription>Your payment history</CardDescription>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate('/tenant/payments')}
-                aria-label="View all payments"
               >
                 View All
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            {recentPayments.length === 0 ? (
-              <EmptyState
-                icon={DollarSign}
-                title="No Payment History"
-                description="You haven't made any payments yet. Your payment history will appear here once you make your first payment."
-                action={{
-                  label: 'Make a Payment',
-                  onClick: () => navigate('/tenant/payments'),
-                }}
-              />
-            ) : (
-              <div className="space-y-4">
-                {recentPayments.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 p-4 border rounded-lg hover:bg-gray-50 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
-                    tabIndex={0}
-                    role="article"
-                    aria-label={`Payment of ${formatCurrency(payment.amount)} on ${formatDate(payment.paymentDate)}`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
-                        aria-hidden="true"
-                      >
-                        <DollarSign className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">
-                          {formatCurrency(payment.amount)}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatDate(payment.paymentDate)} •{' '}
-                          {payment.paymentMethod.replace('_', ' ')}
-                        </p>
-                      </div>
+            <div className="space-y-4">
+              {MOCK_PAYMENTS.map((payment) => (
+                <div
+                  key={payment.id}
+                  className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 p-4 border rounded-lg"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
+                      aria-hidden="true"
+                    >
+                      <DollarSign className="h-5 w-5 text-primary" />
                     </div>
-                    <div className="flex items-center gap-3 pl-14 sm:pl-0">
-                      {getPaymentStatusBadge(payment.paymentStatus)}
-                      {payment.paymentStatus === 'completed' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            navigate(`/tenant/payments/${payment.id}`)
-                          }
-                          aria-label={`Download receipt for payment of ${formatCurrency(payment.amount)}`}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      )}
+                    <div>
+                      <p className="font-medium">
+                        {formatCurrency(payment.amount)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {formatDate(payment.paymentDate)} •{' '}
+                        {payment.paymentMethod.replace('_', ' ')}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="flex items-center gap-3 pl-14 sm:pl-0">
+                    {getPaymentStatusBadge(payment.paymentStatus)}
+                    {payment.paymentStatus === 'completed' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          navigate(`/tenant/payments/${payment.id}`)
+                        }
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
