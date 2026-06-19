@@ -223,10 +223,56 @@ export function ClausesCard({ lease }: { lease: Lease }) {
 }
 
 export function DocumentCard({ lease }: { lease: Lease }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // GET /document is a GET with side effects (re-renders + re-stores), so it
+  // runs only on this explicit action — never on render. It returns the full
+  // lease with refreshed links/hash/cid, which we push into the cache.
+  const generate = useMutation({
+    mutationFn: () => getLeaseDocument(lease.id),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['lease', lease.id], updated);
+      toast({
+        title: 'Document generated',
+        description:
+          'This environment renders plain text, not a PDF (hackathon).',
+      });
+    },
+    onError: () =>
+      toast({
+        title: 'Couldn’t generate the document',
+        description: 'Please try again.',
+        variant: 'destructive',
+      }),
+  });
+
+  const hasDoc = Boolean(lease.documentLinks.generatedPDF);
+
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle>Document</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle>Document</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generate.mutate()}
+            disabled={generate.isPending}
+          >
+            {generate.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {hasDoc ? 'Refresh' : 'Generate'}
+              </>
+            )}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <div className="flex items-center justify-between rounded-lg border p-3">
@@ -234,10 +280,10 @@ export function DocumentCard({ lease }: { lease: Lease }) {
             <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
             <span className="font-medium">Generated lease document</span>
           </div>
-          {lease.documentLinks.generatedPDF ? (
+          {hasDoc ? (
             <Button variant="outline" size="sm" asChild>
               <a
-                href={lease.documentLinks.generatedPDF}
+                href={lease.documentLinks.generatedPDF as string}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -267,6 +313,10 @@ export function DocumentCard({ lease }: { lease: Lease }) {
             </div>
           </>
         )}
+        <p className="text-xs text-muted-foreground">
+          Hackathon build: the document is plain text, and the hash/CID are
+          stubs until a real renderer + storage are wired.
+        </p>
       </CardContent>
     </Card>
   );
