@@ -1,6 +1,73 @@
 import { supabase } from '@/lib/supabase/client';
 import { emailService } from './emailService';
 import { smsService } from './smsService';
+import { backendClient } from '@/lib/api-client';
+import { toQueryString } from '@/lib/queryString';
+import type { PaginatedResponse } from '@/types/listingContract';
+import type {
+  Renewal,
+  Negotiation,
+  CreateRenewalBody,
+  RespondRenewalBody,
+  PostNegotiationBody,
+  ListRenewalsQuery,
+} from '@/types/renewalContract';
+
+// ===========================================================================
+// Backend-wired renewal API (`feat/lease-agreement`, `/api/v1/renewals`).
+// See `docs/api/agreements_api.md` §4. This supersedes the legacy Supabase
+// `RenewalService` class below, which is migrated page-by-page and removed in
+// the cleanup step (LA-20). No Supabase — anywhere.
+// ===========================================================================
+
+const RENEWALS = '/api/v1/renewals';
+
+/** `POST /renewals` — landlord creates an offer → `sent`. */
+export async function createRenewal(body: CreateRenewalBody): Promise<Renewal> {
+  return backendClient.post<Renewal>(RENEWALS, body);
+}
+
+/** `GET /renewals/{id}` — offer detail (party-gated). */
+export async function getRenewal(id: string): Promise<Renewal> {
+  return backendClient.get<Renewal>(`${RENEWALS}/${id}`);
+}
+
+/** `GET /renewals` — the caller's renewals, paginated. Scope by `tenantId`/`landlordId: 'me'`. */
+export async function listRenewals(
+  query: ListRenewalsQuery = {}
+): Promise<PaginatedResponse<Renewal>> {
+  return backendClient.get<PaginatedResponse<Renewal>>(
+    `${RENEWALS}${toQueryString({ ...query })}`
+  );
+}
+
+/** `POST /renewals/{id}/respond` — tenant accepts / rejects / counters. */
+export async function respondRenewal(
+  id: string,
+  body: RespondRenewalBody
+): Promise<Renewal> {
+  return backendClient.post<Renewal>(`${RENEWALS}/${id}/respond`, body);
+}
+
+/** `GET /renewals/{id}/negotiations` — append-only thread, oldest-first. */
+export async function getNegotiations(id: string): Promise<Negotiation[]> {
+  return backendClient.get<Negotiation[]>(`${RENEWALS}/${id}/negotiations`);
+}
+
+/** `POST /renewals/{id}/negotiations` — add a message or counter-offer. */
+export async function postNegotiation(
+  id: string,
+  body: PostNegotiationBody
+): Promise<Negotiation> {
+  return backendClient.post<Negotiation>(
+    `${RENEWALS}/${id}/negotiations`,
+    body
+  );
+}
+
+// ===========================================================================
+// LEGACY (Supabase) — used by not-yet-migrated renewal pages; removed in LA-20.
+// ===========================================================================
 
 export interface RenewalOffer {
   id: string;
@@ -153,12 +220,14 @@ class RenewalService {
 
     const { data, error } = await supabase
       .from('leases')
-      .select(`
+      .select(
+        `
         *,
         property:properties(*),
         tenant:tenants(*),
         landlord:landlords(*)
-      `)
+      `
+      )
       .eq('status', 'active')
       .lte('end_date', in90Days.toISOString())
       .gte('end_date', today.toISOString())
@@ -190,12 +259,14 @@ class RenewalService {
     // Get lease details
     const { data: lease, error: leaseError } = await supabase
       .from('leases')
-      .select(`
+      .select(
+        `
         *,
         property:properties(*),
         tenant:tenants(*),
         landlord:landlords(*)
-      `)
+      `
+      )
       .eq('id', leaseId)
       .single();
 
@@ -217,7 +288,8 @@ class RenewalService {
     if (reminderError) throw reminderError;
 
     // Send notifications
-    const daysUntilExpiration = reminderType === '90_day' ? 90 : reminderType === '60_day' ? 60 : 30;
+    const daysUntilExpiration =
+      reminderType === '90_day' ? 90 : reminderType === '60_day' ? 60 : 30;
     const expirationDate = new Date(leaseData.end_date).toLocaleDateString();
 
     // Email to tenant
@@ -262,16 +334,20 @@ class RenewalService {
   /**
    * Create a new renewal offer
    */
-  async createRenewalOffer(data: CreateRenewalOfferData): Promise<RenewalOffer> {
+  async createRenewalOffer(
+    data: CreateRenewalOfferData
+  ): Promise<RenewalOffer> {
     // Get lease details
     const { data: lease, error: leaseError } = await supabase
       .from('leases')
-      .select(`
+      .select(
+        `
         *,
         property:properties(*),
         tenant:tenants(*),
         landlord:landlords(*)
-      `)
+      `
+      )
       .eq('id', data.lease_id)
       .single();
 
@@ -309,12 +385,16 @@ class RenewalService {
 
     // Send email notification to tenant
     const rentChange = data.proposed_rent - leaseData.monthly_rent;
-    const rentChangePercent = ((rentChange / leaseData.monthly_rent) * 100).toFixed(1);
-    const rentChangeText = rentChange > 0 
-      ? `increase of $${rentChange.toFixed(2)} (${rentChangePercent}%)`
-      : rentChange < 0
-      ? `decrease of $${Math.abs(rentChange).toFixed(2)} (${Math.abs(parseFloat(rentChangePercent))}%)`
-      : 'no change';
+    const rentChangePercent = (
+      (rentChange / leaseData.monthly_rent) *
+      100
+    ).toFixed(1);
+    const rentChangeText =
+      rentChange > 0
+        ? `increase of $${rentChange.toFixed(2)} (${rentChangePercent}%)`
+        : rentChange < 0
+          ? `decrease of $${Math.abs(rentChange).toFixed(2)} (${Math.abs(parseFloat(rentChangePercent))}%)`
+          : 'no change';
 
     await emailService.sendEmail({
       to: leaseData.tenant.email,
@@ -350,14 +430,16 @@ class RenewalService {
   ): Promise<RenewalOffer[]> {
     let query = supabase
       .from('lease_renewals')
-      .select(`
+      .select(
+        `
         *,
         lease:leases(
           *,
           property:properties(*),
           tenant:tenants(*)
         )
-      `)
+      `
+      )
       .eq('landlord_id', landlordId)
       .order('created_at', { ascending: false });
 
@@ -379,14 +461,16 @@ class RenewalService {
   ): Promise<RenewalOffer[]> {
     let query = supabase
       .from('lease_renewals')
-      .select(`
+      .select(
+        `
         *,
         lease:leases(
           *,
           property:properties(*),
           landlord:landlords(*)
         )
-      `)
+      `
+      )
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false });
 
@@ -405,7 +489,8 @@ class RenewalService {
   async getRenewalOfferById(id: string): Promise<RenewalOffer> {
     const { data, error } = await supabase
       .from('lease_renewals')
-      .select(`
+      .select(
+        `
         *,
         lease:leases(
           *,
@@ -414,7 +499,8 @@ class RenewalService {
           landlord:landlords(*)
         ),
         counter_offers:renewal_counter_offers(*)
-      `)
+      `
+      )
       .eq('id', id)
       .single();
 
@@ -462,7 +548,11 @@ class RenewalService {
       if (error) throw error;
 
       // Send notification to landlord
-      if (offer.lease?.landlord && offer.lease?.tenant && offer.lease?.property) {
+      if (
+        offer.lease?.landlord &&
+        offer.lease?.tenant &&
+        offer.lease?.property
+      ) {
         await emailService.sendEmail({
           to: offer.lease.landlord.email,
           subject: 'Renewal Offer Accepted',
@@ -493,7 +583,11 @@ class RenewalService {
       if (error) throw error;
 
       // Send notification to landlord
-      if (offer.lease?.landlord && offer.lease?.tenant && offer.lease?.property) {
+      if (
+        offer.lease?.landlord &&
+        offer.lease?.tenant &&
+        offer.lease?.property
+      ) {
         await emailService.sendEmail({
           to: offer.lease.landlord.email,
           subject: 'Renewal Offer Declined',
@@ -549,7 +643,11 @@ class RenewalService {
       if (counterError) throw counterError;
 
       // Send notification to landlord
-      if (offer.lease?.landlord && offer.lease?.tenant && offer.lease?.property) {
+      if (
+        offer.lease?.landlord &&
+        offer.lease?.tenant &&
+        offer.lease?.property
+      ) {
         await emailService.sendEmail({
           to: offer.lease.landlord.email,
           subject: 'Counter-Offer Received',
@@ -646,9 +744,12 @@ class RenewalService {
   /**
    * Accept a counter-offer
    */
-  async acceptCounterOffer(offerId: string, counterOfferId: string): Promise<RenewalOffer> {
+  async acceptCounterOffer(
+    offerId: string,
+    counterOfferId: string
+  ): Promise<RenewalOffer> {
     const offer = await this.getRenewalOfferById(offerId);
-    
+
     const { data: counterOffer, error: counterError } = await supabase
       .from('renewal_counter_offers')
       .select('*')
@@ -668,7 +769,9 @@ class RenewalService {
     // Calculate new end date
     const startDate = new Date(offer.new_lease_start_date!);
     const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + counterOfferData.proposed_term_months);
+    endDate.setMonth(
+      endDate.getMonth() + counterOfferData.proposed_term_months
+    );
 
     // Update renewal offer
     const { data, error } = await supabase
@@ -687,12 +790,17 @@ class RenewalService {
     if (error) throw error;
 
     // Send notifications
-    const acceptedBy = counterOfferData.offered_by === 'tenant' ? 'landlord' : 'tenant';
+    const acceptedBy =
+      counterOfferData.offered_by === 'tenant' ? 'landlord' : 'tenant';
     if (offer.lease?.tenant && offer.lease?.landlord && offer.lease?.property) {
-      const notifyEmail = acceptedBy === 'landlord' ? offer.lease.tenant.email : offer.lease.landlord.email;
-      const notifyName = acceptedBy === 'landlord' 
-        ? `${offer.lease.tenant.first_name} ${offer.lease.tenant.last_name}`
-        : `${offer.lease.landlord.first_name} ${offer.lease.landlord.last_name}`;
+      const notifyEmail =
+        acceptedBy === 'landlord'
+          ? offer.lease.tenant.email
+          : offer.lease.landlord.email;
+      const notifyName =
+        acceptedBy === 'landlord'
+          ? `${offer.lease.tenant.first_name} ${offer.lease.tenant.last_name}`
+          : `${offer.lease.landlord.first_name} ${offer.lease.landlord.last_name}`;
 
       await emailService.sendEmail({
         to: notifyEmail,
@@ -730,20 +838,29 @@ class RenewalService {
 
     const renewalData = (renewals || []) as RenewalOffer[];
     const totalRenewals = renewalData.length;
-    const acceptedRenewals = renewalData.filter(r => r.status === 'accepted').length;
-    const renewalRate = totalRenewals > 0 ? (acceptedRenewals / totalRenewals) * 100 : 0;
+    const acceptedRenewals = renewalData.filter(
+      (r) => r.status === 'accepted'
+    ).length;
+    const renewalRate =
+      totalRenewals > 0 ? (acceptedRenewals / totalRenewals) * 100 : 0;
 
     // Calculate average rent increase
     const rentIncreases = renewalData
-      .filter(r => r.status === 'accepted' && r.final_rent)
-      .map(r => r.final_rent! - r.original_rent);
-    const averageRentIncrease = rentIncreases.length > 0
-      ? rentIncreases.reduce((sum, inc) => sum + inc, 0) / rentIncreases.length
-      : 0;
+      .filter((r) => r.status === 'accepted' && r.final_rent)
+      .map((r) => r.final_rent! - r.original_rent);
+    const averageRentIncrease =
+      rentIncreases.length > 0
+        ? rentIncreases.reduce((sum, inc) => sum + inc, 0) /
+          rentIncreases.length
+        : 0;
 
     // Calculate average negotiation rounds
-    const totalRounds = renewalData.reduce((sum, r) => sum + r.negotiation_rounds, 0);
-    const averageNegotiationRounds = totalRenewals > 0 ? totalRounds / totalRenewals : 0;
+    const totalRounds = renewalData.reduce(
+      (sum, r) => sum + r.negotiation_rounds,
+      0
+    );
+    const averageNegotiationRounds =
+      totalRenewals > 0 ? totalRounds / totalRenewals : 0;
 
     // Renewals by month (last 12 months)
     const renewalsByMonth = [];
@@ -751,9 +868,14 @@ class RenewalService {
       const date = new Date();
       date.setMonth(date.getMonth() - i);
       const monthKey = date.toISOString().slice(0, 7);
-      const count = renewalData.filter(r => r.created_at.startsWith(monthKey)).length;
+      const count = renewalData.filter((r) =>
+        r.created_at.startsWith(monthKey)
+      ).length;
       renewalsByMonth.push({
-        month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        month: date.toLocaleDateString('en-US', {
+          month: 'short',
+          year: 'numeric',
+        }),
         count,
       });
     }
@@ -767,11 +889,11 @@ class RenewalService {
       { range: '10%+', count: 0 },
     ];
 
-    renewalData.forEach(r => {
+    renewalData.forEach((r) => {
       if (r.status === 'accepted' && r.final_rent) {
         const change = r.final_rent - r.original_rent;
         const changePercent = (change / r.original_rent) * 100;
-        
+
         if (change < 0) rentAdjustments[0].count++;
         else if (change === 0) rentAdjustments[1].count++;
         else if (changePercent <= 5) rentAdjustments[2].count++;
@@ -783,11 +905,13 @@ class RenewalService {
     // Response time distribution
     const responseTimes: Array<{ days: number; count: number }> = [];
     renewalData
-      .filter(r => r.response_date)
-      .forEach(r => {
+      .filter((r) => r.response_date)
+      .forEach((r) => {
         const created = new Date(r.created_at);
         const responded = new Date(r.response_date!);
-        const days = Math.floor((responded.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+        const days = Math.floor(
+          (responded.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
+        );
         responseTimes.push({ days, count: 1 });
       });
 
