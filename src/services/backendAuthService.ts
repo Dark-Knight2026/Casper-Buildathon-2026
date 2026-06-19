@@ -20,14 +20,14 @@ export async function getNonce(publicKey: string): Promise<NonceResponse> {
   // (hex string with a 1-byte algorithm prefix: 01 = Ed25519, 02 = Secp256k1).
   return backendClient.get<NonceResponse>(
     `/api/v1/auth/nonce?wallet_address=${encodeURIComponent(publicKey)}`,
-    { retry: false },
+    { retry: false }
   );
 }
 
 export async function loginWithSignature(
   publicKey: string,
   signatureHex: string,
-  role?: SelfRegisterableRole,
+  role?: SelfRegisterableRole
 ): Promise<LoginResponse> {
   // casper_types::Signature::from_hex expects a 1-byte algorithm prefix:
   //   01 = Ed25519, 02 = Secp256k1
@@ -35,8 +35,12 @@ export async function loginWithSignature(
   // the public key with the same prefix byte prepended — so the address prefix
   // reliably identifies the signing algorithm. Reference:
   // https://docs.casper.network/concepts/accounts-and-keys/#account-keys
+  // A raw signature is 128 hex chars; one already carrying the prefix is 130 —
+  // distinguish by length, not by leading bytes (a raw sig can itself start
+  // with 01/02, which would skip a needed prefix).
   const prefix = publicKey.startsWith('02') ? '02' : '01';
-  const signature = signatureHex.startsWith(prefix) ? signatureHex : `${prefix}${signatureHex}`;
+  const signature =
+    signatureHex.length === 130 ? signatureHex : `${prefix}${signatureHex}`;
 
   // Tokens travel as HttpOnly cookies set by the response — the request must
   // therefore opt into credentialed mode so the browser stores Set-Cookie.
@@ -49,7 +53,7 @@ export async function loginWithSignature(
       // `tenant` and the field is honored only on the very first login.
       ...(role !== undefined ? { role } : {}),
     },
-    { retry: false },
+    { retry: false }
   );
 }
 
@@ -103,7 +107,7 @@ export async function register(body: RegisterBody): Promise<LoginResponse> {
  */
 export async function loginWithPassword(
   email: string,
-  password: string,
+  password: string
 ): Promise<LoginResponse> {
   return backendClient.post<LoginResponse>(
     '/api/v1/auth/login/password',
@@ -112,7 +116,7 @@ export async function loginWithPassword(
     // refresh-and-replay path. skipAuthError: a 401 here means "wrong
     // credentials" and is handled in-page — it must NOT fire the global
     // onAuthError handler, which hard-redirects to /auth/login (a full reload).
-    { retry: false, skipRefresh: true, skipAuthError: true },
+    { retry: false, skipRefresh: true, skipAuthError: true }
   );
 }
 
@@ -128,13 +132,15 @@ export interface ForgotPasswordResponse {
  *
  * Unauthenticated.
  */
-export async function forgotPassword(email: string): Promise<ForgotPasswordResponse> {
+export async function forgotPassword(
+  email: string
+): Promise<ForgotPasswordResponse> {
   return backendClient.post<ForgotPasswordResponse>(
     '/api/v1/auth/password/forgot',
     { email },
     // Unauthenticated flow: never let an error here trigger the global
     // auth-redirect; the page renders its own neutral state.
-    { retry: false, skipRefresh: true, skipAuthError: true },
+    { retry: false, skipRefresh: true, skipAuthError: true }
   );
 }
 
@@ -151,14 +157,14 @@ export async function forgotPassword(email: string): Promise<ForgotPasswordRespo
  */
 export async function resetPassword(
   token: string,
-  newPassword: string,
+  newPassword: string
 ): Promise<LoginResponse> {
   return backendClient.post<LoginResponse>(
     '/api/v1/auth/password/reset',
     { token, new_password: newPassword },
     // Unauthenticated flow: a 400 (bad/expired token) is handled in-page and
     // must not hard-redirect via the global onAuthError handler.
-    { retry: false, skipRefresh: true, skipAuthError: true },
+    { retry: false, skipRefresh: true, skipAuthError: true }
   );
 }
 
@@ -237,7 +243,7 @@ export async function sendVerificationEmail(): Promise<VerifyEmailSendResponse> 
   return backendClient.post<VerifyEmailSendResponse>(
     '/api/v1/auth/verify/email/send',
     undefined,
-    { retry: false },
+    { retry: false }
   );
 }
 
@@ -249,7 +255,7 @@ export async function resendVerificationEmail(): Promise<VerifyEmailSendResponse
   return backendClient.post<VerifyEmailSendResponse>(
     '/api/v1/auth/verify/email/resend',
     undefined,
-    { retry: false },
+    { retry: false }
   );
 }
 
@@ -270,7 +276,7 @@ export async function resendVerificationEmail(): Promise<VerifyEmailSendResponse
  * "bad token".
  */
 export async function confirmEmailVerification(
-  token: string,
+  token: string
 ): Promise<VerifyEmailConfirmResponse> {
   return backendClient.post<VerifyEmailConfirmResponse>(
     '/api/v1/auth/verify/email/confirm',
@@ -278,6 +284,6 @@ export async function confirmEmailVerification(
     // skipAuthError: a 401 here is classified in-page (needs_login vs bad token);
     // don't let the global handler hard-redirect to /auth/login. Refresh-and-replay
     // still runs, so an expired-access link transparently re-auths.
-    { retry: false, skipAuthError: true },
+    { retry: false, skipAuthError: true }
   );
 }

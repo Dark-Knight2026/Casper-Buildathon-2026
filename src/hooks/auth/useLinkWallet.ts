@@ -35,7 +35,7 @@ export function useLinkWallet() {
       // `refresh: false` defers the profile refresh to the caller — used when an
       // on-chain registration step follows immediately, so the profile (and the
       // UI that keys off `walletAddress`) only updates once the whole flow ends.
-      opts?: { refresh?: boolean },
+      opts?: { refresh?: boolean }
     ): Promise<boolean> => {
       if (!clickRef || !publicKey) return false;
 
@@ -54,11 +54,14 @@ export function useLinkWallet() {
 
         // 3. Prefix the signature with its algorithm byte (01 = Ed25519,
         //    02 = Secp256k1), matching the wallet-login path — the backend's
-        //    `Signature::from_hex` requires it.
+        //    `Signature::from_hex` requires it. A raw signature is 128 hex
+        //    chars; one already prefixed is 130 — distinguish by length, not by
+        //    leading bytes (a raw sig can itself start with 01/02).
         const prefix = publicKey.startsWith('02') ? '02' : '01';
-        const signature = result.signatureHex.startsWith(prefix)
-          ? result.signatureHex
-          : `${prefix}${result.signatureHex}`;
+        const signature =
+          result.signatureHex.length === 130
+            ? result.signatureHex
+            : `${prefix}${result.signatureHex}`;
 
         // 4. Bind the wallet, then refresh so `walletAddress` propagates
         //    (unless the caller defers it to run an on-chain step first).
@@ -76,7 +79,7 @@ export function useLinkWallet() {
         setLinking(false);
       }
     },
-    [refreshProfile],
+    [refreshProfile]
   );
 
   return { link, linking, error, clearError: () => setError(null) };

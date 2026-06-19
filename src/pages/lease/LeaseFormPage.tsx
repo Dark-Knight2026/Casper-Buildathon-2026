@@ -93,6 +93,15 @@ const EMPTY_FORM: FormState = {
 };
 
 /**
+ * Parse a date as UTC midnight, ignoring any time/zone component. Accepts both
+ * date-only (`YYYY-MM-DD`) and full ISO inputs so the two helpers below stay in
+ * lockstep regardless of which shape the backend sends.
+ */
+function parseUtcDay(value: string): Date {
+  return new Date(`${value.slice(0, 10)}T00:00:00Z`);
+}
+
+/**
  * End date = start + term × 30 days, as `YYYY-MM-DD`. Empty when inputs are
  * incomplete. The backend requires `(end - start)` to be a whole multiple of 30
  * days, so deriving the end from a term count makes every value valid by
@@ -101,7 +110,7 @@ const EMPTY_FORM: FormState = {
 function computeEndDate(start: string, termMonths: string): string {
   const months = Number(termMonths);
   if (!start || !Number.isInteger(months) || months <= 0) return '';
-  const d = new Date(`${start}T00:00:00Z`);
+  const d = parseUtcDay(start);
   d.setUTCDate(d.getUTCDate() + months * 30);
   return d.toISOString().slice(0, 10);
 }
@@ -109,7 +118,7 @@ function computeEndDate(start: string, termMonths: string): string {
 /** Months (× 30 days) between two ISO dates — to seed the term when editing. */
 function termMonthsBetween(start: string, end: string): number {
   const days = Math.round(
-    (new Date(end).getTime() - new Date(start).getTime()) / MS_PER_DAY
+    (parseUtcDay(end).getTime() - parseUtcDay(start).getTime()) / MS_PER_DAY
   );
   return Math.max(1, Math.round(days / 30));
 }

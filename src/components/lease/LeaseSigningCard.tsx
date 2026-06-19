@@ -97,11 +97,14 @@ function SigningFlow({
         return;
       }
       // Prefix the algorithm byte (01 = Ed25519, 02 = Secp256k1) as the backend
-      // verifier expects, matching the wallet-link path.
+      // verifier expects, matching the wallet-link path. A raw signature is 128
+      // hex chars; one already carrying the prefix is 130 — distinguish by
+      // length, not by leading bytes (a raw sig can itself start with 01/02).
       const prefix = account.publicKey.startsWith('02') ? '02' : '01';
-      const signature = result.signatureHex.startsWith(prefix)
-        ? result.signatureHex
-        : `${prefix}${result.signatureHex}`;
+      const signature =
+        result.signatureHex.length === 130
+          ? result.signatureHex
+          : `${prefix}${result.signatureHex}`;
       await signLease(lease.id, {
         role,
         signature,
