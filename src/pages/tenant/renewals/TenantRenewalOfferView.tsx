@@ -172,10 +172,16 @@ export default function TenantRenewalOfferView() {
 
       {renewal.status === 'accepted' && (
         <Card className="border-green-200 bg-green-50">
-          <CardContent className="py-4 flex items-center gap-2 text-sm text-green-700">
-            <CheckCircle2 className="h-4 w-4" />
-            You accepted this offer. The landlord will prepare the renewed
-            lease.
+          <CardContent className="py-4 flex items-start gap-2 text-sm text-green-700">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              You accepted this offer. Once the landlord prolongs the lease
+              on-chain, the renewed term applies.{' '}
+              <span className="text-green-800/80">
+                Your lease’s end date may not refresh automatically until the
+                backend reconciles — these agreed terms are authoritative.
+              </span>
+            </span>
           </CardContent>
         </Card>
       )}

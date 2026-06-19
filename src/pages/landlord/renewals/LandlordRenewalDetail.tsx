@@ -101,10 +101,17 @@ export default function LandlordRenewalDetail() {
 
       {renewal.status === 'accepted' && (
         <Card className="border-green-200 bg-green-50">
-          <CardContent className="py-4 flex items-center gap-2 text-sm text-green-700">
-            <CheckCircle2 className="h-4 w-4" />
-            The tenant accepted. Prolong the lease on-chain to apply the
-            renewal.
+          <CardContent className="py-4 flex items-start gap-2 text-sm text-green-700">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              The tenant accepted. Prolong the lease on-chain to apply the
+              renewal.{' '}
+              <span className="text-green-800/80">
+                Note: the lease’s end date doesn’t refresh automatically after
+                prolonging (the indexer is log-only) — the agreed terms below
+                are authoritative until the backend reconciles.
+              </span>
+            </span>
           </CardContent>
         </Card>
       )}
