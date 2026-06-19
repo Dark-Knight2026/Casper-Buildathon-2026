@@ -1,203 +1,248 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+/**
+ * Renewal negotiation thread — `GET/POST /api/v1/renewals/{id}/negotiations`.
+ * Append-only, oldest-first; both parties post a `message` (body) or a
+ * `counter-offer` (proposedTerms). This thread is SEPARATE from the renewal's
+ * own `counterOffer` (the tenant's formal counter via `/respond`).
+ */
+
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MessageSquare, TrendingUp, Send, Loader2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { MessageSquare, User, Building } from 'lucide-react';
-import { renewalService } from '@/services/renewalService';
-import { RenewalOfferWithRelations, CounterOfferType } from '@/types/renewal';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { getNegotiations, postNegotiation } from '@/services/renewalService';
+import { ApiError } from '@/lib/api-client';
+import { formatLeaseDateTime, formatLeaseMoney } from '@/lib/leaseDisplay';
+import type {
+  NegotiationKind,
+  PostNegotiationBody,
+} from '@/types/renewalContract';
 
-interface RenewalNegotiationThreadProps {
-  renewalId: string;
-  userType: 'tenant' | 'landlord';
-  onAcceptCounterOffer?: (counterOfferId: string) => void;
-  onMakeCounterOffer?: () => void;
+function mapPostError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.statusCode === 403) return 'You’re not a party to this renewal.';
+    if (err.statusCode === 400)
+      return err.message || 'Complete the message or counter-offer.';
+  }
+  return 'Couldn’t post. Please try again.';
 }
 
 export default function RenewalNegotiationThread({
   renewalId,
-  userType,
-  onAcceptCounterOffer,
-  onMakeCounterOffer,
-}: RenewalNegotiationThreadProps) {
-  const [offer, setOffer] = useState<RenewalOfferWithRelations | null>(null);
-  const [loading, setLoading] = useState(true);
+}: {
+  renewalId: string;
+}) {
+  const { profile } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [kind, setKind] = useState<NegotiationKind>('message');
+  const [body, setBody] = useState('');
+  const [terms, setTerms] = useState({
+    proposedRent: '',
+    proposedTermMonths: '',
+    notes: '',
+  });
 
-  const loadOffer = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await renewalService.getRenewalOfferById(renewalId);
-      setOffer(data);
-    } catch (err) {
-      console.error('Error loading offer:', err);
-    } finally {
-      setLoading(false);
+  const { data: entries = [], isLoading } = useQuery({
+    queryKey: ['negotiations', renewalId],
+    queryFn: () => getNegotiations(renewalId),
+  });
+
+  const post = useMutation({
+    mutationFn: (b: PostNegotiationBody) => postNegotiation(renewalId, b),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['negotiations', renewalId] });
+      setBody('');
+      setTerms({ proposedRent: '', proposedTermMonths: '', notes: '' });
+    },
+    onError: (err) =>
+      toast({
+        title: 'Couldn’t post',
+        description: mapPostError(err),
+        variant: 'destructive',
+      }),
+  });
+
+  const counterValid =
+    Number(terms.proposedRent) > 0 && Number(terms.proposedTermMonths) > 0;
+
+  const submit = () => {
+    if (kind === 'message') {
+      if (!body.trim()) return;
+      post.mutate({ kind: 'message', body: body.trim() });
+    } else {
+      if (!counterValid) return;
+      post.mutate({
+        kind: 'counter-offer',
+        proposedTerms: {
+          proposedRent: Number(terms.proposedRent),
+          proposedTermMonths: Number(terms.proposedTermMonths),
+          notes: terms.notes || null,
+        },
+      });
     }
-  }, [renewalId]);
-
-  useEffect(() => {
-    loadOffer();
-  }, [loadOffer]);
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-sm text-muted-foreground">Loading negotiation history...</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!offer) {
-    return null;
-  }
-
-  const counterOffers = offer.counter_offers || [];
-  const canMakeCounterOffer = offer.negotiation_rounds < 5;
+  };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Negotiation History</CardTitle>
-        <CardDescription>
-          Round {offer.negotiation_rounds} of 5 maximum
-        </CardDescription>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="h-5 w-5" /> Negotiation
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Initial Offer */}
-        <div className="border rounded-lg p-4 bg-muted/50">
-          <div className="flex items-center gap-2 mb-3">
-            <Building className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">Initial Offer from Landlord</span>
-            <Badge variant="secondary">Original</Badge>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : entries.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No messages yet. Start the conversation below.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {entries.map((entry) => {
+              const mine = entry.authorId === profile?.id;
+              return (
+                <div
+                  key={entry.id}
+                  className={`rounded-lg border p-3 ${mine ? 'bg-primary/5 ml-8' : 'mr-8'}`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-medium">
+                      {mine ? 'You' : 'Counterparty'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatLeaseDateTime(entry.createdAt)}
+                    </span>
+                  </div>
+                  {entry.kind === 'counter-offer' && entry.proposedTerms ? (
+                    <div className="text-sm">
+                      <Badge variant="secondary" className="mb-1">
+                        <TrendingUp className="h-3 w-3 mr-1" /> Counter-offer
+                      </Badge>
+                      <p>
+                        {formatLeaseMoney(
+                          entry.proposedTerms.proposedRent,
+                          null
+                        )}{' '}
+                        · {entry.proposedTerms.proposedTermMonths} months
+                      </p>
+                      {entry.proposedTerms.notes && (
+                        <p className="text-muted-foreground">
+                          {entry.proposedTerms.notes}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{entry.body}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Rent</p>
-              <p className="font-semibold">${offer.proposed_rent.toFixed(2)}/month</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Term</p>
-              <p className="font-semibold">{offer.proposed_term_months} months</p>
-            </div>
+        )}
+
+        {/* Composer */}
+        <div className="border-t pt-4 space-y-3">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={kind === 'message' ? 'default' : 'outline'}
+              onClick={() => setKind('message')}
+            >
+              Message
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={kind === 'counter-offer' ? 'default' : 'outline'}
+              onClick={() => setKind('counter-offer')}
+            >
+              Counter-offer
+            </Button>
           </div>
-          {offer.special_terms && (
-            <div className="mt-2">
-              <p className="text-sm text-muted-foreground">Special Terms</p>
-              <p className="text-sm">{offer.special_terms}</p>
+
+          {kind === 'message' ? (
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Write a message…"
+              rows={3}
+            />
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="ntRent">Proposed Rent</Label>
+                <Input
+                  id="ntRent"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={terms.proposedRent}
+                  onChange={(e) =>
+                    setTerms((t) => ({ ...t, proposedRent: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="ntTerm">Term (months)</Label>
+                <Input
+                  id="ntTerm"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={terms.proposedTermMonths}
+                  onChange={(e) =>
+                    setTerms((t) => ({
+                      ...t,
+                      proposedTermMonths: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-2 md:col-span-2">
+                <Label htmlFor="ntNotes">Notes (optional)</Label>
+                <Textarea
+                  id="ntNotes"
+                  value={terms.notes}
+                  onChange={(e) =>
+                    setTerms((t) => ({ ...t, notes: e.target.value }))
+                  }
+                  rows={2}
+                />
+              </div>
             </div>
           )}
-          <p className="text-xs text-muted-foreground mt-2">
-            {new Date(offer.created_at).toLocaleString()}
-          </p>
-        </div>
 
-        {/* Counter Offers */}
-        {counterOffers.length > 0 && (
-          <>
-            <Separator />
-            <div className="space-y-4">
-              {counterOffers.map((counterOffer: CounterOfferType, index: number) => {
-                const isTenantOffer = counterOffer.offered_by === 'tenant';
-                const isMyOffer = (userType === 'tenant' && isTenantOffer) || (userType === 'landlord' && !isTenantOffer);
-                const canAccept = !isMyOffer && counterOffer.status === 'pending' && onAcceptCounterOffer;
-
-                return (
-                  <div
-                    key={counterOffer.id}
-                    className={`border rounded-lg p-4 ${isMyOffer ? 'bg-primary/5 border-primary/20' : 'bg-muted/50'}`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {isTenantOffer ? (
-                          <User className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Building className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className="font-medium">
-                          Counter-Offer #{index + 1} from {isTenantOffer ? 'Tenant' : 'Landlord'}
-                        </span>
-                        {isMyOffer && <Badge variant="outline">You</Badge>}
-                      </div>
-                      <Badge
-                        variant={
-                          counterOffer.status === 'accepted'
-                            ? 'default'
-                            : counterOffer.status === 'rejected'
-                            ? 'destructive'
-                            : 'secondary'
-                        }
-                      >
-                        {counterOffer.status}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Proposed Rent</p>
-                        <p className="font-semibold">${counterOffer.proposed_rent.toFixed(2)}/month</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Proposed Term</p>
-                        <p className="font-semibold">{counterOffer.proposed_term_months} months</p>
-                      </div>
-                    </div>
-                    {counterOffer.additional_terms && (
-                      <div className="mt-2">
-                        <p className="text-sm text-muted-foreground">Additional Terms</p>
-                        <p className="text-sm">{counterOffer.additional_terms}</p>
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {new Date(counterOffer.created_at).toLocaleString()}
-                    </p>
-                    {canAccept && (
-                      <div className="flex gap-2 mt-4">
-                        <Button size="sm" onClick={() => onAcceptCounterOffer(counterOffer.id)}>
-                          Accept Counter-Offer
-                        </Button>
-                        {canMakeCounterOffer && onMakeCounterOffer && (
-                          <Button size="sm" variant="outline" onClick={onMakeCounterOffer}>
-                            Make New Counter-Offer
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* Action Buttons */}
-        {offer.status === 'negotiating' && counterOffers.length > 0 && (
-          <>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {canMakeCounterOffer
-                  ? `You can make ${5 - offer.negotiation_rounds} more counter-offer(s)`
-                  : 'Maximum negotiation rounds reached'}
-              </p>
-              {canMakeCounterOffer && onMakeCounterOffer && (
-                <Button onClick={onMakeCounterOffer}>
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Make Counter-Offer
-                </Button>
+          <div className="flex justify-end">
+            <Button
+              onClick={submit}
+              disabled={
+                post.isPending ||
+                (kind === 'message' ? !body.trim() : !counterValid)
+              }
+            >
+              {post.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Posting…
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Post
+                </>
               )}
-            </div>
-          </>
-        )}
-
-        {!canMakeCounterOffer && offer.status === 'negotiating' && (
-          <div className="text-center py-4">
-            <p className="text-sm text-muted-foreground">
-              Maximum negotiation rounds reached. Please accept one of the offers or decline.
-            </p>
+            </Button>
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   );
