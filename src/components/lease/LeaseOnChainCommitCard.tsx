@@ -34,9 +34,11 @@ import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useLeaseAgreementOnChain } from '@/hooks/lease/useLeaseAgreementOnChain';
 import { isLeaseAgreementEnabled } from '@/lib/casper/leaseAgreement';
-import { currencyOption, scaleToSmallestUnit } from '@/lib/leaseCurrency';
+import { LEASE_CURRENCY, scaleToSmallestUnit } from '@/lib/leaseCurrency';
 import {
   LeaseOnChainForm,
+  dateTimeLocalToUnixSeconds,
+  daysToSeconds,
   initialLeaseOnChainForm,
   isLeaseOnChainFormValid,
   type LeaseOnChainFormState,
@@ -60,31 +62,11 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const [form, setForm] = useState<LeaseOnChainFormState>(() =>
     initialLeaseOnChainForm(lease)
   );
-  const currency = currencyOption(form.currencySymbol);
 
   const onFieldChange = <K extends keyof LeaseOnChainFormState>(
     key: K,
     value: string
   ) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  // Switching currency re-scales the prefilled amounts to the new decimals
-  // (from the lease's human values), so the smallest-unit figures stay correct.
-  const onCurrencyChange = (symbol: string) =>
-    setForm((prev) => {
-      const { decimals } = currencyOption(symbol);
-      return {
-        ...prev,
-        currencySymbol: symbol,
-        monthlyRentAmount: scaleToSmallestUnit(
-          lease.monthlyRent ?? 0,
-          decimals
-        ),
-        securityDepositAmount: scaleToSmallestUnit(
-          lease.securityDeposit ?? 0,
-          decimals
-        ),
-      };
-    });
 
   const { step, txHash, error } = state;
   const busy = step === 'signing' || step === 'pending';
@@ -119,23 +101,30 @@ function CommitFlow({ lease }: { lease: Lease }) {
 
   // Equity only applies to a lease-to-own lease; when the lease carries an
   // equity property the on-chain id is required (the off-chain row holds only a
-  // UUID, so the landlord supplies it). Currency is the same for rent + deposit;
-  // amounts are already scaled to its smallest unit.
+  // UUID, so the landlord supplies it). Rent + deposit are both in tUSDC; we
+  // scale the human amounts to its smallest unit and the local date-times to
+  // unix seconds here, just before signing.
   const submit = () =>
     create({
       tenantUserId: form.tenantUserId.trim(),
       equityPropertyId: form.equityPropertyId.trim() || null,
       monthlyRent: {
-        currency: currency.address,
-        amount: form.monthlyRentAmount.trim(),
+        currency: LEASE_CURRENCY.address,
+        amount: scaleToSmallestUnit(
+          form.monthlyRentAmount.trim(),
+          LEASE_CURRENCY.decimals
+        ),
       },
       securityDeposit: {
-        currency: currency.address,
-        amount: form.securityDepositAmount.trim(),
+        currency: LEASE_CURRENCY.address,
+        amount: scaleToSmallestUnit(
+          form.securityDepositAmount.trim(),
+          LEASE_CURRENCY.decimals
+        ),
       },
-      startUnixSeconds: form.startUnixSeconds.trim(),
-      endUnixSeconds: form.endUnixSeconds.trim(),
-      invoiceValidityDuration: form.invoiceValidityDuration.trim(),
+      startUnixSeconds: String(dateTimeLocalToUnixSeconds(form.startDateTime)),
+      endUnixSeconds: String(dateTimeLocalToUnixSeconds(form.endDateTime)),
+      invoiceValidityDuration: daysToSeconds(form.invoiceValidityDays),
     });
 
   if (!hasWalletSession) {
@@ -153,7 +142,6 @@ function CommitFlow({ lease }: { lease: Lease }) {
         hasEquity={hasEquity}
         equityPropertyId={lease.equityPropertyId}
         onFieldChange={onFieldChange}
-        onCurrencyChange={onCurrencyChange}
       />
 
       {error && step !== 'failed' && (

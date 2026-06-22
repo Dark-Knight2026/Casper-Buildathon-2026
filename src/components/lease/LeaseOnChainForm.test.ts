@@ -23,34 +23,32 @@ const makeLease = (over: Partial<Lease> = {}): Lease =>
 const validForm: LeaseOnChainFormState = {
   tenantUserId: '5',
   equityPropertyId: '',
-  currencySymbol: 'tUSDC',
-  monthlyRentAmount: '2500000000',
-  securityDepositAmount: '3000000000',
-  startUnixSeconds: '1782864000',
-  endUnixSeconds: '1785456000',
-  invoiceValidityDuration: '2592000',
+  monthlyRentAmount: '2500',
+  securityDepositAmount: '3000',
+  startDateTime: '2026-07-01T00:00',
+  endDateTime: '2026-07-31T00:00',
+  invoiceValidityDays: '30',
 };
 
 describe('initialLeaseOnChainForm', () => {
-  it('prefills currency, scaled amounts, and a blank tenant id', () => {
+  it('prefills human amounts and a blank tenant id', () => {
     const form = initialLeaseOnChainForm(makeLease());
 
     expect(form.tenantUserId).toBe('');
     expect(form.equityPropertyId).toBe('');
-    // USDC maps to the tUSDC option (6 decimals).
-    expect(form.currencySymbol).toBe('tUSDC');
-    expect(form.monthlyRentAmount).toBe('2500000000'); // 2500 × 10^6
-    expect(form.securityDepositAmount).toBe('3000000000'); // 3000 × 10^6
-    expect(form.invoiceValidityDuration).toBe(String(ONE_MONTH));
+    // Rent and deposit are prefilled as their human tUSDC amounts.
+    expect(form.monthlyRentAmount).toBe('2500');
+    expect(form.securityDepositAmount).toBe('3000');
+    expect(form.invoiceValidityDays).toBe('30');
   });
 
-  it('uses UTC-midnight start and aligns end to a whole 30-day multiple', () => {
+  it('aligns the term to a whole 30-day multiple', () => {
     const form = initialLeaseOnChainForm(makeLease());
-    const start = Math.floor(Date.UTC(2026, 6, 1) / 1000);
+    const start = Date.parse(form.startDateTime);
+    const end = Date.parse(form.endDateTime);
 
-    expect(form.startUnixSeconds).toBe(String(start));
-    // 30-day term → exactly one month after start.
-    expect(form.endUnixSeconds).toBe(String(start + ONE_MONTH));
+    // 30-day term → end is exactly one month after start.
+    expect((end - start) / 1000).toBe(ONE_MONTH);
   });
 
   it('rounds a non-30-day term to the nearest whole month', () => {
@@ -58,20 +56,11 @@ describe('initialLeaseOnChainForm', () => {
     const form = initialLeaseOnChainForm(
       makeLease({ startDate: '2026-07-01', endDate: '2026-09-15' })
     );
-    const span = Number(form.endUnixSeconds) - Number(form.startUnixSeconds);
+    const span =
+      (Date.parse(form.endDateTime) - Date.parse(form.startDateTime)) / 1000;
 
     expect(span % ONE_MONTH).toBe(0);
     expect(span / ONE_MONTH).toBe(3);
-  });
-
-  it('maps a null/CSPR currency to native CSPR (9 decimals)', () => {
-    const form = initialLeaseOnChainForm(
-      makeLease({ currency: null, monthlyRent: 100, securityDeposit: 0 })
-    );
-
-    expect(form.currencySymbol).toBe('CSPR');
-    expect(form.monthlyRentAmount).toBe('100000000000'); // 100 × 10^9
-    expect(form.securityDepositAmount).toBe('0');
   });
 });
 

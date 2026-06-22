@@ -45,6 +45,12 @@ export function currencyOption(symbol: string): CurrencyOption {
 }
 
 /**
+ * The only currency offered when recording a lease on-chain: testnet USDC.
+ * Rent and deposit are always priced in it, so the commit form no longer asks.
+ */
+export const LEASE_CURRENCY = currencyOption('tUSDC');
+
+/**
  * Maps a lease's stored `currency` label to a selectable option symbol. USDC/USDT
  * (and the testnet `tUSD*` forms) map to the token; everything else — including
  * label-only currencies like `cUSD`/`USD` — defaults to CSPR.
@@ -66,9 +72,13 @@ export function defaultCurrencySymbol(
 
 /**
  * Scales a human amount (e.g. `2500.5`) to a smallest-unit U256 decimal string
- * (e.g. `2500500000` at 6 decimals), exactly — no float rounding.
+ * (e.g. `2500500000` at 6 decimals), exactly — no float rounding. Accepts a
+ * string so a typed value keeps its precision (no round-trip through a float).
  */
-export function scaleToSmallestUnit(amount: number, decimals: number): string {
+export function scaleToSmallestUnit(
+  amount: number | string,
+  decimals: number
+): string {
   const [intPart, fracPart = ''] = String(amount).split('.');
   const frac = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
   const digits = `${intPart}${frac}`.replace(/^0+(?=\d)/, '');

@@ -3,52 +3,70 @@
  *
  * Pure presentation: it renders the fields and reports edits via callbacks. The
  * owning `LeaseOnChainCommitCard` keeps the wallet gating, state machine and the
- * submit action. Amounts are the currency's smallest unit; the tenant id and
- * (for a lease-to-own lease) the equity property id are entered manually.
+ * submit action — and converts these human-friendly values (tUSDC amounts, local
+ * date-times) to the contract's units (smallest unit, unix seconds) at submit.
+ * The tenant id and (for a lease-to-own lease) the equity property id are entered
+ * manually. Rent and deposit are always in tUSDC, so there is no currency choice.
  */
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  LEASE_CURRENCY_OPTIONS,
-  currencyOption,
-  defaultCurrencySymbol,
-  scaleToSmallestUnit,
-} from '@/lib/leaseCurrency';
 import type { Lease } from '@/types/leaseContract';
 
-const ONE_MONTH_IN_SECONDS = 30 * 24 * 60 * 60;
+const DAY_IN_SECONDS = 24 * 60 * 60;
+const ONE_MONTH_IN_SECONDS = 30 * DAY_IN_SECONDS;
+/** Default grace period a tenant has to pay each monthly invoice. */
+const DEFAULT_INVOICE_VALIDITY_DAYS = 30;
 
 export interface LeaseOnChainFormState {
   /** Tenant's on-chain UserRegistry user id (`U256`, decimal digits). */
   tenantUserId: string;
   equityPropertyId: string;
-  currencySymbol: string;
+  /** Monthly rent, as a human tUSDC amount (e.g. `2500.50`). */
   monthlyRentAmount: string;
+  /** Security deposit, as a human tUSDC amount. */
   securityDepositAmount: string;
-  startUnixSeconds: string;
-  endUnixSeconds: string;
-  invoiceValidityDuration: string;
+  /** Start, as a `datetime-local` value (`YYYY-MM-DDTHH:mm`) in local time. */
+  startDateTime: string;
+  /** End, as a `datetime-local` value in local time. */
+  endDateTime: string;
+  /** Days a tenant has to pay each invoice (converted to seconds at submit). */
+  invoiceValidityDays: string;
 }
 
+/** Whole days as seconds — the unit the contract expects. */
+export const daysToSeconds = (days: string) =>
+  String(Number(days.trim()) * DAY_IN_SECONDS);
+
 export const isDigits = (value: string) => /^\d+$/.test(value.trim());
+
+/** A non-negative decimal amount (e.g. `2500`, `2500.50`). */
+export const isAmount = (value: string) => /^\d+(\.\d+)?$/.test(value.trim());
+
+/** A `datetime-local` value the browser (and `Date`) can parse. */
+export const isDateTime = (value: string) => !Number.isNaN(Date.parse(value));
 
 /** UTC midnight of a `YYYY-MM-DD` (or ISO) date, as unix seconds. */
 function toUnixSeconds(date: string): number {
   return Math.floor(Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / 1000);
 }
 
+/** Unix seconds as a `datetime-local` value (`YYYY-MM-DDTHH:mm`) in local time. */
+function toDateTimeLocal(seconds: number): string {
+  const utc = new Date(seconds * 1000);
+  const local = new Date(utc.getTime() - utc.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+/** A `datetime-local` value (local time) back to unix seconds. */
+export function dateTimeLocalToUnixSeconds(value: string): number {
+  return Math.floor(new Date(value).getTime() / 1000);
+}
+
 /**
- * Prefill from the lease: currency from `lease.currency`, amounts scaled to its
- * smallest unit, term aligned to whole 30-day months. The tenant's on-chain user
- * id can't be derived, so it starts blank for the landlord to enter.
+ * Prefill from the lease: rent/deposit as their human tUSDC amounts, the term
+ * shown as local date-times and aligned to whole 30-day months. The tenant's
+ * on-chain user id can't be derived, so it starts blank for the landlord.
  */
 export function initialLeaseOnChainForm(lease: Lease): LeaseOnChainFormState {
   const start = toUnixSeconds(lease.startDate);
@@ -56,36 +74,30 @@ export function initialLeaseOnChainForm(lease: Lease): LeaseOnChainFormState {
     1,
     Math.round((toUnixSeconds(lease.endDate) - start) / ONE_MONTH_IN_SECONDS)
   );
-  const symbol = defaultCurrencySymbol(lease.currency);
-  const { decimals } = currencyOption(symbol);
   return {
     tenantUserId: '',
     equityPropertyId: '',
-    currencySymbol: symbol,
-    monthlyRentAmount: scaleToSmallestUnit(lease.monthlyRent ?? 0, decimals),
-    securityDepositAmount: scaleToSmallestUnit(
-      lease.securityDeposit ?? 0,
-      decimals
-    ),
-    startUnixSeconds: String(start),
+    monthlyRentAmount: String(lease.monthlyRent ?? 0),
+    securityDepositAmount: String(lease.securityDeposit ?? 0),
+    startDateTime: toDateTimeLocal(start),
     // Aligned to a whole 30-day multiple — the contract reverts otherwise.
-    endUnixSeconds: String(start + months * ONE_MONTH_IN_SECONDS),
-    invoiceValidityDuration: String(ONE_MONTH_IN_SECONDS),
+    endDateTime: toDateTimeLocal(start + months * ONE_MONTH_IN_SECONDS),
+    invoiceValidityDays: String(DEFAULT_INVOICE_VALIDITY_DAYS),
   };
 }
 
-/** Every required field is present and numeric (equity id only when applicable). */
+/** Every required field is present and well-formed (equity id only when applicable). */
 export function isLeaseOnChainFormValid(
   form: LeaseOnChainFormState,
   hasEquity: boolean
 ): boolean {
   return (
     isDigits(form.tenantUserId) &&
-    isDigits(form.monthlyRentAmount) &&
-    isDigits(form.securityDepositAmount) &&
-    isDigits(form.startUnixSeconds) &&
-    isDigits(form.endUnixSeconds) &&
-    isDigits(form.invoiceValidityDuration) &&
+    isAmount(form.monthlyRentAmount) &&
+    isAmount(form.securityDepositAmount) &&
+    isDateTime(form.startDateTime) &&
+    isDateTime(form.endDateTime) &&
+    isDigits(form.invoiceValidityDays) &&
     (hasEquity ? isDigits(form.equityPropertyId) : true)
   );
 }
@@ -100,7 +112,6 @@ interface LeaseOnChainFormProps {
     key: K,
     value: string
   ) => void;
-  onCurrencyChange: (symbol: string) => void;
 }
 
 export function LeaseOnChainForm({
@@ -108,12 +119,11 @@ export function LeaseOnChainForm({
   hasEquity,
   equityPropertyId,
   onFieldChange,
-  onCurrencyChange,
 }: LeaseOnChainFormProps) {
   const field = (
     key: keyof LeaseOnChainFormState,
     label: string,
-    placeholder?: string
+    opts: { type?: string; placeholder?: string; mono?: boolean } = {}
   ) => (
     <div className="flex flex-col gap-1">
       <Label htmlFor={key} className="text-xs">
@@ -121,10 +131,11 @@ export function LeaseOnChainForm({
       </Label>
       <Input
         id={key}
+        type={opts.type ?? 'text'}
         value={form[key]}
-        placeholder={placeholder}
+        placeholder={opts.placeholder}
         onChange={(e) => onFieldChange(key, e.target.value)}
-        className="font-mono text-sm"
+        className={opts.mono ? 'font-mono text-sm' : 'text-sm'}
       />
     </div>
   );
@@ -132,9 +143,8 @@ export function LeaseOnChainForm({
   return (
     <>
       <p className="text-sm text-muted-foreground">
-        Review the on-chain values for this lease, then sign once. Amounts are
-        in the currency's smallest unit and prefilled from the lease — adjust if
-        a token's decimals differ.
+        Review the on-chain values for this lease, then sign once. Rent and
+        deposit are in tUSDC; the term is shown in your local time.
       </p>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -159,7 +169,7 @@ export function LeaseOnChainForm({
         </div>
 
         {hasEquity && (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 sm:col-span-2">
             <Label htmlFor="equityPropertyId" className="text-xs">
               Equity property on-chain id (lease-to-own) *
             </Label>
@@ -179,32 +189,22 @@ export function LeaseOnChainForm({
           </div>
         )}
 
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="currencySymbol" className="text-xs">
-            Currency
-          </Label>
-          <Select value={form.currencySymbol} onValueChange={onCurrencyChange}>
-            <SelectTrigger id="currencySymbol">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LEASE_CURRENCY_OPTIONS.map((option) => (
-                <SelectItem key={option.symbol} value={option.symbol}>
-                  {option.symbol}
-                  {option.address
-                    ? ` · ${option.decimals} decimals`
-                    : ' · native'}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {field('monthlyRentAmount', 'Rent amount (smallest unit) *')}
-        {field('securityDepositAmount', 'Deposit amount (smallest unit) *')}
-        {field('startUnixSeconds', 'Start (unix seconds)')}
-        {field('endUnixSeconds', 'End (unix seconds)')}
-        {field('invoiceValidityDuration', 'Invoice validity (seconds)')}
+        {field('monthlyRentAmount', 'Monthly rent (tUSDC) *', {
+          type: 'number',
+          placeholder: '0.00',
+        })}
+        {field('securityDepositAmount', 'Security deposit (tUSDC) *', {
+          type: 'number',
+          placeholder: '0.00',
+        })}
+        {field('startDateTime', 'Start date & time *', {
+          type: 'datetime-local',
+        })}
+        {field('endDateTime', 'End date & time *', { type: 'datetime-local' })}
+        {field('invoiceValidityDays', 'Invoice validity (days)', {
+          type: 'number',
+          placeholder: '30',
+        })}
       </div>
     </>
   );
