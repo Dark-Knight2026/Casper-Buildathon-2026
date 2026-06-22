@@ -510,36 +510,36 @@ pub async fn update_consent(
     .await
 }
 
-/// Records the on-chain bindings and activates a lease awaiting signatures, the
-/// `/commit` reconciliation write.
+/// Outcome of [`store_commit_tx_hash`].
+#[derive(Debug)]
+pub enum StoreCommitTxOutcome {
+    /// Hash stored; inner value is the updated row.
+    Stored(Box<LeaseRow>),
+    /// `commit_tx_hash` was already set on this lease (write-once guard).
+    AlreadySet,
+}
+
+/// Records the deploy hash of `create_lease_agreement` on the lease (write-once).
 ///
-/// The `status = 'pending_signatures'` guard makes this a no-op (`RowNotFound`)
-/// if the lease already left that state - notably when the indexer's
-/// `LeaseAgreementCreated` handler activated it first - keeping `/commit`
-/// idempotent across the push (this) and pull (indexer) activation paths.
-/// `$2::TEXT::NUMERIC` binds the U256 decimal string into the `NUMERIC` column.
+/// Does not change the lease status - the indexer activates the lease when
+/// `LeaseAgreementCreated` arrives. Returns [`StoreCommitTxOutcome::AlreadySet`]
+/// if a hash was already stored; the handler maps that to `409`.
 ///
 /// # Errors
 ///
-/// Returns [`Error::RowNotFound`] when the lease is no longer awaiting
-/// signatures, or any other database error.
+/// Returns any database error.
 #[inline]
-pub async fn commit_lease(
+pub async fn store_commit_tx_hash(
     pool: &PgPool,
     lease_id: Uuid,
-    onchain_lease_id: &str,
-    nft_token_id: &str,
-    commit_tx_hash: &str,
-) -> Result<LeaseRow, Error> {
-    sqlx::query_as!(
+    commit_tx_hash: String,
+) -> Result<StoreCommitTxOutcome, Error> {
+    let row = sqlx::query_as!(
         LeaseRow,
         r#"
-            UPDATE leases SET
-                status = 'active',
-                onchain_lease_id = $2::TEXT::NUMERIC,
-                nft_token_id = $3,
-                commit_tx_hash = $4
-            WHERE id = $1 AND status = 'pending_signatures' AND deleted_at IS NULL
+            UPDATE leases
+            SET commit_tx_hash = $2
+            WHERE id = $1 AND commit_tx_hash IS NULL AND deleted_at IS NULL
             RETURNING
                 id, property_id, landlord_id, tenant_ids,
                 type AS "lease_type!",
@@ -560,12 +560,14 @@ pub async fn commit_lease(
                 updated_at AS "updated_at!"
         "#,
         lease_id,
-        onchain_lease_id,
-        nft_token_id,
         commit_tx_hash,
     )
-    .fetch_one(pool)
-    .await
+    .fetch_optional(pool)
+    .await?;
+    match row {
+        Some(row) => Ok(StoreCommitTxOutcome::Stored(Box::new(row))),
+        None => Ok(StoreCommitTxOutcome::AlreadySet),
+    }
 }
 
 /// Records a freshly rendered lease document on the lease: the stored

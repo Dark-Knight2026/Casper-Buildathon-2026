@@ -285,16 +285,12 @@ pub struct SignLeaseRequest {
     pub signer_wallet: String,
 }
 
-/// On-chain commit submission. After the landlord runs `create_lease_agreement`
-/// from their wallet, they report the result here so the backend can reconcile
-/// against the chain and activate the lease.
+/// On-chain commit submission. The landlord reports the deploy hash after
+/// signing `create_lease_agreement`; the indexer activates the lease when
+/// `LeaseAgreementCreated` arrives.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitLeaseRequest {
-    /// U256 on-chain agreement id (decimal string) from `LeaseAgreementCreated`.
-    pub onchain_lease_id: String,
-    /// Tenant's frozen lease NFT token id (U256 decimal string).
-    pub nft_token_id: String,
     /// Deploy/tx hash of the `create_lease_agreement` call.
     pub commit_tx_hash: String,
 }
