@@ -77,6 +77,8 @@ export interface SignatureProgress {
 export interface ConsentSignatureEntry {
   signature: string | null;
   signedAt: string | null;
+  /** Public key/address the party signed with (stored by the backend at /sign). */
+  signerWallet?: string | null;
 }
 
 export interface ConsentSignatures {
