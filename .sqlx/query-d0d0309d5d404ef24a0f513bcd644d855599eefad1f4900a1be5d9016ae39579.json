@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE leases SET\n                lease_document_url = $2,\n                document_hash = $3,\n                ipfs_cid = $4\n            WHERE id = $1 AND deleted_at IS NULL\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            UPDATE leases SET\n                lease_document_url = $2,\n                document_hash = $3,\n                ipfs_cid = $4\n            WHERE id = $1 AND deleted_at IS NULL\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -254,6 +254,12 @@
       },
       {
         "ordinal": 24,
+        "name": "tenant_onchain_user_id",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 25,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -264,7 +270,7 @@
         }
       },
       {
-        "ordinal": 25,
+        "ordinal": 26,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -308,9 +314,10 @@
       null,
       true,
       true,
+      null,
       true,
       true
     ]
   },
-  "hash": "2f8d927a8284133de99f051d40842e82a58c11d5ac7f87e5929ff38513d0b506"
+  "hash": "d0d0309d5d404ef24a0f513bcd644d855599eefad1f4900a1be5d9016ae39579"
 }

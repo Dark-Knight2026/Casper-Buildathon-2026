@@ -397,6 +397,8 @@ pub struct Lease {
     pub nft_token_id: Option<String>,
     /// Commit tx hash; null until committed.
     pub commit_tx_hash: Option<String>,
+    /// Primary tenant's contract-assigned on-chain user id (U256 as string); null until registered on-chain.
+    pub tenant_onchain_user_id: Option<String>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -433,6 +435,7 @@ impl From<LeaseRow> for Lease {
             onchain_lease_id: row.onchain_lease_id,
             nft_token_id: row.nft_token_id,
             commit_tx_hash: row.commit_tx_hash,
+            tenant_onchain_user_id: row.tenant_onchain_user_id,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

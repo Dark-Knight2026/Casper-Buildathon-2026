@@ -1127,3 +1127,65 @@ async fn document_not_found(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+// `tenantOnchainUserId` field -------------------------------------------------
+
+/// `tenantOnchainUserId` is present in the lease response and is `null` when
+/// the tenant has not yet registered on-chain.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_lease_tenant_onchain_user_id_null_when_not_registered(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+    let lease_id = lease["id"].as_str().unwrap();
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/leases/{lease_id}"),
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.unwrap()["tenantOnchainUserId"].is_null(),
+        "tenantOnchainUserId must be null when the tenant is not registered on-chain"
+    );
+}
+
+/// `tenantOnchainUserId` carries the contract-assigned U256 id once the tenant
+/// registers on-chain (stamped by the indexer from `UserCreated`).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_lease_tenant_onchain_user_id_populated_when_registered(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    sqlx::query(r"UPDATE users SET onchain_user_id = $1::TEXT::NUMERIC WHERE id = $2")
+        .bind("7")
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let lease = create_draft(&env, &ltoken, property_id, tenant_id).await;
+    let lease_id = lease["id"].as_str().unwrap();
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/leases/{lease_id}"),
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.unwrap()["tenantOnchainUserId"].as_str().unwrap(), "7");
+}

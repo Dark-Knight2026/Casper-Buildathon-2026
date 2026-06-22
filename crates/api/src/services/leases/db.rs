@@ -110,6 +110,8 @@ pub struct LeaseRow {
     pub nft_token_id: Option<String>,
     /// Commit tx hash.
     pub commit_tx_hash: Option<String>,
+    /// Primary tenant's contract-assigned on-chain user id (U256 as text); null until registered on-chain.
+    pub tenant_onchain_user_id: Option<String>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -196,6 +198,7 @@ pub async fn create_lease(
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -245,6 +248,7 @@ pub async fn fetch_lease(pool: &PgPool, lease_id: Uuid) -> Result<LeaseRow, Erro
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM leases
@@ -310,6 +314,7 @@ pub async fn list_leases(
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM leases
@@ -377,6 +382,7 @@ pub async fn update_lease_draft(
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -451,6 +457,7 @@ pub async fn submit_lease(
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -499,6 +506,7 @@ pub async fn update_consent(
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -556,6 +564,7 @@ pub async fn store_commit_tx_hash(
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -610,6 +619,7 @@ pub async fn set_lease_document(
                 document_hash, ipfs_cid,
                 onchain_lease_id::text AS onchain_lease_id,
                 nft_token_id, commit_tx_hash,
+                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,

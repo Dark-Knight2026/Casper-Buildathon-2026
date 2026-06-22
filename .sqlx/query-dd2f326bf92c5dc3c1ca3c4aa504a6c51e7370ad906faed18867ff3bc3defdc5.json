@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE leases\n            SET commit_tx_hash = $2\n            WHERE id = $1 AND commit_tx_hash IS NULL AND deleted_at IS NULL\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            SELECT\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM leases\n            WHERE deleted_at IS NULL\n              AND (\n                ($2 = 'landlord' AND landlord_id = $1)\n                OR ($2 = 'tenant' AND $1 = ANY(tenant_ids))\n                OR ($2 = 'both' AND (landlord_id = $1 OR $1 = ANY(tenant_ids)))\n              )\n              AND ($3::text IS NULL OR status = $3)\n            ORDER BY created_at DESC\n            LIMIT $4 OFFSET $5\n        ",
   "describe": {
     "columns": [
       {
@@ -254,6 +254,12 @@
       },
       {
         "ordinal": 24,
+        "name": "tenant_onchain_user_id",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 25,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -264,7 +270,7 @@
         }
       },
       {
-        "ordinal": 25,
+        "ordinal": 26,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -278,7 +284,10 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Text"
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -306,9 +315,10 @@
       null,
       true,
       true,
+      null,
       true,
       true
     ]
   },
-  "hash": "78757510ec8d36d6a9b6bbc30bb94c4c691b3fe11ad8485c88bd4257d6d77781"
+  "hash": "dd2f326bf92c5dc3c1ca3c4aa504a6c51e7370ad906faed18867ff3bc3defdc5"
 }

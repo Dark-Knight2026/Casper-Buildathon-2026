@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO leases (\n                landlord_id, property_id, tenant_ids, primary_tenant_id, created_by,\n                type, status, start_date, end_date, monthly_rent, security_deposit,\n                currency, clauses, property_manager_id, property_manager_bps, equity_property_id\n            )\n            VALUES (\n                $1, $2, $3, $4, $1,\n                $5, 'draft', $6, $7, $8::double precision, $9::double precision,\n                $10, $11, $12, $13, $14\n            )\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            UPDATE leases\n            SET commit_tx_hash = $2\n            WHERE id = $1 AND commit_tx_hash IS NULL AND deleted_at IS NULL\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -254,6 +254,12 @@
       },
       {
         "ordinal": 24,
+        "name": "tenant_onchain_user_id",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 25,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -264,7 +270,7 @@
         }
       },
       {
-        "ordinal": 25,
+        "ordinal": 26,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -278,19 +284,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid",
-        "UuidArray",
-        "Uuid",
-        "Varchar",
-        "Date",
-        "Date",
-        "Float8",
-        "Float8",
-        "Text",
-        "Jsonb",
-        "Uuid",
-        "Int4",
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
@@ -318,9 +312,10 @@
       null,
       true,
       true,
+      null,
       true,
       true
     ]
   },
-  "hash": "3c4f546dd8fe25617885e41e878afa2114b9690de3b9b929d01ec70ca12dd424"
+  "hash": "64ac422d4e48b2044401db5b85414ea70dc0b900a6c122d960dada0d5fc83de3"
 }
