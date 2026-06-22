@@ -545,9 +545,9 @@ pub async fn commit_lease(
     }
     match db::store_commit_tx_hash(&state.db, lease_id, tx_hash).await? {
         StoreCommitTxOutcome::Stored(row) => Ok(Json(Lease::from(*row))),
-        StoreCommitTxOutcome::AlreadySet => {
-            Err(ApiError::Conflict("commit_tx_hash is already set".to_owned()))
-        }
+        StoreCommitTxOutcome::AlreadySet => Err(ApiError::Conflict(
+            "commit_tx_hash is already set".to_owned(),
+        )),
     }
 }
 

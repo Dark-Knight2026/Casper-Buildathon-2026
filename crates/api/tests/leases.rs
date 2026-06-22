@@ -321,24 +321,19 @@ async fn full_lifecycle_draft_to_active(pool: PgPool) {
     .await;
     assert_eq!(s_tsign, StatusCode::OK);
 
-    // Commit activates the lease.
+    // Commit records the deploy hash; indexer will flip status to active later.
     let (s_commit, committed) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         &format!("/api/v1/leases/{id}/commit"),
         &ltoken,
-        &json!({
-            "onchainLeaseId": "0",
-            "nftTokenId": "1",
-            "commitTxHash": "deploy-test-1",
-        }),
+        &json!({ "commitTxHash": "deploy-test-1" }),
     )
     .await;
     assert_eq!(s_commit, StatusCode::OK);
     let committed = committed.unwrap();
-    assert_eq!(committed["status"], "active");
-    assert_eq!(committed["onchainLeaseId"].as_str().unwrap(), "0");
-    assert_eq!(committed["nftTokenId"].as_str().unwrap(), "1");
+    assert_eq!(committed["status"], "pending-signatures");
+    assert_eq!(committed["commitTxHash"].as_str().unwrap(), "deploy-test-1");
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -382,11 +377,7 @@ async fn commit_blocked_until_both_signatures(pool: PgPool) {
         &Method::POST,
         &format!("/api/v1/leases/{id}/commit"),
         &ltoken,
-        &json!({
-            "onchainLeaseId": "0",
-            "nftTokenId": "1",
-            "commitTxHash": "deploy-test-1",
-        }),
+        &json!({ "commitTxHash": "deploy-test-1" }),
     )
     .await;
     assert_eq!(s_commit, StatusCode::CONFLICT);
@@ -413,11 +404,7 @@ async fn commit_requires_landlord_role(pool: PgPool) {
         &Method::POST,
         &format!("/api/v1/leases/{id}/commit"),
         &tenant_token,
-        &json!({
-            "onchainLeaseId": "0",
-            "nftTokenId": "1",
-            "commitTxHash": "deploy-test-1",
-        }),
+        &json!({ "commitTxHash": "deploy-test-1" }),
     )
     .await;
 
@@ -1013,7 +1000,7 @@ async fn sign_rejects_without_active_wallet(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn commit_idempotent_when_already_active(pool: PgPool) {
+async fn commit_rejects_second_call(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), false).await;
     let p = pending_lease(&env, &pool).await;
     assert_eq!(
@@ -1025,13 +1012,9 @@ async fn commit_idempotent_when_already_active(pool: PgPool) {
         StatusCode::OK
     );
     let commit_uri = format!("/api/v1/leases/{}/commit", p.id);
-    let commit_body = json!({
-        "onchainLeaseId": "0",
-        "nftTokenId": "1",
-        "commitTxHash": "deploy-test-1",
-    });
+    let commit_body = json!({ "commitTxHash": "deploy-test-1" });
 
-    let (s_first, _) = common::authed_request::<Value>(
+    let (s_first, body) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         &commit_uri,
@@ -1039,19 +1022,22 @@ async fn commit_idempotent_when_already_active(pool: PgPool) {
         &commit_body,
     )
     .await;
-    // A second commit on an already-active lease returns it unchanged.
-    let (s_second, body) = common::authed_request::<Value>(
-        &env.server,
-        &Method::POST,
-        &commit_uri,
-        &p.ltoken,
-        &commit_body,
-    )
-    .await;
-
     assert_eq!(s_first, StatusCode::OK);
-    assert_eq!(s_second, StatusCode::OK);
-    assert_eq!(body.unwrap()["status"], "active");
+    assert_eq!(
+        body.unwrap()["commitTxHash"].as_str().unwrap(),
+        "deploy-test-1"
+    );
+
+    // A second commit is rejected because commit_tx_hash is write-once.
+    let (s_second, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &commit_uri,
+        &p.ltoken,
+        &commit_body,
+    )
+    .await;
+    assert_eq!(s_second, StatusCode::CONFLICT);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -1066,14 +1052,14 @@ async fn commit_rejects_non_owner(pool: PgPool) {
         &Method::POST,
         &format!("/api/v1/leases/{}/commit", p.id),
         &other_landlord,
-        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x" }),
+        &json!({ "commitTxHash": "x" }),
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn commit_rejects_invalid_onchain_id(pool: PgPool) {
+async fn commit_rejects_blank_tx_hash(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), false).await;
     let p = pending_lease(&env, &pool).await;
     sign_consent(&env, &p.ltoken, &p.id, "landlord", &p.landlord, &p.message).await;
@@ -1084,7 +1070,7 @@ async fn commit_rejects_invalid_onchain_id(pool: PgPool) {
         &Method::POST,
         &format!("/api/v1/leases/{}/commit", p.id),
         &p.ltoken,
-        &json!({ "onchainLeaseId": "not-a-number", "nftTokenId": "1", "commitTxHash": "x" }),
+        &json!({ "commitTxHash": "   " }),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -1100,7 +1086,7 @@ async fn commit_not_found(pool: PgPool) {
         &Method::POST,
         &format!("/api/v1/leases/{}/commit", Uuid::new_v4()),
         &token,
-        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x" }),
+        &json!({ "commitTxHash": "x" }),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);

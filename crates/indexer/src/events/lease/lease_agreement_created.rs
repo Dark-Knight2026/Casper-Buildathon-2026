@@ -44,12 +44,8 @@ impl IndexableEvent for LeaseAgreementCreated {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        if db::activate_lease_by_commit_tx_hash(
-            ctx.tx,
-            ctx.deploy_hash,
-            &self.lease_agreement_id,
-        )
-        .await?
+        if db::activate_lease_by_commit_tx_hash(ctx.tx, ctx.deploy_hash, &self.lease_agreement_id)
+            .await?
         {
             tracing::info!(
                 deploy_hash = %ctx.deploy_hash,
