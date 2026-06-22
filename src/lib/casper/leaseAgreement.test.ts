@@ -123,13 +123,13 @@ describe('encodeCreateLeaseAgreementParams', () => {
 
   it('concatenates fields in declaration order with no outer length prefix', () => {
     const bytes = encodeCreateLeaseAgreementParams({
-      tenantUserId: 5,
+      tenantUserId: 5n,
       equityPropertyId: null,
-      monthlyRent: { amount: 250 },
-      securityDeposit: { amount: 250 },
-      startUnixSeconds: 0,
-      endUnixSeconds: 2_592_000,
-      invoiceValidityDuration: 0,
+      monthlyRent: { amount: 250n },
+      securityDeposit: { amount: 250n },
+      startUnixSeconds: 0n,
+      endUnixSeconds: 2_592_000n,
+      invoiceValidityDuration: 0n,
     });
 
     const expected =
@@ -149,17 +149,17 @@ describe('encodeCreateLeaseAgreementParams', () => {
 
   it('encodes Some equity_option and a property manager', () => {
     const bytes = encodeCreateLeaseAgreementParams({
-      tenantUserId: 5,
+      tenantUserId: 5n,
       rentDistributionTerms: {
-        propertyManagerUserId: 7,
+        propertyManagerUserId: 7n,
         propertyManagerBps: 250,
       },
-      equityPropertyId: 9,
-      monthlyRent: { amount: 1 },
-      securityDeposit: { amount: 1 },
-      startUnixSeconds: 0,
-      endUnixSeconds: 2_592_000,
-      invoiceValidityDuration: 0,
+      equityPropertyId: 9n,
+      monthlyRent: { amount: 1n },
+      securityDeposit: { amount: 1n },
+      startUnixSeconds: 0n,
+      endUnixSeconds: 2_592_000n,
+      invoiceValidityDuration: 0n,
     });
 
     const expected =
