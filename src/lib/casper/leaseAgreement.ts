@@ -250,8 +250,15 @@ export function createLeaseAgreementTransaction(
 
 // ── Revert-reason mapping ────────────────────────────────────────────
 
-// Lease user-error discriminants (2025_anthony_leasefi/src/lease.rs `Error`).
+// User-error discriminants surfaced by `create_lease_agreement`. The ranges of
+// the contracts in the call chain don't overlap, so a flat map is unambiguous:
+//   • lease  (src/lease.rs)  400–417 — the lease contract's own checks
+//   • escrow (src/escrow.rs) 300–318 — surfaced when writing the deposit/rent invoices
+//   • NFT    (src/nft.rs)    100–106 — surfaced when minting the tenant's lease NFT
+// The escrow/NFT codes are cross-contract: they almost always mean the contracts
+// aren't wired together on-chain (roles/addresses), not bad landlord input.
 const LEASE_ERROR_MAP: Record<string, string> = {
+  // ── lease ─────────────────────────────────────────────────────────
   '400': 'Only the lease’s landlord can record it on-chain.',
   '401': 'Unknown on-chain lease id.',
   '402': 'The tenant and landlord must be different accounts.',
@@ -264,6 +271,28 @@ const LEASE_ERROR_MAP: Record<string, string> = {
   '412': 'Invalid property manager — check the manager’s on-chain id.',
   '415':
     'Invalid tenant — the tenant must be a registered on-chain user with the tenant role.',
+  // ── NFT (minting the tenant's lease NFT) ──────────────────────────
+  '100':
+    'The lease contract isn’t authorized to mint the lease NFT (NFT: CallerNotMinter). Grant the lease contract the minter role on the lease-NFT contract.',
+  '101':
+    'The lease contract isn’t authorized to burn the lease NFT (NFT: CallerNotBurner).',
+  '102':
+    'The lease contract is neither minter nor burner on the lease-NFT contract (NFT: CallerNotMinterNorBurner).',
+  '106': 'Not authorized on the lease-NFT contract (NFT: NotAuthorized).',
+  // ── escrow (creating the deposit + rent invoices) ─────────────────
+  '300':
+    'The escrow contract rejected the caller (Escrow: CallerNotLeaseContract). The lease contract isn’t registered on the escrow contract.',
+  '301':
+    'The escrow contract has no lease contract configured (Escrow: LeaseContractIsNotSet).',
+  '302':
+    'The escrow contract has no treasury configured (Escrow: TreasuryContractIsNotSet).',
+  '303': 'An invoice amount is zero (Escrow: ZeroAmount).',
+  '304':
+    'An invoice deadline is invalid (Escrow: InvalidDeadline) — check the invoice validity duration.',
+  '314':
+    'The security-deposit currency isn’t allowed by the escrow contract (Escrow: InvalidSecurityDepositCurrency).',
+  '318':
+    'The escrow contract has no user registry configured (Escrow: UserRegistryContractIsNotSet).',
 };
 
 // Odra framework (non-user) errors are reported as `64536 + discriminant`

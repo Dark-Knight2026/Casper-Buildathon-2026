@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   encodeCreateLeaseAgreementParams,
   encodeCurrencyAmount,
+  encodeRentDistributionTerms,
   parseLeaseAgreementError,
   u256ToBytes,
   u32ToBytes,
@@ -52,10 +53,40 @@ describe('encodeCurrencyAmount', () => {
   });
 });
 
+describe('encodeRentDistributionTerms', () => {
+  it('no manager → Option::None then bps u32(0)', () => {
+    expect(hex(encodeRentDistributionTerms())).toBe('00' + '00000000');
+  });
+
+  it('with manager → Option::Some(U256) then bps u32', () => {
+    // manager U256(7) = [01,07]; bps u32(250) = 0xfa → 'fa000000'
+    expect(
+      hex(
+        encodeRentDistributionTerms({
+          propertyManagerUserId: 7,
+          propertyManagerBps: 250,
+        })
+      )
+    ).toBe('01' + '0107' + 'fa000000');
+  });
+
+  it('throws when bps is non-zero without a manager', () => {
+    expect(() =>
+      encodeRentDistributionTerms({ propertyManagerBps: 100 })
+    ).toThrow(/property_manager_bps must be 0/);
+  });
+});
+
 describe('parseLeaseAgreementError', () => {
   it('maps lease user errors to friendly copy', () => {
     expect(parseLeaseAgreementError('User error: 415')).toMatch(/tenant/i);
     expect(parseLeaseAgreementError('User error: 404')).toMatch(/rent/i);
+  });
+
+  it('maps cross-contract NFT/escrow errors to a setup hint', () => {
+    // 100 = NFT CallerNotMinter; 300 = escrow CallerNotLeaseContract
+    expect(parseLeaseAgreementError('User error: 100')).toMatch(/mint/i);
+    expect(parseLeaseAgreementError('User error: 300')).toMatch(/escrow/i);
   });
 
   it('maps the Odra deserialization framework error (64647) to an ABI-mismatch hint', () => {
@@ -71,14 +102,14 @@ describe('parseLeaseAgreementError', () => {
 });
 
 describe('encodeCreateLeaseAgreementParams', () => {
-  // A valid account-hash (32 bytes) → Key::Account = tag 0x00 + the 32 bytes.
-  const ACCOUNT_HASH =
-    'account-hash-0101010101010101010101010101010101010101010101010101010101010101';
-  const ACCOUNT_KEY_HEX = '00' + '01'.repeat(32);
+  // tenant is now a U256 user id; u256ToBytes(5) = [01,05].
+  const TENANT_HEX = '0105';
+  // rent_distribution_terms with no manager: None ++ bps u32(0).
+  const NO_MANAGER_HEX = '00' + '00000000';
 
   it('concatenates fields in declaration order with no outer length prefix', () => {
     const bytes = encodeCreateLeaseAgreementParams({
-      tenantAccountHash: ACCOUNT_HASH,
+      tenantUserId: 5,
       equityPropertyId: null,
       monthlyRent: { amount: 250 },
       securityDeposit: { amount: 250 },
@@ -88,7 +119,8 @@ describe('encodeCreateLeaseAgreementParams', () => {
     });
 
     const expected =
-      ACCOUNT_KEY_HEX + // tenant Address::Account → Key::Account
+      TENANT_HEX + // tenant U256(5)
+      NO_MANAGER_HEX + // rent_distribution_terms: None ++ bps 0
       '00' + // equity_option Option::None
       '00' +
       '01fa' + // monthly_rent: None ++ U256(250)
@@ -101,9 +133,13 @@ describe('encodeCreateLeaseAgreementParams', () => {
     expect(hex(bytes)).toBe(expected);
   });
 
-  it('encodes Some equity_option', () => {
+  it('encodes Some equity_option and a property manager', () => {
     const bytes = encodeCreateLeaseAgreementParams({
-      tenantAccountHash: ACCOUNT_HASH,
+      tenantUserId: 5,
+      rentDistributionTerms: {
+        propertyManagerUserId: 7,
+        propertyManagerBps: 250,
+      },
       equityPropertyId: 9,
       monthlyRent: { amount: 1 },
       securityDeposit: { amount: 1 },
@@ -113,7 +149,10 @@ describe('encodeCreateLeaseAgreementParams', () => {
     });
 
     const expected =
-      ACCOUNT_KEY_HEX + // tenant
+      TENANT_HEX + // tenant U256(5)
+      '01' +
+      '0107' +
+      'fa000000' + // rent_distribution_terms: Some(U256(7)) ++ bps u32(250)
       '01' +
       '0109' + // equity_option Option::Some { property_id U256(9) }
       '00' +

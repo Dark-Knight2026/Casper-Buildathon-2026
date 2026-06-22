@@ -51,6 +51,13 @@ const SAMPLE_USER: ServerUserInfo = {
   onchain_user_id: null,
 };
 
+// Signature prefixing is detected by LENGTH, not leading bytes: a raw signature
+// is 128 hex chars; one already carrying the 1-byte algo prefix is 130. Use
+// realistic lengths so "already-prefixed → as-is" is exercised correctly.
+const RAW_SIG = 'ab'.repeat(64); // 128 hex chars
+const PREFIXED_SIG_02 = `02${RAW_SIG}`; // 130 hex chars
+const PREFIXED_SIG_01 = `01${RAW_SIG}`; // 130 hex chars
+
 // Unauthenticated auth calls opt out of the global 401→refresh→redirect:
 // skipRefresh (no session yet) + skipAuthError (errors handled in-page, never a
 // full-page reload). Asserting these guards the "failed login reloads" fix.
@@ -68,7 +75,9 @@ describe('backendAuthService', () => {
       expect(
         mockGet,
         'GET /api/v1/auth/nonce should be called with raw wallet_address and retry disabled'
-      ).toHaveBeenCalledWith('/api/v1/auth/nonce?wallet_address=02abc123', { retry: false });
+      ).toHaveBeenCalledWith('/api/v1/auth/nonce?wallet_address=02abc123', {
+        retry: false,
+      });
     });
 
     it('URL-encodes special characters in wallet address', async () => {
@@ -77,13 +86,21 @@ describe('backendAuthService', () => {
       expect(
         mockGet,
         '"+" in wallet_address must be percent-encoded as %2B in the query string'
-      ).toHaveBeenCalledWith('/api/v1/auth/nonce?wallet_address=02ab%2Bcd', { retry: false });
+      ).toHaveBeenCalledWith('/api/v1/auth/nonce?wallet_address=02ab%2Bcd', {
+        retry: false,
+      });
     });
 
     it('returns the nonce response', async () => {
-      mockGet.mockResolvedValue({ nonce: 'test-nonce', message: 'please sign' });
+      mockGet.mockResolvedValue({
+        nonce: 'test-nonce',
+        message: 'please sign',
+      });
       const result = await getNonce('02abc');
-      expect(result, 'getNonce should pass the response body through unchanged').toEqual({
+      expect(
+        result,
+        'getNonce should pass the response body through unchanged'
+      ).toEqual({
         nonce: 'test-nonce',
         message: 'please sign',
       });
@@ -103,14 +120,14 @@ describe('backendAuthService', () => {
   describe('loginWithSignature', () => {
     it('passes signature as-is when it already has the correct 02 prefix', async () => {
       mockPost.mockResolvedValue({ user: SAMPLE_USER });
-      await loginWithSignature('02walletabc', '02sigabc');
+      await loginWithSignature('02walletabc', PREFIXED_SIG_02);
       expect(
         mockPost,
         'login payload should reuse a 02-prefixed signature without re-prefixing'
       ).toHaveBeenCalledWith(
         '/api/v1/auth/login',
-        { wallet_address: '02walletabc', signature: '02sigabc' },
-        { retry: false },
+        { wallet_address: '02walletabc', signature: PREFIXED_SIG_02 },
+        { retry: false }
       );
     });
 
@@ -123,20 +140,20 @@ describe('backendAuthService', () => {
       ).toHaveBeenCalledWith(
         '/api/v1/auth/login',
         { wallet_address: '02walletabc', signature: '02rawsig' },
-        { retry: false },
+        { retry: false }
       );
     });
 
     it('passes 01-prefixed signature as-is for Ed25519 wallet', async () => {
       mockPost.mockResolvedValue({ user: SAMPLE_USER });
-      await loginWithSignature('01walletabc', '01sigabc');
+      await loginWithSignature('01walletabc', PREFIXED_SIG_01);
       expect(
         mockPost,
         '01-prefixed signature for an Ed25519 wallet must not be re-prefixed'
       ).toHaveBeenCalledWith(
         '/api/v1/auth/login',
-        { wallet_address: '01walletabc', signature: '01sigabc' },
-        { retry: false },
+        { wallet_address: '01walletabc', signature: PREFIXED_SIG_01 },
+        { retry: false }
       );
     });
 
@@ -149,7 +166,7 @@ describe('backendAuthService', () => {
       ).toHaveBeenCalledWith(
         '/api/v1/auth/login',
         { wallet_address: '01walletabc', signature: '01rawsig' },
-        { retry: false },
+        { retry: false }
       );
     });
 
@@ -165,14 +182,18 @@ describe('backendAuthService', () => {
 
     it('forwards role as a top-level field when provided (Register flow)', async () => {
       mockPost.mockResolvedValue({ user: SAMPLE_USER });
-      await loginWithSignature('02walletabc', '02sigabc', 'landlord');
+      await loginWithSignature('02walletabc', PREFIXED_SIG_02, 'landlord');
       expect(
         mockPost,
         'when Register passes role=landlord it must reach the backend in the JSON body'
       ).toHaveBeenCalledWith(
         '/api/v1/auth/login',
-        { wallet_address: '02walletabc', signature: '02sigabc', role: 'landlord' },
-        { retry: false },
+        {
+          wallet_address: '02walletabc',
+          signature: PREFIXED_SIG_02,
+          role: 'landlord',
+        },
+        { retry: false }
       );
     });
 
@@ -214,7 +235,10 @@ describe('backendAuthService', () => {
     it('returns false when the refresh cookie is missing/expired (401)', async () => {
       mockPost.mockRejectedValue(new ApiError('Unauthorized', 401));
       const ok = await refreshSession();
-      expect(ok, '401 from refresh endpoint should resolve to false (logged out)').toBe(false);
+      expect(
+        ok,
+        '401 from refresh endpoint should resolve to false (logged out)'
+      ).toBe(false);
     });
 
     it('returns false on 404 (refresh endpoint not deployed yet)', async () => {
@@ -268,7 +292,9 @@ describe('backendAuthService', () => {
       expect(
         mockPost,
         'send must hit /verify/email/send with no body and retry off (a queued send still resolves "sent")'
-      ).toHaveBeenCalledWith('/api/v1/auth/verify/email/send', undefined, { retry: false });
+      ).toHaveBeenCalledWith('/api/v1/auth/verify/email/send', undefined, {
+        retry: false,
+      });
     });
 
     it('returns the send response verbatim', async () => {
@@ -296,7 +322,9 @@ describe('backendAuthService', () => {
       expect(
         mockPost,
         'resend must hit the separate /verify/email/resend endpoint (distinct metrics), not /send'
-      ).toHaveBeenCalledWith('/api/v1/auth/verify/email/resend', undefined, { retry: false });
+      ).toHaveBeenCalledWith('/api/v1/auth/verify/email/resend', undefined, {
+        retry: false,
+      });
     });
 
     it('propagates errors from backendClient', async () => {
@@ -315,7 +343,7 @@ describe('backendAuthService', () => {
       ).toHaveBeenCalledWith(
         '/api/v1/auth/verify/email/confirm',
         { token: 'tok-123' },
-        { retry: false, skipAuthError: true },
+        { retry: false, skipAuthError: true }
       );
     });
 
@@ -358,7 +386,12 @@ describe('backendAuthService', () => {
     it('propagates a 409 (email taken) to the caller', async () => {
       mockPost.mockRejectedValue(new ApiError('Email already registered', 409));
       await expect(
-        register({ email: 'a@b.com', password: 'Valid123', first_name: 'A', last_name: 'B' }),
+        register({
+          email: 'a@b.com',
+          password: 'Valid123',
+          first_name: 'A',
+          last_name: 'B',
+        })
       ).rejects.toThrow('Email already registered');
     });
   });
@@ -373,7 +406,7 @@ describe('backendAuthService', () => {
       ).toHaveBeenCalledWith(
         '/api/v1/auth/login/password',
         { email: 'jane@example.com', password: 'Valid123' },
-        UNAUTH_OPTS,
+        UNAUTH_OPTS
       );
     });
   });
@@ -385,9 +418,12 @@ describe('backendAuthService', () => {
       expect(mockPost).toHaveBeenCalledWith(
         '/api/v1/auth/password/forgot',
         { email: 'jane@example.com' },
-        UNAUTH_OPTS,
+        UNAUTH_OPTS
       );
-      expect(res, 'anti-enumeration: response is always { status: "sent" }').toEqual({
+      expect(
+        res,
+        'anti-enumeration: response is always { status: "sent" }'
+      ).toEqual({
         status: 'sent',
       });
     });
@@ -400,7 +436,7 @@ describe('backendAuthService', () => {
       expect(mockPost).toHaveBeenCalledWith(
         '/api/v1/auth/password/reset',
         { token: 'tok123', new_password: 'Valid123' },
-        UNAUTH_OPTS,
+        UNAUTH_OPTS
       );
     });
   });

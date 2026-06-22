@@ -22,7 +22,9 @@ function makeClickRef(signResult: unknown) {
 beforeEach(() => {
   refreshProfile.mockReset().mockResolvedValue(undefined);
   getNonce.mockReset().mockResolvedValue({ nonce: 'n', message: 'sign me' });
-  linkWallet.mockReset().mockResolvedValue({ id: '1', wallet_address: '01pub' });
+  linkWallet
+    .mockReset()
+    .mockResolvedValue({ id: '1', wallet_address: '01pub' });
 });
 
 describe('useLinkWallet', () => {
@@ -45,12 +47,14 @@ describe('useLinkWallet', () => {
   });
 
   it('keeps an already-prefixed signature as-is', async () => {
-    const clickRef = makeClickRef({ signatureHex: '02alreadysig' });
+    // Already-prefixed = 130 hex chars (02 + 128); detected by length, not bytes.
+    const prefixedSig = `02${'ab'.repeat(64)}`;
+    const clickRef = makeClickRef({ signatureHex: prefixedSig });
     const { result } = renderHook(() => useLinkWallet());
     await act(async () => {
       await result.current.link(clickRef, '02pubkey');
     });
-    expect(linkWallet).toHaveBeenCalledWith('02pubkey', '02alreadysig');
+    expect(linkWallet).toHaveBeenCalledWith('02pubkey', prefixedSig);
   });
 
   it('returns false and sets an error when signing is cancelled', async () => {
@@ -68,7 +72,9 @@ describe('useLinkWallet', () => {
   });
 
   it('maps a 409 to an "already linked" message', async () => {
-    linkWallet.mockRejectedValueOnce(new ApiError('Wallet already linked', 409));
+    linkWallet.mockRejectedValueOnce(
+      new ApiError('Wallet already linked', 409)
+    );
     const clickRef = makeClickRef({ signatureHex: 'sig' });
     const { result } = renderHook(() => useLinkWallet());
 
