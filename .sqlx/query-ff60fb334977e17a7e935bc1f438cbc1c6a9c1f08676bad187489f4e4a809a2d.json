@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE deleted_at IS NULL\n              AND ($3::float8 IS NULL OR ST_DWithin(\n                    geog,\n                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,\n                    $3::float8 * 1609.34\n                  ))\n              AND ($4::float8 IS NULL OR ST_Intersects(\n                    geog,\n                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography\n                  ))\n            ORDER BY\n                CASE\n                    WHEN $1::float8 IS NOT NULL AND $2::float8 IS NOT NULL\n                    THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography)\n                    ELSE NULL\n                END ASC NULLS LAST,\n                created_at DESC\n            LIMIT $8 OFFSET $9\n        ",
+  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                registration_tx_hash,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE deleted_at IS NULL\n              AND ($3::float8 IS NULL OR ST_DWithin(\n                    geog,\n                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,\n                    $3::float8 * 1609.34\n                  ))\n              AND ($4::float8 IS NULL OR ST_Intersects(\n                    geog,\n                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography\n                  ))\n            ORDER BY\n                CASE\n                    WHEN $1::float8 IS NOT NULL AND $2::float8 IS NOT NULL\n                    THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography)\n                    ELSE NULL\n                END ASC NULLS LAST,\n                created_at DESC\n            LIMIT $8 OFFSET $9\n        ",
   "describe": {
     "columns": [
       {
@@ -183,6 +183,17 @@
       },
       {
         "ordinal": 18,
+        "name": "registration_tx_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "registration_tx_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -193,7 +204,7 @@
         }
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -237,8 +248,9 @@
       true,
       null,
       true,
+      true,
       true
     ]
   },
-  "hash": "ac2c057253034e474155076df55fd9ea4813022b8fbfce928830e07e2814c860"
+  "hash": "ff60fb334977e17a7e935bc1f438cbc1c6a9c1f08676bad187489f4e4a809a2d"
 }

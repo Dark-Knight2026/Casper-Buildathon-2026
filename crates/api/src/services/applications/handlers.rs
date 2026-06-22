@@ -249,10 +249,11 @@ pub async fn get_application(
     user: AuthUser,
     Path(application_id): Path<Uuid>,
 ) -> ApiResult<Json<RentalApplication>> {
-    match db::fetch_application(&state.db, application_id, user.0.sub).await? {
-        Some(application) => Ok(Json(application)),
-        None => Err(ApiError::NotFound("application not found".to_owned())),
-    }
+    let application = db::fetch_application(&state.db, application_id, user.0.sub)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("application not found".to_owned()))?;
+    let tenant_info = db::fetch_tenant_info(&state.db, application.user_id).await?;
+    Ok(Json(application.with_tenant(tenant_info)))
 }
 
 // `PUT /api/v1/applications/{id}/status`

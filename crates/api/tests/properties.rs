@@ -894,6 +894,147 @@ async fn create_property_persists_metadata_uri(pool: PgPool) {
     assert_eq!(stored.as_deref(), Some(metadata_uri));
 }
 
+// `PATCH /properties/{id}/registration` write-once deploy hash ----------------
+async fn patch_registration(
+    env: &TestEnv,
+    token: &str,
+    property_id: Uuid,
+    tx_hash: &str,
+) -> (StatusCode, Value) {
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::PATCH,
+        &format!("/api/v1/properties/{property_id}/registration"),
+        token,
+        &json!({ "txHash": tx_hash }),
+    )
+    .await;
+    (status, body.unwrap_or(Value::Null))
+}
+
+/// Happy path: the owner stores a deploy hash; the response carries the updated
+/// property with `registrationTxHash` set, and the DB row matches.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn set_registration_tx_returns_200_and_persists(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    let tx_hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+    let (status, body) = patch_registration(&env, &token, property_id, tx_hash).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["registrationTxHash"].as_str().unwrap(), tx_hash);
+
+    let stored = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT registration_tx_hash FROM properties WHERE id = $1",
+    )
+    .bind(property_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.as_deref(), Some(tx_hash));
+}
+
+/// A blank `txHash` (whitespace-only) is rejected before the DB is touched.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn set_registration_tx_rejects_blank_tx_hash_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    let (status, body) = patch_registration(&env, &token, property_id, "   ").await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("txHash cannot be empty")
+    );
+}
+
+/// A second call from the same owner is rejected once the hash is already stored.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn set_registration_tx_rejects_second_call_409(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    let tx_hash = "aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd";
+    let (first_status, _) = patch_registration(&env, &token, property_id, tx_hash).await;
+    assert_eq!(first_status, StatusCode::OK);
+
+    let (second_status, body) = patch_registration(&env, &token, property_id, tx_hash).await;
+    assert_eq!(second_status, StatusCode::CONFLICT);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("registration_tx_hash is already set")
+    );
+}
+
+/// A landlord who is not the property owner gets `404` (indistinguishable from
+/// "not found" to avoid leaking the existence of the property).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn set_registration_tx_rejects_non_owner_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (owner_id, _owner_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other_id, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, owner_id).await;
+
+    let (status, _body) = patch_registration(
+        &env,
+        &other_token,
+        property_id,
+        "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// An unknown property id also returns `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn set_registration_tx_returns_404_for_unknown_property(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) = patch_registration(
+        &env,
+        &token,
+        Uuid::new_v4(),
+        "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// No `access_token` cookie -> `401` before the handler runs.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn set_registration_tx_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, _token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    let response = env
+        .server
+        .patch(&format!("/api/v1/properties/{property_id}/registration"))
+        .json(&json!({ "txHash": "abc" }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// A tenant token is rejected by the landlord role gate.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn set_registration_tx_rejects_tenant_403(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let (status, _body) = patch_registration(&env, &token, Uuid::new_v4(), "abc").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
 /// `PUT` re-pins after an edit: a seeded property starts with no pointer, the
 /// first edit pins one, and a second edit that changes the metadata yields a
 /// different pointer (the CID tracks the descriptors, not a fixed placeholder).

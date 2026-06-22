@@ -18,7 +18,7 @@ use crate::{
     services::{
         applications::db::{
             ApplicationNoteRow, ApplicationRow, BackgroundCheckRow, LandlordApplicationFilter,
-            NewApplication,
+            NewApplication, TenantInfo,
         },
         listings::models::Listing,
     },
@@ -134,6 +134,15 @@ pub struct RentalApplication {
     /// The listing this application targets; nested in `GET /applications`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub listing: Option<Listing>,
+    /// Tenant's on-chain wallet address; present only in the detail response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_wallet_address: Option<String>,
+    /// Tenant's first name; present only in the detail response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_first_name: Option<String>,
+    /// Tenant's last name; present only in the detail response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_last_name: Option<String>,
     /// Submission timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -173,9 +182,22 @@ impl RentalApplication {
             background_check_consent: row.background_check_consent,
             status: ApplicationStatus::from_str(&row.status).unwrap_or(ApplicationStatus::Pending),
             listing,
+            tenant_wallet_address: None,
+            tenant_first_name: None,
+            tenant_last_name: None,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
+    }
+
+    /// Attaches the tenant's identity fields for the detail endpoint.
+    #[inline]
+    #[must_use]
+    pub fn with_tenant(mut self, tenant: TenantInfo) -> Self {
+        self.tenant_wallet_address = tenant.wallet_address;
+        self.tenant_first_name = Some(tenant.first_name);
+        self.tenant_last_name = Some(tenant.last_name);
+        self
     }
 }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO properties (\n                landlord_id, property_type, address_line1, address_line2,\n                city, state, zip_code, latitude, longitude, bedrooms,\n                bathrooms, square_feet, year_built, parking_features, parcel_id\n            )\n            VALUES (\n                $1, $2, $3, $4, $5, $6, $7,\n                $8::double precision, $9::double precision, $10,\n                $11::double precision, $12, $13, $14, $15\n            )\n            ON CONFLICT (fingerprint) DO UPDATE SET updated_at = NOW()\n            RETURNING\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\",\n                (xmax::text::bigint = 0) AS \"was_inserted!\"\n        ",
+  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                registration_tx_hash,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -183,6 +183,17 @@
       },
       {
         "ordinal": 18,
+        "name": "registration_tx_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "registration_tx_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -193,7 +204,7 @@
         }
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -202,31 +213,11 @@
             "name": "updated_at"
           }
         }
-      },
-      {
-        "ordinal": 20,
-        "name": "was_inserted!",
-        "type_info": "Bool",
-        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Float8",
-        "Float8",
-        "Int4",
-        "Float8",
-        "Int4",
-        "Int4",
-        "TextArray",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -250,8 +241,8 @@
       null,
       true,
       true,
-      null
+      true
     ]
   },
-  "hash": "aa269736a4f660929279988d5d522fd090b924297b6f819a804402a77cc9c1fe"
+  "hash": "0a135f7833fae5bb6d5402f9b8259263b00fe3fe3c368ef3bbe0f972aa834245"
 }

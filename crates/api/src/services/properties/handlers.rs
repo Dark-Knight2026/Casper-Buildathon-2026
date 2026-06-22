@@ -14,11 +14,11 @@ use crate::{
     services::{
         auth::{LandlordRole, RoleUser},
         properties::{
-            db::{self, PropertyUpdate},
+            db::{self, PropertyUpdate, SetRegistrationTxOutcome},
             metadata,
             models::{
                 CreatePropertyRequest, Property, PropertyListingSummary, PropertySearchParams,
-                UpdatePropertyRequest,
+                SetRegistrationTxRequest, UpdatePropertyRequest,
             },
         },
     },
@@ -237,4 +237,61 @@ pub async fn search_properties(
     let (rows, total) = db::search_properties_geo(&state.db, &search).await?;
     let properties = rows.into_iter().map(Property::from).collect();
     Ok(Json(PaginatedResponse::new(properties, total, &pagination)))
+}
+
+// `PATCH /api/v1/properties/{id}/registration`
+//
+/// Records the Casper deploy hash of an on-chain property registration call.
+///
+/// Owner-scoped and write-once: the caller must be the property's landlord and
+/// the hash must not already be stored. A second call from the same owner
+/// returns `409 Conflict`.
+///
+/// # Errors
+///
+/// Returns [`ApiError::BadRequest`] when `txHash` is blank,
+/// [`ApiError::NotFound`] when the property does not exist or the caller is not
+/// its owner, [`ApiError::Conflict`] when the hash is already stored, or a
+/// database error.
+#[utoipa::path(
+    patch,
+    path = "/properties/{id}/registration",
+    tag = "Properties",
+    request_body = SetRegistrationTxRequest,
+    params(
+        ("id" = Uuid, Path, description = "Property id")
+    ),
+    responses(
+        (status = 200, description = "Registration hash stored", body = Property),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Property not found or not the owner", body = ErrorResponse),
+        (status = 409, description = "Registration hash already set", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn set_registration_tx(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(property_id): Path<Uuid>,
+    Json(payload): Json<SetRegistrationTxRequest>,
+) -> ApiResult<Json<Property>> {
+    let tx_hash = Some(payload.tx_hash.trim())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ApiError::BadRequest("txHash cannot be empty".to_owned()))?
+        .to_owned();
+    match db::set_registration_tx_hash(&state.db, property_id, user.0.sub, tx_hash).await? {
+        SetRegistrationTxOutcome::Updated(row) => Ok(Json(Property::from(*row))),
+        SetRegistrationTxOutcome::NotFound => {
+            Err(ApiError::NotFound("property not found".to_owned()))
+        }
+        SetRegistrationTxOutcome::AlreadySet => Err(ApiError::Conflict(
+            "registration_tx_hash is already set".to_owned(),
+        )),
+    }
 }

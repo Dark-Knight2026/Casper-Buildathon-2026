@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE properties\n            SET\n                address_line1 = COALESCE($2, address_line1),\n                address_line2 = COALESCE($3, address_line2),\n                city = COALESCE($4, city),\n                state = COALESCE($5, state),\n                zip_code = COALESCE($6, zip_code),\n                property_type = COALESCE($7, property_type),\n                latitude = COALESCE($8::double precision, latitude),\n                longitude = COALESCE($9::double precision, longitude),\n                bedrooms = COALESCE($10, bedrooms),\n                bathrooms = COALESCE($11::double precision, bathrooms),\n                square_feet = COALESCE($12, square_feet),\n                year_built = COALESCE($13, year_built),\n                parking_features = COALESCE($14, parking_features),\n                parcel_id = COALESCE($15, parcel_id),\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            UPDATE properties\n            SET\n                address_line1 = COALESCE($2, address_line1),\n                address_line2 = COALESCE($3, address_line2),\n                city = COALESCE($4, city),\n                state = COALESCE($5, state),\n                zip_code = COALESCE($6, zip_code),\n                property_type = COALESCE($7, property_type),\n                latitude = COALESCE($8::double precision, latitude),\n                longitude = COALESCE($9::double precision, longitude),\n                bedrooms = COALESCE($10, bedrooms),\n                bathrooms = COALESCE($11::double precision, bathrooms),\n                square_feet = COALESCE($12, square_feet),\n                year_built = COALESCE($13, year_built),\n                parking_features = COALESCE($14, parking_features),\n                parcel_id = COALESCE($15, parcel_id),\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                registration_tx_hash,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -183,6 +183,17 @@
       },
       {
         "ordinal": 18,
+        "name": "registration_tx_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "registration_tx_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -193,7 +204,7 @@
         }
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -243,8 +254,9 @@
       true,
       null,
       true,
+      true,
       true
     ]
   },
-  "hash": "2c890762ccf8c71b66250421566b9bacc9f0ae05c5fc0e531ef3a7687f1f2162"
+  "hash": "6d4b2ab046e256bd10d5e51e7b0a949f44c228e2bbe05b393ac967df4a6b2204"
 }
