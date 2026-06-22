@@ -1558,6 +1558,11 @@ async fn get_application_includes_tenant_name_fields(pool: PgPool) {
         body.get("tenantWalletAddress").is_none(),
         "tenantWalletAddress must be absent when the tenant has no wallet"
     );
+    // onchain_user_id is NULL until on-chain registration.
+    assert!(
+        body.get("tenantOnchainUserId").is_none(),
+        "tenantOnchainUserId must be absent when the tenant is not registered on-chain"
+    );
 }
 
 /// `tenantWalletAddress` is included when the tenant's `wallet_address` column
@@ -1585,6 +1590,32 @@ async fn get_application_includes_wallet_address_when_set(pool: PgPool) {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["tenantWalletAddress"].as_str().unwrap(), wallet);
+}
+
+/// `tenantOnchainUserId` is included when the tenant's `onchain_user_id` column
+/// is set (i.e. the tenant has registered on-chain via the indexer).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_includes_onchain_user_id_when_set(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (tenant_id, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+
+    sqlx::query(r"UPDATE users SET onchain_user_id = $1::TEXT::NUMERIC WHERE id = $2")
+        .bind("42")
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (_status, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let application_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = get_app(&env, &tenant_token, application_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["tenantOnchainUserId"].as_str().unwrap(), "42");
 }
 
 /// The tenant list endpoint (`GET /applications`) must NOT expose
@@ -1622,5 +1653,9 @@ async fn list_applications_excludes_tenant_fields(pool: PgPool) {
     assert!(
         first.get("tenantWalletAddress").is_none(),
         "list must not include tenantWalletAddress"
+    );
+    assert!(
+        first.get("tenantOnchainUserId").is_none(),
+        "list must not include tenantOnchainUserId"
     );
 }

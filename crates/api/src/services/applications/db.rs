@@ -714,6 +714,8 @@ pub struct TenantInfo {
     pub last_name: String,
     /// Tenant's on-chain wallet address; `None` until a wallet is linked.
     pub wallet_address: Option<String>,
+    /// Contract-assigned on-chain user id (U256 as string); `None` until the user registers on-chain.
+    pub onchain_user_id: Option<String>,
 }
 
 /// Reads the tenant's identity fields for the detail view.
@@ -729,7 +731,7 @@ pub struct TenantInfo {
 pub async fn fetch_tenant_info(pool: &PgPool, user_id: Uuid) -> Result<TenantInfo, Error> {
     let row = sqlx::query!(
         r"
-            SELECT first_name, last_name, wallet_address
+            SELECT first_name, last_name, wallet_address, onchain_user_id::TEXT as onchain_user_id
             FROM users
             WHERE id = $1
         ",
@@ -741,6 +743,7 @@ pub async fn fetch_tenant_info(pool: &PgPool, user_id: Uuid) -> Result<TenantInf
         first_name: row.first_name,
         last_name: row.last_name,
         wallet_address: row.wallet_address,
+        onchain_user_id: row.onchain_user_id,
     })
 }
 
