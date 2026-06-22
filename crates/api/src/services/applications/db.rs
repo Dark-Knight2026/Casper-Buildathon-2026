@@ -705,6 +705,45 @@ pub async fn list_application_notes(
     Ok(Some(notes))
 }
 
+/// Tenant identity fields surfaced in the application detail response.
+#[derive(Debug)]
+pub struct TenantInfo {
+    /// Tenant's first name.
+    pub first_name: String,
+    /// Tenant's last name.
+    pub last_name: String,
+    /// Tenant's on-chain wallet address; `None` until a wallet is linked.
+    pub wallet_address: Option<String>,
+}
+
+/// Reads the tenant's identity fields for the detail view.
+///
+/// The `user_id` comes from a just-fetched `RentalApplication` row, so the
+/// user is guaranteed to exist; returns [`Error::RowNotFound`] only on data
+/// corruption.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_tenant_info(pool: &PgPool, user_id: Uuid) -> Result<TenantInfo, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT first_name, last_name, wallet_address
+            FROM users
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(TenantInfo {
+        first_name: row.first_name,
+        last_name: row.last_name,
+        wallet_address: row.wallet_address,
+    })
+}
+
 /// The applicant data a background check needs, plus their consent flag, read
 /// owner-scoped for the landlord requesting the check.
 #[derive(Debug)]
