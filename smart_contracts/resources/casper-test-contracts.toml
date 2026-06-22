@@ -38,12 +38,7 @@ package_hash = "hash-d17f419ab36bb85453b671530f067cdb3b2506eacd10097bb2210b165e6
 [[contracts]]
 name = "Escrow"
 package_name = "Escrow"
-package_hash = "hash-808b01027b18351ed58b43b5f9ead3e6948deb8caffc4c2208d007a3d5af1aee"
-
-[[contracts]]
-name = "Lease"
-package_name = "Lease"
-package_hash = "hash-c103202b74094a5e16c2b318668e361f7398817add74a2c86e16f685dbcac3f8"
+package_hash = "hash-122d1083952162bbaad8a3e941af187022694228e5413d651cbc6f17f806dd8d"
 
 [[contracts]]
 name = "UserRegistry"
@@ -53,4 +48,9 @@ package_hash = "hash-29cd2d0ae790bed5feca98b5f0b725f8a8dda423726bcfbd06b81278e91
 [[contracts]]
 name = "PropertyRegistry"
 package_name = "PropertyRegistry"
-package_hash = "hash-661269fb3c7b6e0934a3350a0aad5633dd80f902cb59e7612337ee09620098ca"
+package_hash = "hash-dfc5d21eb4e2eb9098019c810d774805a43af8a56bba8c9c6fd47b4d4043de4e"
+
+[[contracts]]
+name = "Lease"
+package_name = "Lease"
+package_hash = "hash-2b76bee4a3b51a1838e925dc4a1be92e10e43ce9b7ca48b0f87e6f5b7defea38"
