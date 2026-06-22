@@ -1,7 +1,10 @@
 import { useCallback } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 
-import { useBlockchainTransaction } from '@/hooks/ico/useBlockchainTransaction';
+import {
+  useBlockchainTransaction,
+  type UseBlockchainTransactionOptions,
+} from '@/hooks/ico/useBlockchainTransaction';
 import {
   createLeaseAgreementTransaction,
   isLeaseAgreementEnabled,
@@ -19,18 +22,23 @@ import {
  *
  * Connecting the wallet (obtaining `clickRef` + `publicKey`) is the caller's
  * job — pass them in from `useICOWallet`. This hook owns only the build → sign →
- * submit → confirm state machine via `useBlockchainTransaction`.
+ * submit → confirm state machine via `useBlockchainTransaction`. `options`
+ * forwards `onSuccess(txHash)` / `onError(message)`, which fire exactly once per
+ * attempt — the caller uses them to push the deploy hash and toast outcomes
+ * without re-deriving them from `state` transitions.
  */
 export function useLeaseAgreementOnChain(
   publicKey: string | null | undefined,
-  clickRef: ICSPRClickSDK | null
+  clickRef: ICSPRClickSDK | null,
+  options?: UseBlockchainTransactionOptions
 ) {
   const { state, execute, reset } = useBlockchainTransaction(
     publicKey ?? null,
     clickRef,
     (pk, params: CreateLeaseAgreementParamsInput) =>
       createLeaseAgreementTransaction(pk, params),
-    parseLeaseAgreementError
+    parseLeaseAgreementError,
+    options
   );
 
   const create = useCallback(

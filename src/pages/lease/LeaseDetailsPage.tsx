@@ -34,6 +34,12 @@ import {
 import { LeaseSigningCard } from '@/components/lease/LeaseSigningCard';
 import { LeaseOnChainCommitCard } from '@/components/lease/LeaseOnChainCommitCard';
 
+// While a committed lease waits on the indexer, poll every 15s for up to 5
+// minutes after its last backend update — enough to catch the indexer, but
+// it gives up (rather than polling forever) if the indexer is down.
+const INDEXER_POLL_MS = 15_000;
+const INDEXER_POLL_WINDOW_MS = 5 * 60_000;
+
 /** Both submit and delete fail with `409` on a status conflict, `403` if not the landlord. */
 function mapActionError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -71,10 +77,15 @@ export const LeaseDetailsPage = () => {
       count < 2,
     // Once the on-chain deploy is committed, poll until the indexer writes the
     // on-chain ids (and flips the status) so they appear without a manual reload.
+    // Bounded: stop after INDEXER_POLL_WINDOW_MS of no backend update so a
+    // stopped/lagging indexer doesn't poll forever, and never in a background tab.
     refetchInterval: (query) => {
       const l = query.state.data;
-      return l?.commitTxHash && !l.onchainLeaseId ? 8000 : false;
+      if (!l?.commitTxHash || l.onchainLeaseId) return false;
+      const sinceUpdate = Date.now() - Date.parse(l.updatedAt);
+      return sinceUpdate < INDEXER_POLL_WINDOW_MS ? INDEXER_POLL_MS : false;
     },
+    refetchIntervalInBackground: false,
   });
 
   const submitMutation = useMutation({
