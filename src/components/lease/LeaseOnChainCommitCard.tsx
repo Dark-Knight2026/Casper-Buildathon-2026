@@ -18,7 +18,7 @@
  * after the landlord starts.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, ShieldCheck } from 'lucide-react';
 
@@ -65,8 +65,16 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const [form, setForm] = useState<LeaseOnChainFormState>(() =>
     initialLeaseOnChainForm(lease)
   );
-  // Guards the one-shot `/commit` push against effect re-runs (and strict mode).
+  // Status of the `/commit` push (separate from the deploy's own lifecycle): the
+  // deploy can succeed on-chain while the push fails, and that must be retryable
+  // WITHOUT re-signing — re-signing would create a duplicate on-chain lease/NFT.
+  const [commitStatus, setCommitStatus] = useState<
+    'idle' | 'pushing' | 'pushed' | 'failed'
+  >('idle');
+  // Guards the one-shot auto-push against effect re-runs (and strict mode).
   const committedRef = useRef(false);
+  // Guards the deploy-failure toast against effect re-runs.
+  const deployFailedRef = useRef(false);
 
   const onFieldChange = <K extends keyof LeaseOnChainFormState>(
     key: K,
@@ -78,9 +86,25 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const hasWalletSession = Boolean(account?.publicKey && clickRef);
   const hasEquity = Boolean(lease.equityPropertyId);
 
-  // On confirm: surface a cspr.live link and hand the deploy hash to the backend
-  // once — its indexer derives the on-chain ids and activates the lease. On
-  // failure, surface the reason.
+  // Hand the deploy hash to the backend; its indexer derives the on-chain ids
+  // and activates the lease. Reusable so a failed push can be retried in place
+  // with the same hash (no second deploy). The hash is the only input — a true
+  // duplicate guard lives on the backend, keyed on the deploy/commit hash.
+  const pushCommit = useCallback(
+    (hash: string) => {
+      setCommitStatus('pushing');
+      commitLease(lease.id, { commitTxHash: hash })
+        .then(() => {
+          setCommitStatus('pushed');
+          queryClient.invalidateQueries({ queryKey: ['lease', lease.id] });
+        })
+        .catch(() => setCommitStatus('failed'));
+    },
+    [lease.id, queryClient]
+  );
+
+  // On confirm: surface a cspr.live link and auto-push the hash once. On deploy
+  // failure: surface the reason once.
   useEffect(() => {
     if (step === 'confirmed' && txHash && !committedRef.current) {
       committedRef.current = true;
@@ -97,27 +121,17 @@ function CommitFlow({ lease }: { lease: Lease }) {
           </a>
         ),
       });
-      commitLease(lease.id, { commitTxHash: txHash })
-        .then(() =>
-          queryClient.invalidateQueries({ queryKey: ['lease', lease.id] })
-        )
-        .catch(() =>
-          toast({
-            title: 'Couldn’t notify the platform',
-            description:
-              'The deploy succeeded but the platform wasn’t updated. Reload the lease to retry.',
-            variant: 'destructive',
-          })
-        );
+      pushCommit(txHash);
     }
-    if (step === 'failed' && error) {
+    if (step === 'failed' && error && !deployFailedRef.current) {
+      deployFailedRef.current = true;
       toast({
         title: 'Couldn’t record on-chain',
         description: error,
         variant: 'destructive',
       });
     }
-  }, [step, txHash, error, toast, lease.id, queryClient]);
+  }, [step, txHash, error, toast, pushCommit]);
 
   // Equity only applies to a lease-to-own lease; when the lease carries an
   // equity property the on-chain id is required (the off-chain row holds only a
@@ -186,28 +200,43 @@ function CommitFlow({ lease }: { lease: Lease }) {
         </p>
       )}
 
-      <Button
-        disabled={
-          busy ||
-          step === 'confirmed' ||
-          !isLeaseOnChainFormValid(form, hasEquity)
-        }
-        onClick={submit}
-      >
-        {step === 'signing' && (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Confirm in your wallet…
-          </>
-        )}
-        {step === 'pending' && (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Submitting…
-          </>
-        )}
-        {!busy && 'Record lease on-chain'}
-      </Button>
+      {/* The deploy is on-chain but the backend wasn't notified. Retry the push
+          with the SAME hash — never re-sign (that would deploy a duplicate). */}
+      {step === 'confirmed' && commitStatus === 'failed' && txHash && (
+        <div className="space-y-2">
+          <p className="text-sm text-destructive">
+            The deploy succeeded on-chain, but the platform wasn’t notified.
+            Retry — this re-sends the same deploy, it does not sign again.
+          </p>
+          <Button variant="outline" onClick={() => pushCommit(txHash)}>
+            Retry recording
+          </Button>
+        </div>
+      )}
+
+      {/* Once the deploy is confirmed the only valid action is the push (handled
+          automatically / via retry above) — disable signing to prevent a
+          duplicate on-chain lease. */}
+      {step !== 'confirmed' && (
+        <Button
+          disabled={busy || !isLeaseOnChainFormValid(form, hasEquity)}
+          onClick={submit}
+        >
+          {step === 'signing' && (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Confirm in your wallet…
+            </>
+          )}
+          {step === 'pending' && (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Submitting…
+            </>
+          )}
+          {!busy && 'Record lease on-chain'}
+        </Button>
+      )}
     </div>
   );
 }
