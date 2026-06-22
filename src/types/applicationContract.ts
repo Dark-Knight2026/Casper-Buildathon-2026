@@ -65,6 +65,14 @@ export interface RentalApplication {
   backgroundCheckConsent: boolean;
   status: ApplicationStatus;
   listing?: Listing; // nested in GET /applications and GET /applications/landlord
+  // Tenant identity — only present on the detail endpoint (GET /applications/{id});
+  // absent (undefined) on the list endpoints.
+  tenantFirstName?: string;
+  tenantLastName?: string;
+  /** Tenant's linked on-chain wallet; null until they link one. */
+  tenantWalletAddress?: string | null;
+  /** Tenant's contract-assigned on-chain user id; null until registered on-chain. */
+  tenantOnchainUserId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

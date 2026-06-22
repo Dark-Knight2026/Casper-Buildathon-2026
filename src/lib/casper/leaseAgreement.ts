@@ -43,13 +43,36 @@ export const isLeaseAgreementEnabled = Boolean(LEASE_AGREEMENT_PACKAGE_HASH);
 
 /**
  * Gas for `create_lease_agreement` (motes). The call mints the tenant's lease
- * NFT and writes a security-deposit invoice plus one invoice per rental month,
- * so it is heavier than the `PropertyRegistry` writes — 20 CSPR by default.
- * Override via env if testnet measurements differ.
+ * NFT, writes a security-deposit invoice, and then writes **one invoice per
+ * rental month** (`for i in 0..(duration / 30 days)`), so its cost scales with
+ * the lease term — a 1-month lease consumed ~6.2 CSPR (2 invoices), a 12-month
+ * one writes 13 invoices and costs far more. We therefore estimate the payment
+ * as a fixed base plus a per-month allowance rather than a flat figure. The
+ * payment is only a ceiling (unused gas is refunded), so it's set generous.
+ * Both parts are env-overridable once testnet measurements are firmer.
  */
-const GAS_CREATE_LEASE = BigInt(
-  import.meta.env.VITE_LEASE_AGREEMENT_CREATE_GAS ?? '20000000000'
+const GAS_CREATE_LEASE_BASE = BigInt(
+  import.meta.env.VITE_LEASE_AGREEMENT_CREATE_GAS_BASE ?? '8000000000' // 8 CSPR
 );
+const GAS_CREATE_LEASE_PER_MONTH = BigInt(
+  import.meta.env.VITE_LEASE_AGREEMENT_CREATE_GAS_PER_MONTH ?? '4000000000' // 4 CSPR
+);
+
+/** Whole 30-day months in the lease term, from the on-chain start/end seconds. */
+function leaseTermMonths(params: CreateLeaseAgreementParamsInput): bigint {
+  const start = BigInt(params.startUnixSeconds);
+  const end = BigInt(params.endUnixSeconds);
+  return end > start ? (end - start) / 2_592_000n : 0n;
+}
+
+/** Payment ceiling for a `create_lease_agreement` call, scaled by its term. */
+export function estimateCreateLeaseGas(
+  params: CreateLeaseAgreementParamsInput
+): bigint {
+  return (
+    GAS_CREATE_LEASE_BASE + GAS_CREATE_LEASE_PER_MONTH * leaseTermMonths(params)
+  );
+}
 
 // ── Inputs (raw on-chain values — already resolved/scaled by the caller) ─────
 
@@ -243,7 +266,7 @@ export function createLeaseAgreementTransaction(
     LEASE_AGREEMENT_PACKAGE_HASH,
     'create_lease_agreement',
     buildCreateLeaseAgreementArgs(params),
-    GAS_CREATE_LEASE,
+    estimateCreateLeaseGas(params),
     true // Odra contract — call via package hash
   );
 }

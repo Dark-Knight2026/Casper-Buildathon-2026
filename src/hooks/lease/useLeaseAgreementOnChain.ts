@@ -12,11 +12,10 @@ import {
 /**
  * Landlord-signed on-chain `create_lease_agreement` (`Lease` contract).
  *
- * Scope is the deploy only (LA-12, phase 1): the landlord signs + submits the
- * call from their own wallet and we surface success/failure. The `/commit`
- * reconciliation step is intentionally NOT wired here — the backend currently
- * requires `onchainLeaseId`/`nftTokenId` the frontend cannot read, so that push
- * waits on a backend-derived params/commit contract.
+ * Scope is the deploy only: the landlord signs + submits the call from their
+ * own wallet and we surface success/failure. The caller (`LeaseOnChainCommitCard`)
+ * then pushes the resulting deploy hash to `POST /commit`, whose indexer derives
+ * the on-chain ids from the event and activates the lease.
  *
  * Connecting the wallet (obtaining `clickRef` + `publicKey`) is the caller's
  * job — pass them in from `useICOWallet`. This hook owns only the build → sign →

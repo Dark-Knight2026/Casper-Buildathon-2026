@@ -4,6 +4,7 @@ import {
   encodeCreateLeaseAgreementParams,
   encodeCurrencyAmount,
   encodeRentDistributionTerms,
+  estimateCreateLeaseGas,
   parseLeaseAgreementError,
   u256ToBytes,
   u32ToBytes,
@@ -178,5 +179,41 @@ describe('encodeCreateLeaseAgreementParams', () => {
       '0000000000000000';
 
     expect(hex(bytes)).toBe(expected);
+  });
+});
+
+describe('estimateCreateLeaseGas', () => {
+  const ONE_MONTH = 2_592_000n;
+  // Defaults (no env): 8 CSPR base + 4 CSPR per month, in motes.
+  const BASE = 8_000_000_000n;
+  const PER_MONTH = 4_000_000_000n;
+
+  it('scales with the number of 30-day months (one invoice per month)', () => {
+    const at = (months: bigint) =>
+      estimateCreateLeaseGas({
+        tenantUserId: 1n,
+        equityPropertyId: null,
+        monthlyRent: { amount: 1n },
+        securityDeposit: { amount: 1n },
+        startUnixSeconds: 0n,
+        endUnixSeconds: months * ONE_MONTH,
+        invoiceValidityDuration: 0n,
+      });
+
+    expect(at(1n)).toBe(BASE + PER_MONTH); // 12 CSPR for a 1-month lease
+    expect(at(12n)).toBe(BASE + PER_MONTH * 12n); // 56 CSPR for a 12-month lease
+  });
+
+  it('falls back to the base when the term is empty/inverted', () => {
+    const gas = estimateCreateLeaseGas({
+      tenantUserId: 1n,
+      equityPropertyId: null,
+      monthlyRent: { amount: 1n },
+      securityDeposit: { amount: 1n },
+      startUnixSeconds: 100n,
+      endUnixSeconds: 50n,
+      invoiceValidityDuration: 0n,
+    });
+    expect(gas).toBe(BASE);
   });
 });

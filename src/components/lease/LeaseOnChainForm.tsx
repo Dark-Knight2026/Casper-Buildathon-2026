@@ -66,7 +66,9 @@ export function dateTimeLocalToUnixSeconds(value: string): number {
 /**
  * Prefill from the lease: rent/deposit as their human tUSDC amounts, the term
  * shown as local date-times and aligned to whole 30-day months. The tenant's
- * on-chain user id can't be derived, so it starts blank for the landlord.
+ * on-chain user id is prefilled from `lease.tenantOnchainUserId`; it's blank
+ * while that's `null` (the tenant hasn't registered on-chain yet / the indexer
+ * hasn't recorded it), so the landlord can still enter it manually.
  */
 export function initialLeaseOnChainForm(lease: Lease): LeaseOnChainFormState {
   const start = toUnixSeconds(lease.startDate);
@@ -75,7 +77,7 @@ export function initialLeaseOnChainForm(lease: Lease): LeaseOnChainFormState {
     Math.round((toUnixSeconds(lease.endDate) - start) / ONE_MONTH_IN_SECONDS)
   );
   return {
-    tenantUserId: '',
+    tenantUserId: lease.tenantOnchainUserId ?? '',
     equityPropertyId: '',
     monthlyRentAmount: String(lease.monthlyRent ?? 0),
     securityDepositAmount: String(lease.securityDeposit ?? 0),
@@ -162,9 +164,9 @@ export function LeaseOnChainForm({
           <p className="text-[11px] text-muted-foreground">
             {form.tenantUserId
               ? isDigits(form.tenantUserId)
-                ? 'The tenant’s UserRegistry user id.'
+                ? 'Prefilled from the tenant’s on-chain registration.'
                 : 'Must be a whole number (the tenant’s on-chain user id).'
-              : 'The tenant’s UserRegistry user id (a whole number).'}
+              : 'The tenant isn’t registered on-chain yet — enter their UserRegistry user id (a whole number) once available.'}
           </p>
         </div>
 

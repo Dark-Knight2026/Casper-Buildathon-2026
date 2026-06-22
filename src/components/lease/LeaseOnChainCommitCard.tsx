@@ -1,24 +1,25 @@
 /**
- * Landlord "Record on-chain" action for a fully-signed lease (`Lease` contract,
- * LA-12 phase 1). The landlord signs `create_lease_agreement` from their own
- * wallet via CSPR.click; we surface success/failure with a toast.
+ * Landlord "Record on-chain" action for a fully-signed lease (`Lease` contract).
+ * The landlord signs `create_lease_agreement` from their own wallet via
+ * CSPR.click, then we hand the deploy hash to the backend (`POST /commit`),
+ * whose indexer derives the on-chain ids from the event and activates the lease.
  *
  * Targets the contract deployed from `2025_anthony_leasefi` user-registry:
- * `tenant` is the tenant's on-chain UserRegistry user id (`U256`), not a wallet
- * address, so the landlord enters it manually (the frontend cannot derive it).
- * No property-manager split is set (the encoder defaults the rent distribution
- * to no manager). The currency + amounts come from the lease; the other manual
+ * `tenant` is the tenant's on-chain UserRegistry user id (`U256`), prefilled
+ * from `lease.tenantOnchainUserId` (the landlord can still adjust it, and falls
+ * back to entering it manually while it's `null` — pending the indexer). No
+ * property-manager split is set (the encoder defaults the rent distribution to
+ * no manager). The currency + amounts come from the lease; the other manual
  * value is the equity property's on-chain id, only for a lease-to-own lease.
  *
- * The `/commit` push (which would activate the lease) is intentionally NOT wired
- * — it requires `onchainLeaseId`/`nftTokenId` the frontend cannot read.
- *
  * Self-gating: renders nothing unless the caller is the lease's landlord, the
- * lease is `pending-signatures`, both parties have signed, and the contract is
- * configured. Mounts the hidden SDK host only after the landlord starts.
+ * lease is `pending-signatures`, both parties have signed, it isn't already
+ * recorded, and the contract is configured. Mounts the hidden SDK host only
+ * after the landlord starts.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, ShieldCheck } from 'lucide-react';
 
 import {
@@ -34,6 +35,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useLeaseAgreementOnChain } from '@/hooks/lease/useLeaseAgreementOnChain';
 import { isLeaseAgreementEnabled } from '@/lib/casper/leaseAgreement';
+import { commitLease } from '@/services/leaseService';
 import { LEASE_CURRENCY, scaleToSmallestUnit } from '@/lib/leaseCurrency';
 import {
   LeaseOnChainForm,
@@ -55,6 +57,7 @@ const explorerDeployUrl = (txHash: string) =>
 function CommitFlow({ lease }: { lease: Lease }) {
   const { account, clickRef, connect } = useICOWallet();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { state, create } = useLeaseAgreementOnChain(
     account?.publicKey,
     clickRef
@@ -62,6 +65,8 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const [form, setForm] = useState<LeaseOnChainFormState>(() =>
     initialLeaseOnChainForm(lease)
   );
+  // Guards the one-shot `/commit` push against effect re-runs (and strict mode).
+  const committedRef = useRef(false);
 
   const onFieldChange = <K extends keyof LeaseOnChainFormState>(
     key: K,
@@ -73,9 +78,12 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const hasWalletSession = Boolean(account?.publicKey && clickRef);
   const hasEquity = Boolean(lease.equityPropertyId);
 
-  // Surface the outcome once: a cspr.live link on success, the reason on failure.
+  // On confirm: surface a cspr.live link and hand the deploy hash to the backend
+  // once — its indexer derives the on-chain ids and activates the lease. On
+  // failure, surface the reason.
   useEffect(() => {
-    if (step === 'confirmed' && txHash) {
+    if (step === 'confirmed' && txHash && !committedRef.current) {
+      committedRef.current = true;
       toast({
         title: 'Recorded on-chain',
         description: (
@@ -89,6 +97,18 @@ function CommitFlow({ lease }: { lease: Lease }) {
           </a>
         ),
       });
+      commitLease(lease.id, { commitTxHash: txHash })
+        .then(() =>
+          queryClient.invalidateQueries({ queryKey: ['lease', lease.id] })
+        )
+        .catch(() =>
+          toast({
+            title: 'Couldn’t notify the platform',
+            description:
+              'The deploy succeeded but the platform wasn’t updated. Reload the lease to retry.',
+            variant: 'destructive',
+          })
+        );
     }
     if (step === 'failed' && error) {
       toast({
@@ -97,7 +117,7 @@ function CommitFlow({ lease }: { lease: Lease }) {
         variant: 'destructive',
       });
     }
-  }, [step, txHash, error, toast]);
+  }, [step, txHash, error, toast, lease.id, queryClient]);
 
   // Equity only applies to a lease-to-own lease; when the lease carries an
   // equity property the on-chain id is required (the off-chain row holds only a
@@ -148,8 +168,30 @@ function CommitFlow({ lease }: { lease: Lease }) {
         <p className="text-sm text-destructive">{error}</p>
       )}
 
+      {/* Persistent link — survives the transient toast, shown as soon as the
+          deploy is submitted and through confirmation. */}
+      {txHash && (
+        <p className="text-sm text-muted-foreground">
+          {step === 'confirmed'
+            ? 'Recorded on-chain — finalizing on the platform. '
+            : 'Deploy submitted, awaiting confirmation. '}
+          <a
+            href={explorerDeployUrl(txHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline"
+          >
+            View the deploy on cspr.live
+          </a>
+        </p>
+      )}
+
       <Button
-        disabled={busy || !isLeaseOnChainFormValid(form, hasEquity)}
+        disabled={
+          busy ||
+          step === 'confirmed' ||
+          !isLeaseOnChainFormValid(form, hasEquity)
+        }
         onClick={submit}
       >
         {step === 'signing' && (
@@ -183,13 +225,16 @@ export function LeaseOnChainCommitCard({ lease }: { lease: Lease }) {
     Boolean(lease.signatureProgress?.tenant?.signed);
 
   // Stay dark unless this is the landlord on a both-signed, awaiting-commit
-  // lease and the contract is configured.
+  // lease and the contract is configured. Also hide once recorded — either the
+  // indexer has set `onchainLeaseId`, or the deploy hash is already committed
+  // and we're just waiting on the indexer to activate.
   if (
     !isLeaseAgreementEnabled ||
     !isLandlord ||
     lease.status !== 'pending-signatures' ||
     !bothSigned ||
-    lease.onchainLeaseId
+    lease.onchainLeaseId ||
+    lease.commitTxHash
   ) {
     return null;
   }

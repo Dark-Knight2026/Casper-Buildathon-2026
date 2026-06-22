@@ -69,6 +69,12 @@ export const LeaseDetailsPage = () => {
     retry: (count, err) =>
       !(err instanceof ApiError && [403, 404].includes(err.statusCode ?? 0)) &&
       count < 2,
+    // Once the on-chain deploy is committed, poll until the indexer writes the
+    // on-chain ids (and flips the status) so they appear without a manual reload.
+    refetchInterval: (query) => {
+      const l = query.state.data;
+      return l?.commitTxHash && !l.onchainLeaseId ? 8000 : false;
+    },
   });
 
   const submitMutation = useMutation({

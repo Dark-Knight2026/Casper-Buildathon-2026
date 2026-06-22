@@ -42,6 +42,20 @@ describe('initialLeaseOnChainForm', () => {
     expect(form.invoiceValidityDays).toBe('30');
   });
 
+  it('prefills the tenant id from the lease’s on-chain user id', () => {
+    const form = initialLeaseOnChainForm(
+      makeLease({ tenantOnchainUserId: '42' })
+    );
+    expect(form.tenantUserId).toBe('42');
+  });
+
+  it('leaves the tenant id blank when not yet registered on-chain', () => {
+    const form = initialLeaseOnChainForm(
+      makeLease({ tenantOnchainUserId: null })
+    );
+    expect(form.tenantUserId).toBe('');
+  });
+
   it('aligns the term to a whole 30-day multiple', () => {
     const form = initialLeaseOnChainForm(makeLease());
     const start = Date.parse(form.startDateTime);

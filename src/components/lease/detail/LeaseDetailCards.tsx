@@ -156,31 +156,38 @@ export function OnchainCard({ lease }: { lease: Lease }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        {lease.onchainLeaseId ? (
+        {/* The deploy link shows as soon as it's committed; the ids appear once
+            the indexer reads the on-chain event (the page polls until then). */}
+        {lease.commitTxHash ? (
           <>
-            <div className="flex flex-wrap gap-x-8 gap-y-2">
-              <div>
-                <p className="text-muted-foreground">Lease Agreement ID</p>
-                <p className="font-mono">{lease.onchainLeaseId}</p>
-              </div>
-              {lease.nftTokenId && (
+            {lease.onchainLeaseId ? (
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
                 <div>
-                  <p className="text-muted-foreground">NFT Token ID</p>
-                  <p className="font-mono">{lease.nftTokenId}</p>
+                  <p className="text-muted-foreground">Lease Agreement ID</p>
+                  <p className="font-mono">{lease.onchainLeaseId}</p>
                 </div>
-              )}
-            </div>
-            {lease.commitTxHash && (
-              <a
-                href={explorerDeployUrl(lease.commitTxHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                <Link2 className="h-4 w-4" />
-                View commit deploy on cspr.live
-              </a>
+                {lease.nftTokenId && (
+                  <div>
+                    <p className="text-muted-foreground">NFT Token ID</p>
+                    <p className="font-mono">{lease.nftTokenId}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">
+                Recorded on-chain — finalizing. The lease agreement and NFT ids
+                appear here once the network indexes the deploy.
+              </p>
             )}
+            <a
+              href={explorerDeployUrl(lease.commitTxHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              <Link2 className="h-4 w-4" />
+              View commit deploy on cspr.live
+            </a>
           </>
         ) : (
           <p className="text-muted-foreground">

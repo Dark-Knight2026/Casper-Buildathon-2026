@@ -126,6 +126,12 @@ export interface Lease {
   onchainLeaseId: string | null;
   nftTokenId: string | null;
   commitTxHash: string | null;
+  /**
+   * Primary tenant's contract-assigned on-chain user id (U256 as string);
+   * `null` until the indexer records their on-chain registration. Used to
+   * prefill the `create_lease_agreement` tenant id.
+   */
+  tenantOnchainUserId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -166,11 +172,11 @@ export interface SignLeaseBody {
 }
 
 export interface CommitLeaseBody {
-  /** U256 decimal string from the `LeaseAgreementCreated` event. */
-  onchainLeaseId: string;
-  /** Tenant's frozen lease NFT token id (U256 decimal string). */
-  nftTokenId: string;
-  /** Deploy/tx hash of the `create_lease_agreement` call. */
+  /**
+   * Deploy/tx hash of the `create_lease_agreement` call. The backend indexer
+   * derives `onchainLeaseId`/`nftTokenId` from the deploy's on-chain event and
+   * activates the lease, so the hash is all the frontend sends.
+   */
   commitTxHash: string;
 }
 
