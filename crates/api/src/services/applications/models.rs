@@ -143,6 +143,9 @@ pub struct RentalApplication {
     /// Tenant's last name; present only in the detail response.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_last_name: Option<String>,
+    /// Tenant's contract-assigned on-chain user id (U256 as string); present only in the detail response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_onchain_user_id: Option<String>,
     /// Submission timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -185,6 +188,7 @@ impl RentalApplication {
             tenant_wallet_address: None,
             tenant_first_name: None,
             tenant_last_name: None,
+            tenant_onchain_user_id: None,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -197,6 +201,7 @@ impl RentalApplication {
         self.tenant_wallet_address = tenant.wallet_address;
         self.tenant_first_name = Some(tenant.first_name);
         self.tenant_last_name = Some(tenant.last_name);
+        self.tenant_onchain_user_id = tenant.onchain_user_id;
         self
     }
 }
