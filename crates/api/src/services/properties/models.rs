@@ -100,6 +100,9 @@ pub struct Property {
     /// Contract-assigned `PropertyRegistry` id (U256 as a decimal string).
     /// `null` until the indexer observes on-chain registration.
     pub onchain_property_id: Option<String>,
+    /// Casper deploy hash of the registration call; set by the landlord after
+    /// signing. `null` until confirmed.
+    pub registration_tx_hash: Option<String>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -131,6 +134,7 @@ impl From<PropertyRow> for Property {
             parking_features: row.parking_features.unwrap_or_default(),
             metadata_uri: row.metadata_uri,
             onchain_property_id: row.onchain_property_id,
+            registration_tx_hash: row.registration_tx_hash,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -523,6 +527,15 @@ impl PropertySearchParams {
             offset: pagination.offset(),
         })
     }
+}
+
+/// Record the on-chain registration deploy hash
+/// (`PATCH /api/v1/properties/{id}/registration`).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SetRegistrationTxRequest {
+    /// Casper deploy hash (64-character hex string).
+    pub tx_hash: String,
 }
 
 /// Parses a `minLng,minLat,maxLng,maxLat` bbox string into validated bounds.

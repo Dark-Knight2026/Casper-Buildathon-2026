@@ -72,6 +72,7 @@ use crate::{
             // Properties models
             properties::models::CreatePropertyRequest,
             properties::models::UpdatePropertyRequest,
+            properties::models::SetRegistrationTxRequest,
             properties::models::PropertyType,
             properties::models::Property,
             properties::models::PropertyListingSummary,

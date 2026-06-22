@@ -53,6 +53,9 @@ pub struct PropertyRow {
     /// written by the indexer from the `PropertyCreated` event.
     /// `null` until observed on-chain.
     pub onchain_property_id: Option<String>,
+    /// Casper deploy hash of the registration call; set by the landlord after
+    /// signing. `null` until confirmed by the owner.
+    pub registration_tx_hash: Option<String>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -213,6 +216,7 @@ struct UpsertRow {
     parking_features: Option<Vec<String>>,
     metadata_uri: Option<String>,
     onchain_property_id: Option<String>,
+    registration_tx_hash: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     was_inserted: bool,
@@ -268,6 +272,7 @@ pub async fn upsert_property(
                 parking_features,
                 metadata_uri,
                 onchain_property_id::text AS "onchain_property_id?",
+                registration_tx_hash,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!",
                 (xmax::text::bigint = 0) AS "was_inserted!"
@@ -310,6 +315,7 @@ pub async fn upsert_property(
         parking_features: row.parking_features,
         metadata_uri: row.metadata_uri,
         onchain_property_id: row.onchain_property_id,
+        registration_tx_hash: row.registration_tx_hash,
         created_at: row.created_at,
         updated_at: row.updated_at,
     };
@@ -402,6 +408,7 @@ pub async fn update_property(
                 parking_features,
                 metadata_uri,
                 onchain_property_id::text AS "onchain_property_id?",
+                registration_tx_hash,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -505,6 +512,7 @@ pub async fn fetch_property(pool: &PgPool, property_id: Uuid) -> Result<Property
                 parking_features,
                 metadata_uri,
                 onchain_property_id::text AS "onchain_property_id?",
+                registration_tx_hash,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM properties
@@ -636,6 +644,7 @@ pub async fn search_properties_geo(
                 parking_features,
                 metadata_uri,
                 onchain_property_id::text AS "onchain_property_id?",
+                registration_tx_hash,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM properties
@@ -673,4 +682,95 @@ pub async fn search_properties_geo(
 
     tx.commit().await?;
     Ok((rows, total))
+}
+
+/// Outcome of [`set_registration_tx_hash`].
+#[derive(Debug)]
+pub enum SetRegistrationTxOutcome {
+    /// Hash stored; carries the updated row.
+    Updated(Box<PropertyRow>),
+    /// No live property with that id owned by the caller.
+    NotFound,
+    /// `registration_tx_hash` is already set; write-once semantics.
+    AlreadySet,
+}
+
+/// Records the Casper deploy hash of the on-chain property registration call.
+///
+/// Owner-scoped and write-once: the caller must be the property's landlord, and
+/// the column must be null (`AlreadySet` otherwise, `NotFound` for a missing or
+/// foreign property). A `SELECT ... FOR UPDATE` serializes the null-check and
+/// the write in one snapshot.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn set_registration_tx_hash(
+    pool: &PgPool,
+    property_id: Uuid,
+    owner_id: Uuid,
+    tx_hash: String,
+) -> Result<SetRegistrationTxOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    let current = sqlx::query!(
+        r"
+            SELECT landlord_id, registration_tx_hash
+            FROM properties
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        property_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(current) = current else {
+        return Ok(SetRegistrationTxOutcome::NotFound);
+    };
+    if current.landlord_id != owner_id {
+        return Ok(SetRegistrationTxOutcome::NotFound);
+    }
+    if current.registration_tx_hash.is_some() {
+        return Ok(SetRegistrationTxOutcome::AlreadySet);
+    }
+
+    let row = sqlx::query_as!(
+        PropertyRow,
+        r#"
+            UPDATE properties
+            SET registration_tx_hash = $2
+            WHERE id = $1
+            RETURNING
+                id,
+                normalized_address,
+                parcel_id,
+                address_line1,
+                address_line2,
+                city,
+                state,
+                zip_code,
+                latitude::float8 AS "latitude?",
+                longitude::float8 AS "longitude?",
+                property_type,
+                bedrooms,
+                bathrooms::float8 AS "bathrooms?",
+                square_feet,
+                year_built,
+                parking_features,
+                metadata_uri,
+                onchain_property_id::text AS "onchain_property_id?",
+                registration_tx_hash,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        property_id,
+        tx_hash,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+    Ok(SetRegistrationTxOutcome::Updated(Box::new(row)))
 }

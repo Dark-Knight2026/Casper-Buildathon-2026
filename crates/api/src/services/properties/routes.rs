@@ -22,4 +22,5 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::get_property))
         .routes(routes!(handlers::search_properties))
         .routes(routes!(handlers::get_property_listings))
+        .routes(routes!(handlers::set_registration_tx))
 }

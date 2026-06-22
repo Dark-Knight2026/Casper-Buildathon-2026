@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, normalized_address, parcel_id, address_line1, address_line2,\n                city, state, zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type, bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet, year_built, parking_features, metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                created_at AS \"created_at!\", updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = ANY($1) AND deleted_at IS NULL\n        ",
+  "query": "\n            SELECT\n                id, normalized_address, parcel_id, address_line1, address_line2,\n                city, state, zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type, bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet, year_built, parking_features, metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                registration_tx_hash,\n                created_at AS \"created_at!\", updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = ANY($1) AND deleted_at IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -183,6 +183,17 @@
       },
       {
         "ordinal": 18,
+        "name": "registration_tx_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "registration_tx_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -193,7 +204,7 @@
         }
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -229,8 +240,9 @@
       true,
       null,
       true,
+      true,
       true
     ]
   },
-  "hash": "680cc7e66b773de98251fbf6293410c466061600cab5136cf1bc64cbfacd0e61"
+  "hash": "5f5d35260bc3052ec5a2abb3f608a06bcdaed877456898e9f10cbe0782d4fde9"
 }
