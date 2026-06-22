@@ -29,82 +29,24 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useLeaseAgreementOnChain } from '@/hooks/lease/useLeaseAgreementOnChain';
 import { isLeaseAgreementEnabled } from '@/lib/casper/leaseAgreement';
+import { currencyOption, scaleToSmallestUnit } from '@/lib/leaseCurrency';
 import {
-  LEASE_CURRENCY_OPTIONS,
-  currencyOption,
-  defaultCurrencySymbol,
-  scaleToSmallestUnit,
-} from '@/lib/leaseCurrency';
+  LeaseOnChainForm,
+  initialLeaseOnChainForm,
+  isLeaseOnChainFormValid,
+  type LeaseOnChainFormState,
+} from '@/components/lease/LeaseOnChainForm';
 import { OnChainSdkHost } from '@/components/blockchain/OnChainSdkHost';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { Lease } from '@/types/leaseContract';
 
-const ONE_MONTH_IN_SECONDS = 30 * 24 * 60 * 60;
-
 const explorerDeployUrl = (txHash: string) =>
   `${ICO_CONFIG.CASPER.explorerUrl}/deploy/${txHash}`;
-
-/** UTC midnight of a `YYYY-MM-DD` (or ISO) date, as unix seconds. */
-function toUnixSeconds(date: string): number {
-  return Math.floor(Date.parse(`${date.slice(0, 10)}T00:00:00Z`) / 1000);
-}
-
-const isDigits = (value: string) => /^\d+$/.test(value.trim());
-
-interface FormState {
-  /** Tenant's on-chain UserRegistry user id (`U256`, decimal digits). */
-  tenantUserId: string;
-  equityPropertyId: string;
-  currencySymbol: string;
-  monthlyRentAmount: string;
-  securityDepositAmount: string;
-  startUnixSeconds: string;
-  endUnixSeconds: string;
-  invoiceValidityDuration: string;
-}
-
-/**
- * Prefill from the lease: currency from `lease.currency`, amounts scaled to its
- * smallest unit, term aligned to whole 30-day months. The tenant's on-chain user
- * id can't be derived, so it starts blank for the landlord to enter.
- */
-function initialForm(lease: Lease): FormState {
-  const start = toUnixSeconds(lease.startDate);
-  const months = Math.max(
-    1,
-    Math.round((toUnixSeconds(lease.endDate) - start) / ONE_MONTH_IN_SECONDS)
-  );
-  const symbol = defaultCurrencySymbol(lease.currency);
-  const { decimals } = currencyOption(symbol);
-  return {
-    tenantUserId: '',
-    equityPropertyId: '',
-    currencySymbol: symbol,
-    monthlyRentAmount: scaleToSmallestUnit(lease.monthlyRent ?? 0, decimals),
-    securityDepositAmount: scaleToSmallestUnit(
-      lease.securityDeposit ?? 0,
-      decimals
-    ),
-    startUnixSeconds: String(start),
-    // Aligned to a whole 30-day multiple — the contract reverts otherwise.
-    endUnixSeconds: String(start + months * ONE_MONTH_IN_SECONDS),
-    invoiceValidityDuration: String(ONE_MONTH_IN_SECONDS),
-  };
-}
 
 // ── Interactive flow — MUST render inside OnChainSdkHost (needs clickRef) ─────
 
@@ -115,15 +57,19 @@ function CommitFlow({ lease }: { lease: Lease }) {
     account?.publicKey,
     clickRef
   );
-  const [form, setForm] = useState<FormState>(() => initialForm(lease));
+  const [form, setForm] = useState<LeaseOnChainFormState>(() =>
+    initialLeaseOnChainForm(lease)
+  );
   const currency = currencyOption(form.currencySymbol);
 
-  const set = <K extends keyof FormState>(key: K, value: string) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const onFieldChange = <K extends keyof LeaseOnChainFormState>(
+    key: K,
+    value: string
+  ) => setForm((prev) => ({ ...prev, [key]: value }));
 
   // Switching currency re-scales the prefilled amounts to the new decimals
   // (from the lease's human values), so the smallest-unit figures stay correct.
-  const setCurrency = (symbol: string) =>
+  const onCurrencyChange = (symbol: string) =>
     setForm((prev) => {
       const { decimals } = currencyOption(symbol);
       return {
@@ -143,6 +89,7 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const { step, txHash, error } = state;
   const busy = step === 'signing' || step === 'pending';
   const hasWalletSession = Boolean(account?.publicKey && clickRef);
+  const hasEquity = Boolean(lease.equityPropertyId);
 
   // Surface the outcome once: a cspr.live link on success, the reason on failure.
   useEffect(() => {
@@ -170,26 +117,14 @@ function CommitFlow({ lease }: { lease: Lease }) {
     }
   }, [step, txHash, error, toast]);
 
-  // Equity only applies to a lease-to-own lease. When the lease carries an
+  // Equity only applies to a lease-to-own lease; when the lease carries an
   // equity property the on-chain id is required (the off-chain row holds only a
-  // UUID, so the landlord supplies the on-chain id); otherwise it stays None.
-  const hasEquity = Boolean(lease.equityPropertyId);
-
-  const valid =
-    isDigits(form.tenantUserId) &&
-    isDigits(form.monthlyRentAmount) &&
-    isDigits(form.securityDepositAmount) &&
-    isDigits(form.startUnixSeconds) &&
-    isDigits(form.endUnixSeconds) &&
-    isDigits(form.invoiceValidityDuration) &&
-    (hasEquity ? isDigits(form.equityPropertyId) : true);
-
+  // UUID, so the landlord supplies it). Currency is the same for rent + deposit;
+  // amounts are already scaled to its smallest unit.
   const submit = () =>
     create({
       tenantUserId: form.tenantUserId.trim(),
       equityPropertyId: form.equityPropertyId.trim() || null,
-      // Currency is derived from the lease (same for rent + deposit); amounts are
-      // already scaled to its smallest unit.
       monthlyRent: {
         currency: currency.address,
         amount: form.monthlyRentAmount.trim(),
@@ -211,102 +146,24 @@ function CommitFlow({ lease }: { lease: Lease }) {
     );
   }
 
-  const field = (key: keyof FormState, label: string, placeholder?: string) => (
-    <div className="flex flex-col gap-1">
-      <Label htmlFor={key} className="text-xs">
-        {label}
-      </Label>
-      <Input
-        id={key}
-        value={form[key]}
-        placeholder={placeholder}
-        onChange={(e) => set(key, e.target.value)}
-        className="font-mono text-sm"
-      />
-    </div>
-  );
-
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Review the on-chain values for this lease, then sign once. Amounts are
-        in the currency's smallest unit and prefilled from the lease — adjust if
-        a token's decimals differ.
-      </p>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1 sm:col-span-2">
-          <Label htmlFor="tenantUserId" className="text-xs">
-            Tenant on-chain user id *
-          </Label>
-          <Input
-            id="tenantUserId"
-            value={form.tenantUserId}
-            placeholder="e.g. 42"
-            onChange={(e) => set('tenantUserId', e.target.value)}
-            className="font-mono text-sm"
-          />
-          <p className="text-[11px] text-muted-foreground">
-            {form.tenantUserId
-              ? isDigits(form.tenantUserId)
-                ? 'The tenant’s UserRegistry user id.'
-                : 'Must be a whole number (the tenant’s on-chain user id).'
-              : 'The tenant’s UserRegistry user id (a whole number).'}
-          </p>
-        </div>
-
-        {hasEquity && (
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="equityPropertyId" className="text-xs">
-              Equity property on-chain id (lease-to-own) *
-            </Label>
-            <Input
-              id="equityPropertyId"
-              value={form.equityPropertyId}
-              onChange={(e) => set('equityPropertyId', e.target.value)}
-              className="font-mono text-sm"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Lease-to-own for property{' '}
-              <span className="font-mono">{lease.equityPropertyId}</span> —
-              enter its on-chain id.
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="currencySymbol" className="text-xs">
-            Currency
-          </Label>
-          <Select value={form.currencySymbol} onValueChange={setCurrency}>
-            <SelectTrigger id="currencySymbol">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LEASE_CURRENCY_OPTIONS.map((option) => (
-                <SelectItem key={option.symbol} value={option.symbol}>
-                  {option.symbol}
-                  {option.address
-                    ? ` · ${option.decimals} decimals`
-                    : ' · native'}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {field('monthlyRentAmount', 'Rent amount (smallest unit) *')}
-        {field('securityDepositAmount', 'Deposit amount (smallest unit) *')}
-        {field('startUnixSeconds', 'Start (unix seconds)')}
-        {field('endUnixSeconds', 'End (unix seconds)')}
-        {field('invoiceValidityDuration', 'Invoice validity (seconds)')}
-      </div>
+      <LeaseOnChainForm
+        form={form}
+        hasEquity={hasEquity}
+        equityPropertyId={lease.equityPropertyId}
+        onFieldChange={onFieldChange}
+        onCurrencyChange={onCurrencyChange}
+      />
 
       {error && step !== 'failed' && (
         <p className="text-sm text-destructive">{error}</p>
       )}
 
-      <Button disabled={busy || !valid} onClick={submit}>
+      <Button
+        disabled={busy || !isLeaseOnChainFormValid(form, hasEquity)}
+        onClick={submit}
+      >
         {step === 'signing' && (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

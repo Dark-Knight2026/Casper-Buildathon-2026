@@ -3,6 +3,8 @@
  * Provides cursor-based and offset-based pagination for efficient data fetching
  */
 
+import type { PaginatedResponse } from '@/types/listingContract';
+
 export interface PaginationParams {
   page?: number;
   limit?: number;
@@ -35,6 +37,29 @@ export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
 
 /**
+ * Fetches every item across all pages of a `PaginatedResponse` endpoint. Use for
+ * aggregates that must see ALL rows (dashboard KPIs, counts), where reading only
+ * the first page would silently undercount. Page 1 is fetched first to learn
+ * `pageCount`; the remaining pages are then fetched in parallel. `pageSize` is
+ * capped at `MAX_PAGE_SIZE` to keep the round-trip count low.
+ */
+export async function fetchAllPages<T>(
+  fetchPage: (page: number, pageSize: number) => Promise<PaginatedResponse<T>>,
+  pageSize: number = MAX_PAGE_SIZE
+): Promise<T[]> {
+  const size = Math.min(pageSize, MAX_PAGE_SIZE);
+  const first = await fetchPage(1, size);
+  if (first.pageCount <= 1) return first.data;
+
+  const rest = await Promise.all(
+    Array.from({ length: first.pageCount - 1 }, (_, i) =>
+      fetchPage(i + 2, size)
+    )
+  );
+  return rest.reduce((all, page) => all.concat(page.data), [...first.data]);
+}
+
+/**
  * Validate and normalize pagination parameters
  */
 export function normalizePaginationParams(params: PaginationParams): {
@@ -43,7 +68,10 @@ export function normalizePaginationParams(params: PaginationParams): {
   offset: number;
 } {
   const page = Math.max(1, params.page || 1);
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, params.limit || DEFAULT_PAGE_SIZE));
+  const limit = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, params.limit || DEFAULT_PAGE_SIZE)
+  );
   const offset = (page - 1) * limit;
 
   return { page, limit, offset };
@@ -74,22 +102,25 @@ export function calculatePaginationMetadata(
  * Create cursor from item ID and timestamp
  */
 export function createCursor(id: string, timestamp: Date | string): string {
-  const ts = typeof timestamp === 'string' ? timestamp : timestamp.toISOString();
+  const ts =
+    typeof timestamp === 'string' ? timestamp : timestamp.toISOString();
   return Buffer.from(`${id}:${ts}`).toString('base64');
 }
 
 /**
  * Parse cursor to extract ID and timestamp
  */
-export function parseCursor(cursor: string): { id: string; timestamp: string } | null {
+export function parseCursor(
+  cursor: string
+): { id: string; timestamp: string } | null {
   try {
     const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
     const [id, timestamp] = decoded.split(':');
-    
+
     if (!id || !timestamp) {
       return null;
     }
-    
+
     return { id, timestamp };
   } catch {
     return null;

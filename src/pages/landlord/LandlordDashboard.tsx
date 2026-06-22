@@ -48,6 +48,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { getLandlordListings } from '@/services/listingService';
 import { listLeases } from '@/services/leaseService';
+import { fetchAllPages } from '@/lib/pagination';
+import { formatLeaseMoney } from '@/lib/leaseDisplay';
 import {
   MOCK_LANDLORD_RECENT_ACTIVITIES,
   MOCK_LANDLORD_PORTFOLIO,
@@ -134,13 +136,21 @@ function ActivityStatusPill({
 }
 
 export default function LandlordDashboard() {
+  // Page through ALL rows — the KPIs/occupancy counts must see every listing and
+  // lease, not just the first page.
   const listingsQuery = useQuery({
     queryKey: ['landlord-dashboard-listings'],
-    queryFn: () => getLandlordListings({ pageSize: 100 }),
+    queryFn: () =>
+      fetchAllPages((page, pageSize) =>
+        getLandlordListings({ page, pageSize })
+      ),
   });
   const leasesQuery = useQuery({
     queryKey: ['landlord-dashboard-leases'],
-    queryFn: () => listLeases({ landlordId: 'me', pageSize: 100 }),
+    queryFn: () =>
+      fetchAllPages((page, pageSize) =>
+        listLeases({ landlordId: 'me', page, pageSize })
+      ),
   });
 
   // Demo content (no payments/maintenance API yet).
@@ -177,8 +187,8 @@ export default function LandlordDashboard() {
   }
 
   // Real KPIs derived from the landlord's listings + leases.
-  const listings = listingsQuery.data?.data ?? [];
-  const leases = leasesQuery.data?.data ?? [];
+  const listings = listingsQuery.data ?? [];
+  const leases = leasesQuery.data ?? [];
   const activeLeases = leases.filter((l) => l.status === 'active');
   const propertyIds = new Set(listings.map((l) => l.propertyId));
   const occupiedIds = new Set(activeLeases.map((l) => l.propertyId));
@@ -314,7 +324,7 @@ export default function LandlordDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {stats.monthlyRevenue.toLocaleString()}
+                {formatLeaseMoney(stats.monthlyRevenue, 'tUSDC')}
               </div>
               <p className="text-xs text-muted-foreground">
                 from active leases

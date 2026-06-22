@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { listLeases } from '@/services/leaseService';
+import { fetchAllPages } from '@/lib/pagination';
 import { getProperty } from '@/services/propertyAssetService';
 import { formatPropertyType } from '@/lib/listingDisplay';
 import { formatLeaseDate } from '@/lib/leaseDisplay';
@@ -71,8 +72,9 @@ export default function MyProperties() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['tenant-my-properties'],
     queryFn: async (): Promise<LeasedItem[]> => {
-      const page = await listLeases({ tenantId: 'me', pageSize: 100 });
-      const leases = page.data;
+      const leases = await fetchAllPages((page, pageSize) =>
+        listLeases({ tenantId: 'me', page, pageSize })
+      );
       const ids = [...new Set(leases.map((l) => l.propertyId))];
       const props = await Promise.all(
         ids.map((id) => getProperty(id).catch(() => null))

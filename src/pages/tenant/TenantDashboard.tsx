@@ -45,6 +45,7 @@ import { TenantScoreCard } from '@/components/tenant/TenantScoreCard';
 import { useTenantScore } from '@/hooks/useTenantScore';
 import { daysUntil } from '@/lib/date-utils';
 import { listLeases } from '@/services/leaseService';
+import { fetchAllPages } from '@/lib/pagination';
 import { getProperty } from '@/services/propertyAssetService';
 import {
   LEASE_TYPE_LABEL,
@@ -154,9 +155,11 @@ export function TenantDashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ['tenant-dashboard-lease'],
     queryFn: async () => {
-      const page = await listLeases({ tenantId: 'me', pageSize: 50 });
+      const leases = await fetchAllPages((page, pageSize) =>
+        listLeases({ tenantId: 'me', page, pageSize })
+      );
       const active =
-        page.data.find(
+        leases.find(
           (l) => l.status === 'active' || l.status === 'expiring-soon'
         ) ?? null;
       const property = active
