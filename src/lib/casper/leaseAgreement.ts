@@ -269,8 +269,14 @@ const LEASE_ERROR_MAP: Record<string, string> = {
   '411':
     'The property-manager share is invalid (must be 0 when there is no manager).',
   '412': 'Invalid property manager — check the manager’s on-chain id.',
+  '413': 'This lease is already finalized.',
+  '414':
+    'The tenant is already equity-eligible for this property (lease-to-own).',
   '415':
     'Invalid tenant — the tenant must be a registered on-chain user with the tenant role.',
+  '416': 'The lease NFT has no on-chain owner (LeaseNftOwnerNotFound).',
+  '417':
+    'The lease NFT is already held by the tenant’s active wallet — there’s nothing to recover.',
   // ── NFT (minting the tenant's lease NFT) ──────────────────────────
   '100':
     'The lease contract isn’t authorized to mint the lease NFT (NFT: CallerNotMinter). Grant the lease contract the minter role on the lease-NFT contract.',
@@ -278,6 +284,11 @@ const LEASE_ERROR_MAP: Record<string, string> = {
     'The lease contract isn’t authorized to burn the lease NFT (NFT: CallerNotBurner).',
   '102':
     'The lease contract is neither minter nor burner on the lease-NFT contract (NFT: CallerNotMinterNorBurner).',
+  '103':
+    'The tenant isn’t allowed to hold the lease NFT (NFT: CannotTransact) — add the tenant’s address to the lease-NFT allowlist before recording the lease.',
+  '104':
+    'The lease NFT can’t be transferred to the tenant (NFT: CannotTransfer).',
+  '105': 'The lease NFT is frozen and can’t be moved (NFT: TokenIsFrozen).',
   '106': 'Not authorized on the lease-NFT contract (NFT: NotAuthorized).',
   // ── escrow (creating the deposit + rent invoices) ─────────────────
   '300':

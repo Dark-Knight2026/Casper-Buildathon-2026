@@ -89,6 +89,20 @@ describe('parseLeaseAgreementError', () => {
     expect(parseLeaseAgreementError('User error: 300')).toMatch(/escrow/i);
   });
 
+  it('maps the remaining lease errors (413/414/416/417)', () => {
+    expect(parseLeaseAgreementError('User error: 413')).toMatch(/finalized/i);
+    expect(parseLeaseAgreementError('User error: 414')).toMatch(/equity/i);
+    expect(parseLeaseAgreementError('User error: 416')).toMatch(/owner/i);
+    expect(parseLeaseAgreementError('User error: 417')).toMatch(/recover/i);
+  });
+
+  it('explains the NFT allowlist/transfer/freeze errors (103–105)', () => {
+    // 103 = CannotTransact — the tenant isn't on the lease-NFT allowlist.
+    expect(parseLeaseAgreementError('User error: 103')).toMatch(/allowlist/i);
+    expect(parseLeaseAgreementError('User error: 104')).toMatch(/transfer/i);
+    expect(parseLeaseAgreementError('User error: 105')).toMatch(/frozen/i);
+  });
+
   it('maps the Odra deserialization framework error (64647) to an ABI-mismatch hint', () => {
     // 64647 = 64536 (UserErrorTooHigh) + 111 (EarlyEndOfStream)
     expect(parseLeaseAgreementError('User error: 64647')).toMatch(
