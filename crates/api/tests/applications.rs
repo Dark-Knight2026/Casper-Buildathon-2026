@@ -1531,3 +1531,96 @@ async fn get_application_hides_draft_from_landlord(pool: PgPool) {
     assert_eq!(tenant_status, StatusCode::OK);
     assert_eq!(body["status"], "draft");
 }
+
+// `GET /applications/{id}` tenant fields --------------------------------------
+
+/// Detail response carries `tenantFirstName` and `tenantLastName` populated
+/// from the submitting user's profile row.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_includes_tenant_name_fields(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant_id, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+
+    let (_status, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let application_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = get_app(&env, &tenant_token, application_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    // seed_user always inserts first_name='Test', last_name='User'.
+    assert_eq!(body["tenantFirstName"].as_str().unwrap(), "Test");
+    assert_eq!(body["tenantLastName"].as_str().unwrap(), "User");
+    // wallet_address is NULL in the seed row; skip_serializing_if omits the key.
+    assert!(
+        body.get("tenantWalletAddress").is_none(),
+        "tenantWalletAddress must be absent when the tenant has no wallet"
+    );
+}
+
+/// `tenantWalletAddress` is included when the tenant's `wallet_address` column
+/// is set.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_includes_wallet_address_when_set(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (tenant_id, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+
+    let wallet = "01a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3";
+    sqlx::query(r"UPDATE users SET wallet_address = $1 WHERE id = $2")
+        .bind(wallet)
+        .bind(tenant_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (_status, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let application_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = get_app(&env, &tenant_token, application_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["tenantWalletAddress"].as_str().unwrap(), wallet);
+}
+
+/// The tenant list endpoint (`GET /applications`) must NOT expose
+/// `tenantFirstName`, `tenantLastName`, or `tenantWalletAddress` - those fields
+/// are detail-only.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_applications_excludes_tenant_fields(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant_id, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/applications",
+        &tenant_token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let items = body.unwrap_or(Value::Null);
+    let first = &items[0];
+    assert!(
+        first.get("tenantFirstName").is_none(),
+        "list must not include tenantFirstName"
+    );
+    assert!(
+        first.get("tenantLastName").is_none(),
+        "list must not include tenantLastName"
+    );
+    assert!(
+        first.get("tenantWalletAddress").is_none(),
+        "list must not include tenantWalletAddress"
+    );
+}
