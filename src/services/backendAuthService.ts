@@ -1,4 +1,5 @@
 import { backendClient } from '@/lib/api-client';
+import { prefixSignature } from '@/lib/casper/signature';
 import type { ServerUserInfo, SelfRegisterableRole } from '@/types/serverUser';
 
 // Re-exported for back-compat: `ServerUserInfo` and `SelfRegisterableRole` now
@@ -29,18 +30,7 @@ export async function loginWithSignature(
   signatureHex: string,
   role?: SelfRegisterableRole
 ): Promise<LoginResponse> {
-  // casper_types::Signature::from_hex expects a 1-byte algorithm prefix:
-  //   01 = Ed25519, 02 = Secp256k1
-  // Per the Casper account-key format spec, account addresses are derived from
-  // the public key with the same prefix byte prepended — so the address prefix
-  // reliably identifies the signing algorithm. Reference:
-  // https://docs.casper.network/concepts/accounts-and-keys/#account-keys
-  // A raw signature is 128 hex chars; one already carrying the prefix is 130 —
-  // distinguish by length, not by leading bytes (a raw sig can itself start
-  // with 01/02, which would skip a needed prefix).
-  const prefix = publicKey.startsWith('02') ? '02' : '01';
-  const signature =
-    signatureHex.length === 130 ? signatureHex : `${prefix}${signatureHex}`;
+  const signature = prefixSignature(publicKey, signatureHex);
 
   // Tokens travel as HttpOnly cookies set by the response — the request must
   // therefore opt into credentialed mode so the browser stores Set-Cookie.

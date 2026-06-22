@@ -189,11 +189,17 @@ export default function LandlordDashboard() {
   // Real KPIs derived from the landlord's listings + leases.
   const listings = listingsQuery.data ?? [];
   const leases = leasesQuery.data ?? [];
+  // An `expiring-soon` lease is still occupied and still paying rent until it
+  // ends, so it counts toward occupancy/tenants/revenue — matching how the
+  // tenant dashboard and renewal flow treat it alongside `active`.
+  const occupiedLeases = leases.filter(
+    (l) => l.status === 'active' || l.status === 'expiring-soon'
+  );
   const activeLeases = leases.filter((l) => l.status === 'active');
   const propertyIds = new Set(listings.map((l) => l.propertyId));
-  const occupiedIds = new Set(activeLeases.map((l) => l.propertyId));
-  const tenantIds = new Set(activeLeases.flatMap((l) => l.tenantIds));
-  const monthlyRevenue = activeLeases.reduce(
+  const occupiedIds = new Set(occupiedLeases.map((l) => l.propertyId));
+  const tenantIds = new Set(occupiedLeases.flatMap((l) => l.tenantIds));
+  const monthlyRevenue = occupiedLeases.reduce(
     (sum, l) => sum + l.monthlyRent,
     0
   );

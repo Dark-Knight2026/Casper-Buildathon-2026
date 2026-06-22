@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getNonce } from '@/services/backendAuthService';
 import { linkWallet } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
+import { prefixSignature } from '@/lib/casper/signature';
 import { logger } from '@/utils/logger';
 
 /**
@@ -52,16 +53,9 @@ export function useLinkWallet() {
           return false;
         }
 
-        // 3. Prefix the signature with its algorithm byte (01 = Ed25519,
-        //    02 = Secp256k1), matching the wallet-login path — the backend's
-        //    `Signature::from_hex` requires it. A raw signature is 128 hex
-        //    chars; one already prefixed is 130 — distinguish by length, not by
-        //    leading bytes (a raw sig can itself start with 01/02).
-        const prefix = publicKey.startsWith('02') ? '02' : '01';
-        const signature =
-          result.signatureHex.length === 130
-            ? result.signatureHex
-            : `${prefix}${result.signatureHex}`;
+        // 3. Prefix the signature with its algorithm byte so the backend's
+        //    `Signature::from_hex` accepts it, matching the wallet-login path.
+        const signature = prefixSignature(publicKey, result.signatureHex);
 
         // 4. Bind the wallet, then refresh so `walletAddress` propagates
         //    (unless the caller defers it to run an on-chain step first).

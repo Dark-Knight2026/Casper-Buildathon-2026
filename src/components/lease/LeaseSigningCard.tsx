@@ -27,6 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { OnChainSdkHost } from '@/components/blockchain/OnChainSdkHost';
 import { buildLeaseConsentMessage } from '@/lib/leaseConsent';
+import { prefixSignature } from '@/lib/casper/signature';
 import { signLease } from '@/services/leaseService';
 import { ApiError } from '@/lib/api-client';
 import type { Lease, SignerRole } from '@/types/leaseContract';
@@ -96,15 +97,9 @@ function SigningFlow({
         toast({ title: 'Signing was cancelled.', variant: 'destructive' });
         return;
       }
-      // Prefix the algorithm byte (01 = Ed25519, 02 = Secp256k1) as the backend
-      // verifier expects, matching the wallet-link path. A raw signature is 128
-      // hex chars; one already carrying the prefix is 130 — distinguish by
-      // length, not by leading bytes (a raw sig can itself start with 01/02).
-      const prefix = account.publicKey.startsWith('02') ? '02' : '01';
-      const signature =
-        result.signatureHex.length === 130
-          ? result.signatureHex
-          : `${prefix}${result.signatureHex}`;
+      // Prefix the algorithm byte as the backend verifier expects, matching the
+      // wallet-link path.
+      const signature = prefixSignature(account.publicKey, result.signatureHex);
       await signLease(lease.id, {
         role,
         signature,
