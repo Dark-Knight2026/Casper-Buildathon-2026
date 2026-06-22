@@ -336,7 +336,7 @@ pub async fn run_streaming(
     registry: &EventRegistry,
 ) -> IndexerResult<()> {
     let initial_delay = Duration::from_millis(config.wss_reconnect_delay_ms);
-    let max_delay = Duration::from_secs(60);
+    let max_delay = Duration::from_mins(1);
     let mut delay = initial_delay;
 
     loop {

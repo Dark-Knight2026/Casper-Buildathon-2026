@@ -28,14 +28,14 @@ use crate::{EmailError, EmailMessage, EmailSender};
 const CLAIM_LIMIT: i64 = 50;
 
 /// Cadence at which due rows are claimed and re-sent.
-const RETRY_TICK: Duration = Duration::from_secs(60);
+const RETRY_TICK: Duration = Duration::from_mins(1);
 
 /// Cadence at which terminal rows older than [`RETENTION`] are deleted.
-const CLEANUP_TICK: Duration = Duration::from_secs(24 * 3600);
+const CLEANUP_TICK: Duration = Duration::from_hours(24);
 
 /// Rows in `completed` or `failed` status older than this are deleted by
 /// the cleanup tick.
-const RETENTION: Duration = Duration::from_secs(30 * 24 * 3600);
+const RETENTION: Duration = Duration::from_hours(30 * 24);
 
 /// Hard-cap on delivery attempts. Past this, a [`EmailError::Transient`] is
 /// promoted to terminal `failed` so a permanently-broken send (e.g. compromised

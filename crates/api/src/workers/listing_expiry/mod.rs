@@ -9,6 +9,7 @@ pub mod db;
 
 use core::time::Duration;
 
+use broadcast::Receiver;
 use sqlx::{PgPool, Result as SqlxResult};
 use tokio::{sync::broadcast, time};
 
@@ -17,14 +18,14 @@ use tokio::{sync::broadcast, time};
 /// `days_on_market` has day granularity and `expires_at` is a 90-day window, so
 /// an hourly pass is ample - it keeps the public surface fresh without polling
 /// the table tightly.
-const EXPIRY_TICK: Duration = Duration::from_secs(3600);
+const EXPIRY_TICK: Duration = Duration::from_hours(1);
 
 /// Runs the auto-expiry worker until the shutdown broadcast resolves.
 ///
 /// `tokio::time::interval` fires immediately on its first tick, so one pass runs
 /// at startup - this drains anything that expired while the process was down.
 #[inline]
-pub async fn run(pool: PgPool, mut shutdown_rx: broadcast::Receiver<()>) {
+pub async fn run(pool: PgPool, mut shutdown_rx: Receiver<()>) {
     let mut tick = time::interval(EXPIRY_TICK);
     tracing::info!("listing_expiry worker started");
     loop {
