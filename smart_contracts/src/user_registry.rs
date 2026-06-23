@@ -228,7 +228,7 @@ impl UserRegistry {
         ROLE_FLAG_LANDLORD
     }
 
-    /// Returns the tenant capability flag value.
+    /// Returns the property manager capability flag value.
     pub fn property_manager_role_flag(&self) -> u32 {
         ROLE_FLAG_PROPERTY_MANAGER
     }
