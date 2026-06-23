@@ -1,34 +1,193 @@
 use odra::{
     casper_types::{U256, U512},
     host::{Deployer, HostEnv, HostRef},
-    prelude::{Address, Addressable},
+    prelude::Addressable,
     uints::ToU512,
 };
 use odra_modules::access::errors::Error as AccessError;
 
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
 use leasefi_contracts::escrow::{
     errors::Error,
-    events::{InvoiceCreated, InvoicePaid, MinDeadlineSet},
-    types::{Invoice, InvoiceKind},
+    events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet},
+    types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
 };
-use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
+use leasefi_contracts::user_registry::{
+    UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD, ROLE_FLAG_TENANT,
+};
+
+use crate::escrow::events::{SecurityDepositHeld, SecurityDepositReleased};
 
 const MIN_DEADLINE: u64 = 5 * 60; // 5 minutes
+
+// =============================================================================
+// Test Context
+// =============================================================================
 
 struct TestData {
     env: HostEnv,
     escrow: EscrowHostRef,
+    user_registry: UserRegistryHostRef,
     mock_cep18: BigCoinHostRef,
+    tenant_id: U256,
+    landlord_id: U256,
 }
 
 struct InvoiceParams {
-    tenant: Address,
-    landlord: Address,
+    tenant: U256,
+    landlord: U256,
     amount_due: CurrencyAmount,
     deadline: u64,
 }
+
+fn setup(env: HostEnv) -> TestData {
+    let owner = env.get_account(0);
+    let tenant = env.get_account(1);
+    let landlord = env.get_account(2);
+
+    let mut user_registry = UserRegistry::deploy(&env, UserRegistryInitArgs { owner });
+
+    let mut escrow = Escrow::deploy(
+        &env,
+        EscrowInitArgs {
+            owner,
+            min_deadline: MIN_DEADLINE,
+            user_registry: user_registry.address(),
+        },
+    );
+    let mut mock_cep18 = BigCoin::deploy(
+        &env,
+        BigCoinInitArgs {
+            symbol: String::from("MOCK"),
+            name: String::from("MOCK"),
+            decimals: 18,
+            initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
+        },
+    );
+
+    // Fund the tenant (and landlord) with mock CEP18 tokens. The initial supply is held by the deployer (owner).
+    // This is required for tests that pay security deposits or CEP18 rent invoices as the buyer/tenant.
+    env.set_caller(owner);
+    let fund = U256::from_dec_str("1000000000000000000000000").unwrap();
+    mock_cep18.transfer(&tenant, &fund);
+    mock_cep18.transfer(&landlord, &fund);
+    env.set_caller(owner);
+
+    user_registry.grant_role(&user_registry.identity_manager_role(), &owner);
+    let tenant_id = user_registry.create_user([1u8; 32], tenant, ROLE_FLAG_TENANT);
+    let landlord_id = user_registry.create_user([2u8; 32], landlord, ROLE_FLAG_LANDLORD);
+
+    escrow.set_lease(env.get_account(15));
+    escrow.set_treasury(env.get_account(14));
+    escrow.set_security_deposit_token(mock_cep18.address());
+
+    TestData {
+        env,
+        escrow,
+        user_registry,
+        mock_cep18,
+        tenant_id,
+        landlord_id,
+    }
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+fn generate_invoice_params(test_data: &TestData) -> InvoiceParams {
+    InvoiceParams {
+        tenant: test_data.tenant_id,
+        landlord: test_data.landlord_id,
+        amount_due: CurrencyAmount::new(None, U256::from_dec_str("1000000000000000000").unwrap()),
+        deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
+    }
+}
+
+fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U256 {
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    let invoice_id = test_data
+        .escrow
+        .create_lease_invoice(CreateLeaseInvoiceParams {
+            tenant: params.tenant,
+            landlord: params.landlord,
+            rent: params.amount_due,
+            property_manager: None,
+            property_manager_bps: 0,
+            deadline: params.deadline,
+        });
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        InvoiceCreated {
+            invoice_id,
+            created_at: test_data.env.block_time(),
+        }
+    ));
+
+    let mut amount_due = params.amount_due;
+    assert_eq!(
+        test_data.escrow.get_invoice_by_id(invoice_id),
+        Invoice {
+            kind: InvoiceKind::Lease,
+            buyer: params.tenant,
+            seller: params.landlord,
+            amount_due: params.amount_due,
+            rent_amount: *amount_due.amount(),
+            rent_paid: U256::zero(),
+            property_manager: None,
+            property_manager_bps: 0,
+            deadline: params.deadline,
+            is_paid: false
+        },
+        "Invalid invoice"
+    );
+    assert_eq!(
+        test_data.escrow.get_invoices_count(),
+        invoice_id + 1,
+        "Invalid invoices count number"
+    );
+
+    invoice_id
+}
+
+fn create_security_deposit_invoice(test_data: &mut TestData, params: &mut InvoiceParams) -> U256 {
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    let amount_due = CurrencyAmount::new(
+        Some(test_data.mock_cep18.address()),
+        *params.amount_due.amount(),
+    );
+
+    let invoice_id = test_data.escrow.create_security_deposit_invoice(
+        params.tenant,
+        params.landlord,
+        amount_due,
+        params.deadline,
+    );
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+
+    invoice_id
+}
+
+fn set_caller_as_buyer(test_data: &mut TestData, user_id: U256) {
+    let wallet = test_data.user_registry.get_active_wallet(user_id);
+    test_data.env.set_caller(wallet);
+}
+
+// =============================================================================
+// init()
+// =============================================================================
 
 #[test]
 fn test_init_should_initialize_contract_properly() {
@@ -59,7 +218,16 @@ fn test_init_should_initialize_contract_properly() {
         U256::zero(),
         "Invalid initial invoices count"
     );
+    assert_eq!(
+        test_data.escrow.get_security_deposit_token_address(),
+        test_data.mock_cep18.address(),
+        "Invalid security deposit token address"
+    );
 }
+
+// =============================================================================
+// set_min()
+// =============================================================================
 
 #[test]
 fn test_set_min_deadline_should_revert_if_not_owner_is_calling() {
@@ -95,6 +263,10 @@ fn test_set_min_deadline_should_update_min_deadline_properly() {
     ));
 }
 
+// =============================================================================
+// set_lease()
+// =============================================================================
+
 #[test]
 fn test_set_lease_should_revert_if_not_owner_is_calling() {
     let mut test_data = setup(odra_test::env());
@@ -124,6 +296,10 @@ fn test_set_lease_should_set_lease_properly() {
         "Invalid Lease contract address"
     );
 }
+
+// =============================================================================
+// set_treasury()
+// =============================================================================
 
 #[test]
 fn test_set_treasury_should_revert_if_not_owner_is_calling() {
@@ -155,6 +331,44 @@ fn test_set_treasury_should_set_treasury_properly() {
     );
 }
 
+// =============================================================================
+// set_security_deposit_token()
+// =============================================================================
+
+#[test]
+fn test_set_security_deposit_token_should_set_properly() {
+    let mut test_data = setup(odra_test::env());
+    let token = test_data.env.get_account(10);
+
+    test_data.escrow.set_security_deposit_token(token);
+
+    assert_eq!(
+        test_data.escrow.get_security_deposit_token_address(),
+        token,
+        "Invalid security deposit token address",
+    )
+}
+
+#[test]
+fn test_set_security_deposit_token_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_set_security_deposit_token(test_data.env.get_account(1))
+            .unwrap_err(),
+        AccessError::CallerNotTheOwner.into(),
+        "Should revert when called by non-owner",
+    )
+}
+
+// =============================================================================
+// create_lease_invoice()
+// =============================================================================
+
 #[test]
 fn test_create_lease_invoice_should_fail_if_not_lease_contract_is_calling() {
     let mut test_data = setup(odra_test::env());
@@ -162,12 +376,14 @@ fn test_create_lease_invoice_should_fail_if_not_lease_contract_is_calling() {
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(0),
-                CurrencyAmount::new(None, U256::zero()),
-                0
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: test_data.tenant_id,
+                landlord: test_data.landlord_id,
+                rent: CurrencyAmount::new(None, U256::zero()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: 0,
+            })
             .unwrap_err(),
         Error::CallerNotLeaseContract.into(),
         "Should revert when is called by not the Lease contract"
@@ -185,12 +401,14 @@ fn test_create_lease_invoice_should_fail_if_buyer_is_equal_to_seller() {
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(0),
-                CurrencyAmount::new(None, U256::zero()),
-                0
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: test_data.tenant_id,
+                landlord: test_data.tenant_id, // force equal to trigger the check (before deadline etc)
+                rent: CurrencyAmount::new(None, U256::one()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline() + 100,
+            })
             .unwrap_err(),
         Error::EqualBuyerAndSeller.into(),
         "Should revert when buyer is the same as seller"
@@ -208,12 +426,14 @@ fn test_create_lease_invoice_should_fail_if_amount_is_zero() {
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(1),
-                CurrencyAmount::new(None, U256::zero()),
-                0
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: U256::one(),
+                landlord: U256::from(2),
+                rent: CurrencyAmount::new(None, U256::zero()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: 0,
+            })
             .unwrap_err(),
         Error::ZeroAmount.into(),
         "Should revert when is called with zero amount"
@@ -231,12 +451,14 @@ fn test_create_lease_invoice_should_fail_if_deadline_is_sooner_than_min_deadline
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(1),
-                CurrencyAmount::new(None, U256::one()),
-                test_data.env.block_time() + test_data.escrow.get_min_deadline() - 1
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: U256::one(),
+                landlord: U256::from(2),
+                rent: CurrencyAmount::new(None, U256::one()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline() - 1,
+            })
             .unwrap_err(),
         Error::InvalidDeadline.into(),
         "Should revert when deadline is sooner than block.time + minimum deadline"
@@ -252,12 +474,19 @@ fn test_create_lease_invoice_should_create_lease_invoice_properly() {
     assert_eq!(invoice_id, U256::zero(), "Invalid invoice ID");
 }
 
+// =============================================================================
+// pay_invoice()
+// =============================================================================
+
 #[test]
 fn test_pay_invoice_should_fail_if_invoice_does_not_exist() {
     let mut test_data = setup(odra_test::env());
 
     assert_eq!(
-        test_data.escrow.try_pay_invoice(U256::zero()).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(U256::zero(), U256::zero())
+            .unwrap_err(),
         Error::InvalidInvoiceId.into(),
         "Should revert when invoice does not exist"
     );
@@ -269,10 +498,15 @@ fn test_pay_invoice_should_fail_if_not_buyer_is_trying_to_pay_invoice() {
     let params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
-    test_data.env.set_caller(params.landlord);
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    test_data.env.set_caller(landlord.active_wallet);
 
     assert_eq!(
-        test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(invoice_id, U256::zero())
+            .unwrap_err(),
         Error::CallerIsNotBuyer.into(),
         "Should revert when caller is not buyer"
     );
@@ -284,13 +518,20 @@ fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
     let mut params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
+    let rent = *params.amount_due.amount();
+    let amount = rent;
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .escrow
-        .with_tokens(params.amount_due.amount().to_u512())
-        .pay_invoice(invoice_id);
+        .with_tokens(amount.to_u512())
+        .pay_invoice(invoice_id, amount);
 
     assert_eq!(
-        test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(invoice_id, U256::zero())
+            .unwrap_err(),
         Error::InvoiceIsAlreadyPaid.into(),
         "Should revert when invoice is already paid"
     );
@@ -306,8 +547,12 @@ fn test_pay_invoice_should_fail_if_invoice_is_expired() {
         .env
         .advance_block_time(test_data.escrow.get_invoice_by_id(invoice_id).deadline + 1);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     assert_eq!(
-        test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(invoice_id, U256::zero())
+            .unwrap_err(),
         Error::InvoiceIsExpired.into(),
         "Should revert when invoice is expired"
     );
@@ -319,11 +564,14 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
     let mut params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
+    let amount = *params.amount_due.amount();
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
     assert_eq!(
         test_data
             .escrow
-            .with_tokens(params.amount_due.amount().to_u512() - 1)
-            .try_pay_invoice(invoice_id)
+            .with_tokens(U512::zero())
+            .try_pay_invoice(invoice_id, amount)
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid - 1"
@@ -331,8 +579,8 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
     assert_eq!(
         test_data
             .escrow
-            .with_tokens(params.amount_due.amount().to_u512() + 1)
-            .try_pay_invoice(invoice_id)
+            .with_tokens(U512::zero())
+            .try_pay_invoice(invoice_id, U256::one())
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid - 2"
@@ -348,11 +596,12 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
 
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     assert_eq!(
         test_data
             .escrow
             .with_tokens(U512::one())
-            .try_pay_invoice(invoice_id)
+            .try_pay_invoice(invoice_id, *params.amount_due.amount())
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid"
@@ -364,14 +613,34 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
-    let prev_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    let prev_recipient_token_balance = test_data.env.balance_of(&landlord.active_wallet);
+
+    let rent = *params.amount_due.amount();
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .escrow
-        .with_tokens(params.amount_due.amount().to_u512())
-        .pay_invoice(invoice_id);
+        .with_tokens(rent.to_u512())
+        .pay_invoice(invoice_id, rent);
 
-    let curr_recipient_token_balance = test_data.env.balance_of(&params.landlord);
+    let curr_recipient_token_balance = test_data.env.balance_of(&landlord.active_wallet);
+
+    let protocol_fee = rent * U256::from(200u32) / U256::from(10000u32);
+    let distributable_rent = rent - protocol_fee;
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        InvoicePaymentApplied {
+            invoice_id,
+            payer: params.tenant,
+            amount: rent,
+            protocol_fee,
+            rent_paid: rent,
+        }
+    ));
 
     assert!(test_data.env.emitted_event(
         &test_data.escrow,
@@ -380,11 +649,13 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
             paid_at: test_data.env.block_time(),
         }
     ));
+
     assert_eq!(
         curr_recipient_token_balance,
-        prev_recipient_token_balance + params.amount_due.amount().to_u512(),
+        prev_recipient_token_balance + distributable_rent.to_u512(),
         "Invalid current recipient balance"
     );
+
     assert!(
         test_data.escrow.get_invoice_by_id(invoice_id).is_paid,
         "Invoice should be marked as paid after successful payment"
@@ -399,15 +670,34 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     *params.amount_due.currency() = Some(test_data.mock_cep18.address());
 
     let invoice_id = create_lease_invoice(&mut test_data, &params);
-    let prev_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    let prev_recipient_token_balance = test_data.mock_cep18.balance_of(&landlord.active_wallet);
+
+    let rent = *params.amount_due.amount();
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
-        .approve(&test_data.escrow.address(), params.amount_due.amount());
-    test_data.escrow.pay_invoice(invoice_id);
+        .approve(&test_data.escrow.address(), &rent);
+    test_data.escrow.pay_invoice(invoice_id, rent);
 
-    let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
+    let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&landlord.active_wallet);
 
+    let protocol_fee = rent * U256::from(200u32) / U256::from(10000u32);
+    let distributable_rent = rent - protocol_fee;
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        InvoicePaymentApplied {
+            invoice_id,
+            payer: params.tenant,
+            amount: rent,
+            protocol_fee,
+            rent_paid: rent,
+        }
+    ));
     assert!(test_data.env.emitted_event(
         &test_data.escrow,
         InvoicePaid {
@@ -417,7 +707,7 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     ));
     assert_eq!(
         curr_recipient_token_balance,
-        prev_recipient_token_balance + *params.amount_due.amount(),
+        prev_recipient_token_balance + distributable_rent,
         "Invalid current recipient balance"
     );
     assert!(
@@ -426,81 +716,375 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     );
 }
 
-fn setup(env: HostEnv) -> TestData {
-    let mut escrow = Escrow::deploy(
-        &env,
-        EscrowInitArgs {
-            owner: env.get_account(0),
-            min_deadline: MIN_DEADLINE,
-        },
-    );
-    let mock_cep18 = BigCoin::deploy(
-        &env,
-        BigCoinInitArgs {
-            symbol: String::from("MOCK"),
-            name: String::from("MOCK"),
-            decimals: 18,
-            initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
-        },
+#[test]
+fn test_pay_invoice_should_hold_security_deposit_in_escrow() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount = *params.amount_due.amount();
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+    let previous_escrow_balance = test_data.mock_cep18.balance_of(&test_data.escrow.address());
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
+    test_data
+        .mock_cep18
+        .approve(&test_data.escrow.address(), &amount);
+
+    test_data.escrow.pay_invoice(invoice_id, amount);
+
+    let deposit = test_data.escrow.get_security_deposit(invoice_id);
+
+    assert_eq!(
+        test_data.mock_cep18.balance_of(&test_data.escrow.address()),
+        previous_escrow_balance + amount,
+        "Escrow should hold the security deposit"
     );
 
-    escrow.set_lease(env.get_account(15));
-    escrow.set_treasury(env.get_account(14));
+    assert_eq!(deposit.amount, amount, "Invalid held deposit amount");
+    assert!(deposit.paid, "Security deposit should be marked paid");
+    assert!(!deposit.released, "Security deposit should not be released");
+    assert!(test_data.escrow.get_invoice_by_id(invoice_id).is_paid);
 
-    TestData {
-        env,
-        escrow,
-        mock_cep18,
-    }
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        SecurityDepositHeld {
+            invoice_id,
+            tenant: params.tenant,
+            amount,
+        },
+    ));
 }
 
-fn generate_invoice_params(test_data: &TestData) -> InvoiceParams {
-    InvoiceParams {
-        tenant: test_data.env.get_account(0),
-        landlord: test_data.env.get_account(1),
-        amount_due: CurrencyAmount::new(None, U256::from_dec_str("1000000000000000000").unwrap()),
-        deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
-    }
+#[test]
+fn test_pay_invoice_should_revert_if_security_deposit_payment_is_not_exact() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount = *params.amount_due.amount();
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
+    test_data
+        .mock_cep18
+        .approve(&test_data.escrow.address(), &amount);
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_pay_invoice(invoice_id, amount - U256::one())
+            .unwrap_err(),
+        Error::InvalidPaymentAmount.into(),
+        "Security deposits should require exact payment",
+    );
 }
 
-fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U256 {
+#[test]
+fn test_pay_invoice_should_route_protocol_fee_to_treasury() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+    let invoice_id = create_lease_invoice(&mut test_data, &params);
+
+    let rent = *params.amount_due.amount();
+    let amount = rent;
+
+    let protocol_fee = amount * U256::from(200u32) / U256::from(10_000u32);
+
+    let treasury = test_data.escrow.get_treasury_contract_address();
+
+    let previous_treasury_balance = test_data.env.balance_of(&treasury);
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
+    test_data
+        .escrow
+        .with_tokens(amount.to_u512())
+        .pay_invoice(invoice_id, amount);
+
+    assert_eq!(
+        test_data.env.balance_of(&treasury),
+        previous_treasury_balance + protocol_fee.to_u512(),
+        "Treasury should receive the LeaseFi protocol fee",
+    );
+}
+
+// =============================================================================
+// create_security_deposit_invoice()
+// =============================================================================
+
+#[test]
+fn test_create_security_deposit_invoice_should_revert_if_not_lease_contract_is_calling() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount_due = CurrencyAmount::new(
+        Some(test_data.mock_cep18.address()),
+        *params.amount_due.amount(),
+    );
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_create_security_deposit_invoice(
+                params.tenant,
+                params.landlord,
+                amount_due,
+                params.deadline,
+            )
+            .unwrap_err(),
+        Error::CallerNotLeaseContract.into(),
+        "Should revert when caller is not the Lease contract",
+    );
+}
+
+#[test]
+fn test_create_security_deposit_invoice_should_revert_if_currency_is_not_security_deposit_token() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_invoice_params(&test_data);
+
     test_data
         .env
         .set_caller(test_data.escrow.get_lease_contract_address());
 
-    let invoice_id = test_data.escrow.create_lease_invoice(
+    assert_eq!(
+        test_data
+            .escrow
+            .try_create_security_deposit_invoice(
+                params.tenant,
+                params.landlord,
+                params.amount_due,
+                params.deadline,
+            )
+            .unwrap_err(),
+        Error::InvalidSecurityDepositCurrency.into(),
+        "Should require configured security deposit token"
+    );
+}
+
+#[test]
+fn test_create_security_deposit_invoice_should_create_invoice_properly() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount_due = CurrencyAmount::new(
+        Some(test_data.mock_cep18.address()),
+        *params.amount_due.amount(),
+    );
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    let invoice_id = test_data.escrow.create_security_deposit_invoice(
         params.tenant,
         params.landlord,
-        params.amount_due,
+        amount_due,
         params.deadline,
     );
 
-    test_data.env.set_caller(test_data.env.get_account(0));
-
-    assert!(test_data.env.emitted_event(
-        &test_data.escrow,
-        InvoiceCreated {
-            invoice_id,
-            created_at: test_data.env.block_time(),
-        }
-    ));
     assert_eq!(
         test_data.escrow.get_invoice_by_id(invoice_id),
         Invoice {
-            kind: InvoiceKind::Lease,
+            kind: InvoiceKind::SecurityDeposit,
             buyer: params.tenant,
             seller: params.landlord,
-            amount_due: params.amount_due,
+            amount_due,
+            rent_amount: U256::zero(),
+            rent_paid: U256::zero(),
+            property_manager: None,
+            property_manager_bps: 0,
             deadline: params.deadline,
-            is_paid: false
+            is_paid: false,
         },
-        "Invalid invoice"
+        "Invalid security deposit invoice"
     );
+}
+
+// =============================================================================
+// release_security_deposit_invoice()
+// =============================================================================
+
+#[test]
+fn test_release_security_deposit_should_revert_if_not_lease_contract_is_calling() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount = *params.amount_due.amount();
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
+    test_data
+        .mock_cep18
+        .approve(&test_data.escrow.address(), &amount);
+
+    test_data.escrow.pay_invoice(invoice_id, amount);
+
     assert_eq!(
-        test_data.escrow.get_invoices_count(),
-        invoice_id + 1,
-        "Invalid invoices count number"
+        test_data
+            .escrow
+            .try_release_security_deposit(invoice_id, params.landlord, U256::zero())
+            .unwrap_err(),
+        Error::CallerNotLeaseContract.into(),
+        "Only the Lease contract should release deposits",
+    );
+}
+
+#[test]
+fn test_release_security_deposit_should_revert_if_invoice_is_not_security_deposit() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_invoice_params(&test_data);
+    let invoice_id = create_lease_invoice(&mut test_data, &params);
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_release_security_deposit(invoice_id, params.landlord, U256::zero())
+            .unwrap_err(),
+        Error::InvalidInvoiceKind.into(),
+        "Should only release security deposit invoices",
+    );
+}
+
+#[test]
+fn test_release_security_deposit_should_revert_if_deposit_is_not_paid() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_release_security_deposit(invoice_id, params.landlord, U256::zero())
+            .unwrap_err(),
+        Error::SecurityDepositNotPaid.into(),
+        "Should not release unpaid security deposit",
+    );
+}
+
+#[test]
+fn test_release_security_deposit_should_revert_if_charge_is_too_high() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+    let amount = *params.amount_due.amount();
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
+    test_data
+        .mock_cep18
+        .approve(&test_data.escrow.address(), &amount);
+
+    test_data.escrow.pay_invoice(invoice_id, amount);
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_release_security_deposit(invoice_id, params.landlord, amount + U256::one(),)
+            .unwrap_err(),
+        Error::SecurityDepositChargeTooHigh.into(),
+        "Charge cannot exceed security deposit",
+    );
+}
+
+#[test]
+fn test_release_security_deposit_should_split_charge_and_refund() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount = *params.amount_due.amount();
+    let landlord_charge = amount / U256::from(4u32);
+    let tenant_refund = amount - landlord_charge;
+
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+
+    let tenant = test_data.user_registry.get_user(params.tenant);
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    let previous_landlord_balance = test_data.mock_cep18.balance_of(&landlord.active_wallet);
+    let previous_tenant_balance = test_data.mock_cep18.balance_of(&tenant.active_wallet);
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
+    test_data
+        .mock_cep18
+        .approve(&test_data.escrow.address(), &amount);
+
+    test_data.escrow.pay_invoice(invoice_id, amount);
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    test_data
+        .escrow
+        .release_security_deposit(invoice_id, params.landlord, landlord_charge);
+
+    let deposit = test_data.escrow.get_security_deposit(invoice_id);
+
+    assert!(deposit.released, "Security deposit should be released");
+    assert_eq!(deposit.landlord_charge, landlord_charge);
+    assert_eq!(deposit.tenant_refund, tenant_refund);
+
+    assert_eq!(
+        test_data.mock_cep18.balance_of(&landlord.active_wallet),
+        previous_landlord_balance + landlord_charge,
+        "Invalid landlord balance",
     );
 
-    invoice_id
+    assert_eq!(
+        test_data.mock_cep18.balance_of(&tenant.active_wallet),
+        previous_tenant_balance - landlord_charge,
+        "Invalid tenant balance after deposit and refund",
+    );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        SecurityDepositReleased {
+            invoice_id,
+            landlord: params.landlord,
+            tenant: params.tenant,
+            landlord_charge,
+            tenant_refund,
+        },
+    ));
+}
+
+#[test]
+fn test_release_security_deposit_should_revert_if_already_released() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+    let amount = *params.amount_due.amount();
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+
+    set_caller_as_buyer(&mut test_data, params.tenant);
+    test_data
+        .mock_cep18
+        .approve(&test_data.escrow.address(), &amount);
+
+    test_data.escrow.pay_invoice(invoice_id, amount);
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    test_data
+        .escrow
+        .release_security_deposit(invoice_id, params.landlord, U256::zero());
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_release_security_deposit(invoice_id, params.landlord, U256::zero(),)
+            .unwrap_err(),
+        Error::SecurityDepositAlreadyReleased.into(),
+        "Security deposit should not be released twice",
+    );
 }

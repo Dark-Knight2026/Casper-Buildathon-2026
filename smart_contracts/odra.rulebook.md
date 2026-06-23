@@ -129,7 +129,8 @@ The following deployable contracts are part of the current project surface:
 | Contract           | Module Path                           | Responsibility                                                 |
 | ------------------ | ------------------------------------- | -------------------------------------------------------------- |
 | `BigCoin`          | `big_coin::BigCoin`                   | CEP-18 protocol token used for payments, staking, and rewards  |
-| `Roles`            | `roles::Roles`                        | Shared role management for actors such as landlords and agents |
+| `Roles`            | `roles::Roles`                        | Legacy wallet-level roles; superseded by `UserRegistry` for leasing flows |
+| `UserRegistry`     | `user_registry::UserRegistry`         | Stable user IDs, active wallets, capability flags, and lifecycle status |
 | `Escrow`           | `escrow::Escrow`                      | Invoice payment and conditional fund release                   |
 | `Treasury`         | `treasury::Treasury`                  | Protocol reserves and staking reward deposits                  |
 | `NFT`              | `nft::NFT`                            | CEP-95 assets, certificates, and lease-related NFTs            |
@@ -141,11 +142,27 @@ The following deployable contracts are part of the current project surface:
 | `PropertyRegistry` | `property_registry::PropertyRegistry` | Tokenized property records and lifecycle status                |
 | `CompliancePolicy` | `compliance_policy::CompliancePolicy` | Minimal transfer compliance gate for property tokens           |
 
+`UserRegistry` is the canonical identity layer for protocol participants. It maps stable `user_id` values to an opaque
+`identity_hash`, the user's current `active_wallet`, additive capability flags (`tenant`, `landlord`, `property_manager`),
+and a lifecycle status (`Active` or `Suspended`). `IDENTITY_MANAGER` accounts create users, replace active wallets, and
+set status; `USER_ROLE_MANAGER` accounts update capability flags. The registry stores no personal documents or raw KYC
+data.
+
+`Lease`, `Escrow`, `PropertyRegistry`, and `CompliancePolicy` depend on `UserRegistry`:
+
+- `Lease` stores landlords, tenants, and property managers as user IDs and requires callers to be active users with the
+  matching capability flag on their active wallet.
+- `Escrow` stores invoice buyers and sellers as user IDs and resolves active wallets when collecting or releasing funds.
+- `PropertyRegistry` authorizes property-manager actions by resolving the caller's wallet to a user ID.
+- `CompliancePolicy` resolves recipient wallets to user IDs when enforcing equity-distribution eligibility through
+  `Lease`.
+
 `InvestorRegistry`, `PropertyRegistry`, and `CompliancePolicy` form the compliance foundation for tokenized property
 ownership. `InvestorRegistry` stores only on-chain eligibility facts from off-chain KYC/compliance review. It must never
 store names, documents, raw Sumsub IDs, or other personal data. `PropertyRegistry` stores property lifecycle state and
-the addresses of the future property ownership token and revenue distributor. `CompliancePolicy` reads both registries
-and answers whether a property-token transfer is allowed. It does not move tokens, hold funds, or perform KYC.
+the address of the future property ownership token. `CompliancePolicy` reads `InvestorRegistry`, `PropertyRegistry`,
+`UserRegistry`, and `Lease`, then answers whether a property-token transfer is allowed. It does not move tokens, hold
+funds, or perform KYC.
 
 Property-token contracts must call `CompliancePolicy.assert_can_transfer(property_id, from, to, amount)` before moving
 ownership balances.
@@ -980,13 +997,15 @@ The following table lists all current error discriminant range assignments acros
 | **InvestorRegistry** | `800–899`   | 800  | 3           | `NotAuthorized = 800`           | `AccountNotRegistered = 802`                   |
 | **PropertyRegistry** | `900–999`   | 900  | 9           | `NotAuthorized = 900`           | `PropertyTokenAlreadyRegistered = 908`         |
 | **CompliancePolicy** | `1000–1099` | 1000 | 8           | `NotAuthorized = 1000`          | `RecipientNotEquityEligible = 1007`            |
+| **UserRegistry**     | `1200–1299` | 1200 | 6           | `NotAuthorized = 1200`          | `WalletAlreadyActive = 1205`                   |
 
 #### Available Ranges (unassigned)
 
-| Range   | Status                                                            |
-| ------- | ----------------------------------------------------------------- |
-| `0–99`  | ⚠️ Reserved (do not use — conflicts with Odra framework defaults) |
-| `1100+` | ✅ Available (use sparingly; prefer contiguous ranges)            |
+| Range       | Status                                                            |
+| ----------- | ----------------------------------------------------------------- |
+| `0–99`      | ⚠️ Reserved (do not use — conflicts with Odra framework defaults) |
+| `1100–1199` | ✅ Available                                                      |
+| `1300+`     | ✅ Available (use sparingly; prefer contiguous ranges)            |
 
 #### Rules for Adding New Discriminants
 

@@ -23,6 +23,7 @@ use leasefi_contracts::{
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
+    user_registry::{UserRegistry, UserRegistryInitArgs},
     vesting::{Vesting, VestingInitArgs},
 };
 
@@ -96,11 +97,21 @@ impl DeployScript for LeasefiDeployScript {
             450_000_000_000,
         )?;
 
-        let roles = Roles::load_or_deploy_with_cfg(
+        let _roles = Roles::load_or_deploy_with_cfg(
             env,
             None,
             RolesInitArgs { admin: new_owner },
             InstallConfig::upgradable::<Roles>(),
+            container,
+            310_000_000_000,
+        )?;
+        let user_registry = UserRegistry::load_or_deploy_with_cfg(
+            env,
+            None,
+            UserRegistryInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<UserRegistry>(),
             container,
             310_000_000_000,
         )?;
@@ -120,6 +131,7 @@ impl DeployScript for LeasefiDeployScript {
             EscrowInitArgs {
                 owner: env.caller(),
                 min_deadline: 5 * 60,
+                user_registry: user_registry.address(),
             },
             InstallConfig::upgradable::<Escrow>(),
             container,
@@ -130,6 +142,7 @@ impl DeployScript for LeasefiDeployScript {
             None,
             PropertyRegistryInitArgs {
                 owner: env.caller(),
+                user_registry: user_registry.address(),
             },
             InstallConfig::upgradable::<PropertyRegistry>(),
             container,
@@ -150,10 +163,10 @@ impl DeployScript for LeasefiDeployScript {
             None,
             LeaseInitArgs {
                 owner: env.caller(),
-                roles: roles.address(),
                 escrow: escrow.address(),
                 nft: nft.address(),
                 property_registry: property_registry.address(),
+                user_registry: user_registry.address(),
             },
             InstallConfig::upgradable::<Lease>(),
             container,
@@ -167,6 +180,7 @@ impl DeployScript for LeasefiDeployScript {
                 investor_registry: investor_registry.address(),
                 property_registry: property_registry.address(),
                 lease: lease.address(),
+                user_registry: user_registry.address(),
             },
             InstallConfig::upgradable::<CompliancePolicy>(),
             container,
@@ -226,6 +240,7 @@ impl DeployScript for LeasefiDeployScript {
         nft.add_minter(&lease.address());
         nft.add_freezer(&lease.address());
         nft.add_whitelist_manager(&lease.address());
+        nft.add_force_transferer(&lease.address());
 
         // Setup Escrow
         escrow.set_lease(lease.address());
@@ -289,6 +304,7 @@ pub fn main() {
         .contract::<BigCoin>()
         .contract::<NFT>()
         .contract::<Roles>()
+        .contract::<UserRegistry>()
         .contract::<Treasury>()
         .contract::<Escrow>()
         .contract::<Lease>()

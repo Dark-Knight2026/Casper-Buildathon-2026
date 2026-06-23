@@ -4,30 +4,165 @@
   "authors": [],
   "repository": null,
   "homepage": null,
-  "contract_name": "CompliancePolicy",
+  "contract_name": "PropertyFractionToken",
   "contract_version": "0.1.0",
   "types": [
     {
       "struct": {
-        "name": "ComplianceConfig",
+        "name": "Burn",
         "description": null,
         "members": [
           {
-            "name": "transfers_enabled",
+            "name": "owner",
             "description": null,
-            "ty": "Bool"
+            "ty": "Key"
           },
           {
-            "name": "equity_distribution_requires_lease_option",
+            "name": "amount",
             "description": null,
-            "ty": "Bool"
+            "ty": "U256"
           }
         ]
       }
     },
     {
       "struct": {
-        "name": "ComplianceConfigSet",
+        "name": "CompliancePolicySet",
+        "description": null,
+        "members": [
+          {
+            "name": "compliance_policy",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "DecreaseAllowance",
+        "description": null,
+        "members": [
+          {
+            "name": "owner",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "spender",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "allowance",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "decr_by",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "IncreaseAllowance",
+        "description": null,
+        "members": [
+          {
+            "name": "owner",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "spender",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "allowance",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "inc_by",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "Mint",
+        "description": null,
+        "members": [
+          {
+            "name": "recipient",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "PropertyFractionTokenInitParams",
+        "description": null,
+        "members": [
+          {
+            "name": "owner",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "property_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "compliance_policy",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "symbol",
+            "description": null,
+            "ty": "String"
+          },
+          {
+            "name": "name",
+            "description": null,
+            "ty": "String"
+          },
+          {
+            "name": "decimals",
+            "description": null,
+            "ty": "U8"
+          },
+          {
+            "name": "initial_supply",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "initial_holder",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "PropertyFractionTokenInitialized",
         "description": null,
         "members": [
           {
@@ -36,51 +171,17 @@
             "ty": "U256"
           },
           {
-            "name": "transfers_enabled",
+            "name": "initial_holder",
             "description": null,
-            "ty": "Bool"
+            "ty": "Key"
           },
           {
-            "name": "equity_distribution_requires_lease_option",
+            "name": "initial_supply",
             "description": null,
-            "ty": "Bool"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "InvestorRegistrySet",
-        "description": null,
-        "members": [
+            "ty": "U256"
+          },
           {
-            "name": "investor_registry",
-            "description": null,
-            "ty": "Key"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "LeaseSet",
-        "description": null,
-        "members": [
-          {
-            "name": "lease",
-            "description": null,
-            "ty": "Key"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "PropertyRegistrySet",
-        "description": null,
-        "members": [
-          {
-            "name": "property_registry",
+            "name": "compliance_policy",
             "description": null,
             "ty": "Key"
           }
@@ -168,31 +269,74 @@
     },
     {
       "struct": {
-        "name": "TransferExemptSet",
+        "name": "SetAllowance",
         "description": null,
         "members": [
           {
-            "name": "account",
+            "name": "owner",
             "description": null,
             "ty": "Key"
           },
           {
-            "name": "exempt",
+            "name": "spender",
             "description": null,
-            "ty": "Bool"
+            "ty": "Key"
+          },
+          {
+            "name": "allowance",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
     },
     {
       "struct": {
-        "name": "UserRegistrySet",
+        "name": "Transfer",
         "description": null,
         "members": [
           {
-            "name": "user_registry",
+            "name": "sender",
             "description": null,
             "ty": "Key"
+          },
+          {
+            "name": "recipient",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "TransferFrom",
+        "description": null,
+        "members": [
+          {
+            "name": "spender",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "owner",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "recipient",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
@@ -210,9 +354,34 @@
       "discriminant": 20001
     },
     {
-      "name": "InvalidPropertyToken",
+      "name": "CannotTargetSelfUser",
+      "description": "The user cannot target themselves.",
+      "discriminant": 60003
+    },
+    {
+      "name": "EmptyName",
       "description": "",
-      "discriminant": 1006
+      "discriminant": 1101
+    },
+    {
+      "name": "EmptySymbol",
+      "description": "",
+      "discriminant": 1102
+    },
+    {
+      "name": "InsufficientAllowance",
+      "description": "Spender does not have enough allowance approved.",
+      "discriminant": 60002
+    },
+    {
+      "name": "InsufficientBalance",
+      "description": "Spender does not have enough balance.",
+      "discriminant": 60001
+    },
+    {
+      "name": "InvalidDecimals",
+      "description": "",
+      "discriminant": 1103
     },
     {
       "name": "MissingRole",
@@ -222,7 +391,7 @@
     {
       "name": "NotAuthorized",
       "description": "",
-      "discriminant": 1000
+      "discriminant": 1100
     },
     {
       "name": "OwnerNotSet",
@@ -230,49 +399,24 @@
       "discriminant": 20000
     },
     {
-      "name": "PropertyNotActive",
-      "description": "",
-      "discriminant": 1002
-    },
-    {
-      "name": "RecipientNotEquityEligible",
-      "description": "",
-      "discriminant": 1007
-    },
-    {
-      "name": "RecipientNotVerified",
-      "description": "",
-      "discriminant": 1005
-    },
-    {
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
     },
     {
-      "name": "SenderNotVerified",
+      "name": "ZeroInitialSupply",
       "description": "",
-      "discriminant": 1004
-    },
-    {
-      "name": "TransfersDisabled",
-      "description": "",
-      "discriminant": 1003
-    },
-    {
-      "name": "ZeroAmount",
-      "description": "",
-      "discriminant": 1001
+      "discriminant": 1104
     }
   ],
   "entry_points": [
     {
-      "name": "set_investor_registry",
-      "description": "Sets the investor registry used for wallet verifications checks",
+      "name": "set_compliance_policy",
+      "description": "Updates the compliance policy used by this property token.",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "investor_registry",
+          "name": "compliance_policy",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -283,90 +427,49 @@
       "access": "public"
     },
     {
-      "name": "set_property_registry",
-      "description": "Sets the property registry used for property lifecycle checks",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "property_registry",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
+      "name": "get_property_id",
+      "description": "Returns the property ID represented by this token.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "set_lease",
-      "description": "Sets the lease contract used for equity-option eligibility checks.",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "lease",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
+      "name": "get_compliance_policy_contract",
+      "description": "Returns the compliance policy contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "set_user_registry",
-      "description": "Sets the user registry used to resolve wallets to user IDs for lease eligibility checks",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "user_registry",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
+      "name": "token_manager_role",
+      "description": "Returns the role hash for accounts allowed to manage token configuration",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "ByteArray": 32
+      },
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "set_compliance_config",
-      "description": "Sets the transfer configuration for a property",
+      "name": "transfer",
+      "description": "Transfers property ownership tokens from the caller to `recipient`.",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "property_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "config",
-          "description": null,
-          "ty": "ComplianceConfig",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "set_transfer_exempt",
-      "description": "Sets whether an account is exempt from investor verification checks",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "account",
+          "name": "recipient",
           "description": null,
           "ty": "Key",
           "optional": false
         },
         {
-          "name": "exempt",
+          "name": "amount",
           "description": null,
-          "ty": "Bool",
+          "ty": "U256",
           "optional": false
         }
       ],
@@ -375,70 +478,30 @@
       "access": "public"
     },
     {
-      "name": "get_investor_registry_contract",
-      "description": "Returns the investor registry contract address.",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_property_registry_contract",
-      "description": "Returns the property registry contract address.",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_lease_contract",
-      "description": "Returns the lease contract address.",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_user_registry_contract",
-      "description": "Returns the user registry contract address.",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_compliance_config",
-      "description": "Returns the compliance config for a property",
-      "is_mutable": false,
+      "name": "transfer_from",
+      "description": "Transfers property ownership tokens using the caller's allowance.",
+      "is_mutable": true,
       "arguments": [
         {
-          "name": "property_id",
+          "name": "owner",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "recipient",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "amount",
           "description": null,
           "ty": "U256",
           "optional": false
         }
       ],
-      "return_ty": "ComplianceConfig",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "is_transfer_exempt",
-      "description": "Returns `true` if `account` is exempt from investor verification checks, `false` otherwise.",
-      "is_mutable": false,
-      "arguments": [
-        {
-          "name": "account",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Bool",
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -448,12 +511,6 @@
       "is_mutable": false,
       "arguments": [
         {
-          "name": "property_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
           "name": "from",
           "description": null,
           "ty": "Key",
@@ -477,24 +534,12 @@
       "access": "public"
     },
     {
-      "name": "assert_can_transfer",
-      "description": "",
-      "is_mutable": false,
+      "name": "approve",
+      "description": "Delegated. See `self.token.approve()` for details.",
+      "is_mutable": true,
       "arguments": [
         {
-          "name": "property_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "from",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "to",
+          "name": "spender",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -511,13 +556,120 @@
       "access": "public"
     },
     {
-      "name": "compliance_manager_role",
-      "description": "Returns the role hash for accounts allowed to manage property records.",
+      "name": "decrease_allowance",
+      "description": "Delegated. See `self.token.decrease_allowance()` for details.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "spender",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "decr_by",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "increase_allowance",
+      "description": "Delegated. See `self.token.increase_allowance()` for details.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "spender",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "inc_by",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "name",
+      "description": "Delegated. See `self.token.name()` for details.",
       "is_mutable": false,
       "arguments": [],
-      "return_ty": {
-        "ByteArray": 32
-      },
+      "return_ty": "String",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "symbol",
+      "description": "Delegated. See `self.token.symbol()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "String",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "decimals",
+      "description": "Delegated. See `self.token.decimals()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U8",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "total_supply",
+      "description": "Delegated. See `self.token.total_supply()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "balance_of",
+      "description": "Delegated. See `self.token.balance_of()` for details.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "allowance",
+      "description": "Delegated. See `self.token.allowance()` for details.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "owner",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "spender",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
       "is_contract_context": true,
       "access": "public"
     },
@@ -640,20 +792,28 @@
   ],
   "events": [
     {
-      "name": "ComplianceConfigSet",
-      "ty": "ComplianceConfigSet"
+      "name": "Burn",
+      "ty": "Burn"
     },
     {
-      "name": "InvestorRegistrySet",
-      "ty": "InvestorRegistrySet"
+      "name": "CompliancePolicySet",
+      "ty": "CompliancePolicySet"
     },
     {
-      "name": "LeaseSet",
-      "ty": "LeaseSet"
+      "name": "DecreaseAllowance",
+      "ty": "DecreaseAllowance"
     },
     {
-      "name": "PropertyRegistrySet",
-      "ty": "PropertyRegistrySet"
+      "name": "IncreaseAllowance",
+      "ty": "IncreaseAllowance"
+    },
+    {
+      "name": "Mint",
+      "ty": "Mint"
+    },
+    {
+      "name": "PropertyFractionTokenInitialized",
+      "ty": "PropertyFractionTokenInitialized"
     },
     {
       "name": "RoleAdminChanged",
@@ -668,17 +828,21 @@
       "ty": "RoleRevoked"
     },
     {
-      "name": "TransferExemptSet",
-      "ty": "TransferExemptSet"
+      "name": "SetAllowance",
+      "ty": "SetAllowance"
     },
     {
-      "name": "UserRegistrySet",
-      "ty": "UserRegistrySet"
+      "name": "Transfer",
+      "ty": "Transfer"
+    },
+    {
+      "name": "TransferFrom",
+      "ty": "TransferFrom"
     }
   ],
   "call": {
-    "wasm_file_name": "CompliancePolicy.wasm",
-    "description": "",
+    "wasm_file_name": "PropertyFractionToken.wasm",
+    "description": "Initializes a fixed supply property ownership token.",
     "arguments": [
       {
         "name": "odra_cfg_package_hash_key_name",
@@ -705,33 +869,9 @@
         "optional": false
       },
       {
-        "name": "owner",
+        "name": "params",
         "description": null,
-        "ty": "Key",
-        "optional": false
-      },
-      {
-        "name": "investor_registry",
-        "description": null,
-        "ty": "Key",
-        "optional": false
-      },
-      {
-        "name": "property_registry",
-        "description": null,
-        "ty": "Key",
-        "optional": false
-      },
-      {
-        "name": "lease",
-        "description": null,
-        "ty": "Key",
-        "optional": false
-      },
-      {
-        "name": "user_registry",
-        "description": null,
-        "ty": "Key",
+        "ty": "PropertyFractionTokenInitParams",
         "optional": false
       }
     ]

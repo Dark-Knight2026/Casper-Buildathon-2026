@@ -13,10 +13,12 @@ pub mod interfaces;
 pub mod investor_registry;
 pub mod lease;
 pub mod nft;
+pub mod property_fraction_token;
 pub mod property_registry;
 pub mod roles;
 pub mod staking;
 pub mod treasury;
+pub mod user_registry;
 pub mod vesting;
 
 #[cfg(test)]
