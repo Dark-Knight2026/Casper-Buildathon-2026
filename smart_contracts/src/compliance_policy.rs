@@ -158,12 +158,7 @@ impl CompliancePolicy {
     ///      per the project's `odra.rulebook.md` (Security: Address Handling),
     ///      as Odra addresses have no default/zero value.
     pub fn set_investor_registry(&mut self, investor_registry: Address) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
+        self.assert_admin();
 
         self.investor_registry.set(investor_registry);
 
@@ -176,12 +171,7 @@ impl CompliancePolicy {
     ///      per the project's `odra.rulebook.md` (Security: Address Handling),
     ///      as Odra addresses have no default/zero value.
     pub fn set_property_registry(&mut self, property_registry: Address) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
+        self.assert_admin();
 
         self.property_registry.set(property_registry);
 
@@ -194,12 +184,7 @@ impl CompliancePolicy {
     ///      per the project's `odra.rulebook.md` (Security: Address Handling),
     ///      as Odra addresses have no default/zero value.
     pub fn set_lease(&mut self, lease: Address) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
+        self.assert_admin();
 
         self.lease.set(lease);
 
@@ -211,12 +196,7 @@ impl CompliancePolicy {
     ///      per the project's `odra.rulebook.md` (Security: Address Handling),
     ///      as Odra addresses have no default/zero value.
     pub fn set_user_registry(&mut self, user_registry: Address) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
+        self.assert_admin();
 
         self.user_registry.set(user_registry);
 
@@ -344,6 +324,15 @@ impl CompliancePolicy {
 // =============================================================================
 
 impl CompliancePolicy {
+    fn assert_admin(&self) {
+        if !self
+            .access_control
+            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
+        {
+            self.env().revert(Error::NotAuthorized);
+        }
+    }
+
     fn assert_role(&self, role_name: &str) {
         let role = common::hash_role(role_name);
 
