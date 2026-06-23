@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE leases\n            SET commit_tx_hash = $2\n            WHERE id = $1 AND commit_tx_hash IS NULL AND deleted_at IS NULL\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            UPDATE leases SET\n                status = 'active',\n                onchain_lease_id = $2::TEXT::NUMERIC,\n                nft_token_id = $3,\n                commit_tx_hash = $4\n            WHERE id = $1 AND status = 'pending_signatures' AND deleted_at IS NULL\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -284,6 +284,8 @@
     "parameters": {
       "Left": [
         "Uuid",
+        "Text",
+        "Text",
         "Text"
       ]
     },
@@ -317,5 +319,5 @@
       true
     ]
   },
-  "hash": "64ac422d4e48b2044401db5b85414ea70dc0b900a6c122d960dada0d5fc83de3"
+  "hash": "8361bb2029fc9ffbc18ebb1480cc79dd31e1bf1c86de5954e0651586302edbca"
 }

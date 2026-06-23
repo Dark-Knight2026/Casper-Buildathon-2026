@@ -10,7 +10,7 @@ use core::str::FromStr;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use strum::{Display, EnumString};
+use strum::{AsRefStr, Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -27,7 +27,17 @@ pub use crate::common::LeaseType;
 /// Lease lifecycle status. Stored as TEXT (CHECK) in the DB (`snake_case`); the
 /// wire form is hyphenated (`pending-signatures`, `expiring-soon`, ...).
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    EnumString,
+    Display,
+    AsRefStr,
 )]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "snake_case")]
@@ -285,12 +295,16 @@ pub struct SignLeaseRequest {
     pub signer_wallet: String,
 }
 
-/// On-chain commit submission. The landlord reports the deploy hash after
-/// signing `create_lease_agreement`; the indexer activates the lease when
-/// `LeaseAgreementCreated` arrives.
+/// On-chain commit submission. After the landlord runs `create_lease_agreement`
+/// from their wallet, they report the result here so the backend can reconcile
+/// against the chain and activate the lease.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitLeaseRequest {
+    /// U256 on-chain agreement id (decimal string) from `LeaseAgreementCreated`.
+    pub onchain_lease_id: String,
+    /// Tenant's frozen lease NFT token id (U256 decimal string).
+    pub nft_token_id: String,
     /// Deploy/tx hash of the `create_lease_agreement` call.
     pub commit_tx_hash: String,
 }
