@@ -7,7 +7,7 @@ use leasefi_contracts::{
         types::ComplianceConfig,
         CompliancePolicy, CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
-    constants::ONE_MONTH_IN_SECONDS,
+    constants::ONE_MONTH_IN_MILLISECONDS,
     escrow::{Escrow, EscrowHostRef, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
@@ -745,7 +745,7 @@ fn test_assert_can_transfer_should_succeed_if_equity_distribution_requires_lease
                 U256::from(500),
             ),
             start: ctx.env.block_time(),
-            end: ctx.env.block_time() + ONE_MONTH_IN_SECONDS,
+            end: ctx.env.block_time() + ONE_MONTH_IN_MILLISECONDS,
             invoice_validity_duration: ctx.escrow.get_min_deadline(),
         });
 
@@ -914,7 +914,7 @@ fn test_equity_lease_finalization_blocks_compliance_transfer() {
                 U256::from(500),
             ),
             start: ctx.env.block_time(),
-            end: ctx.env.block_time() + ONE_MONTH_IN_SECONDS,
+            end: ctx.env.block_time() + ONE_MONTH_IN_MILLISECONDS,
             invoice_validity_duration: ctx.escrow.get_min_deadline(),
         });
 
