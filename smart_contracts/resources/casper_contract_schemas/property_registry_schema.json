@@ -15,7 +15,7 @@
           {
             "name": "issuer",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           },
           {
             "name": "total_supply",
@@ -43,12 +43,17 @@
           {
             "name": "issuer",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           },
           {
             "name": "total_supply",
             "description": null,
             "ty": "U256"
+          },
+          {
+            "name": "metadata_uri",
+            "description": null,
+            "ty": "String"
           }
         ]
       }
@@ -74,17 +79,10 @@
           {
             "name": "issuer",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           },
           {
             "name": "token",
-            "description": null,
-            "ty": {
-              "Option": "Key"
-            }
-          },
-          {
-            "name": "revenue_distributor",
             "description": null,
             "ty": {
               "Option": "Key"
@@ -138,24 +136,6 @@
           },
           {
             "name": "token",
-            "description": null,
-            "ty": "Key"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "RevenueDistributorSet",
-        "description": null,
-        "members": [
-          {
-            "name": "property_id",
-            "description": null,
-            "ty": "U256"
-          },
-          {
-            "name": "revenue_distributor",
             "description": null,
             "ty": "Key"
           }
@@ -242,6 +222,19 @@
       }
     },
     {
+      "struct": {
+        "name": "UserRegistrySet",
+        "description": null,
+        "members": [
+          {
+            "name": "user_registry",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
       "enum": {
         "name": "PropertyStatus",
         "description": null,
@@ -288,6 +281,11 @@
   ],
   "errors": [
     {
+      "name": "CallerNotPropertyManager",
+      "description": "",
+      "discriminant": 900
+    },
+    {
       "name": "CallerNotTheNewOwner",
       "description": "The caller is not the new owner.",
       "discriminant": 20002
@@ -301,6 +299,11 @@
       "name": "EmptyMetadataUri",
       "description": "",
       "discriminant": 903
+    },
+    {
+      "name": "InvalidIssuer",
+      "description": "",
+      "discriminant": 910
     },
     {
       "name": "InvalidPropertyId",
@@ -318,11 +321,6 @@
       "discriminant": 905
     },
     {
-      "name": "MissingRevenueDistributor",
-      "description": "",
-      "discriminant": 906
-    },
-    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
@@ -330,7 +328,7 @@
     {
       "name": "NotAuthorized",
       "description": "",
-      "discriminant": 900
+      "discriminant": 909
     },
     {
       "name": "OwnerNotSet",
@@ -360,6 +358,22 @@
   ],
   "entry_points": [
     {
+      "name": "set_user_registry",
+      "description": "Sets the UserRegistry contract address.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "user_registry",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "set_property_token",
       "description": "Sets the property ownership token address.",
       "is_mutable": true,
@@ -372,28 +386,6 @@
         },
         {
           "name": "token",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "set_revenue_distributor",
-      "description": "Sets the property revenue distributor address.",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "property_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "revenue_distributor",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -498,17 +490,10 @@
       "access": "public"
     },
     {
-      "name": "get_revenue_distributor",
-      "description": "Returns the property revenue distributor address",
+      "name": "get_user_registry_contract_address",
+      "description": "Returns the UserRegistry contract address.",
       "is_mutable": false,
-      "arguments": [
-        {
-          "name": "property_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
+      "arguments": [],
       "return_ty": "Key",
       "is_contract_context": true,
       "access": "public"
@@ -542,17 +527,6 @@
         }
       ],
       "return_ty": "U256",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "property_manager_role",
-      "description": "Returns the role hash for accounts allowed to manage property records.",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": {
-        "ByteArray": 32
-      },
       "is_contract_context": true,
       "access": "public"
     },
@@ -691,10 +665,6 @@
       "ty": "PropertyTokenSet"
     },
     {
-      "name": "RevenueDistributorSet",
-      "ty": "RevenueDistributorSet"
-    },
-    {
       "name": "RoleAdminChanged",
       "ty": "RoleAdminChanged"
     },
@@ -705,11 +675,15 @@
     {
       "name": "RoleRevoked",
       "ty": "RoleRevoked"
+    },
+    {
+      "name": "UserRegistrySet",
+      "ty": "UserRegistrySet"
     }
   ],
   "call": {
     "wasm_file_name": "PropertyRegistry.wasm",
-    "description": "",
+    "description": "Initializes the registry and sets the UserRegistry dependency.",
     "arguments": [
       {
         "name": "odra_cfg_package_hash_key_name",
@@ -737,6 +711,12 @@
       },
       {
         "name": "owner",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "user_registry",
         "description": null,
         "ty": "Key",
         "optional": false

@@ -7,13 +7,14 @@ use crate::{
         errors::Error,
         events::{
             ComplianceConfigSet, InvestorRegistrySet, LeaseSet, PropertyRegistrySet,
-            TransferExemptSet,
+            TransferExemptSet, UserRegistrySet,
         },
         types::ComplianceConfig,
     },
     investor_registry::InvestorRegistryContractRef,
     lease::LeaseContractRef,
     property_registry::PropertyRegistryContractRef,
+    user_registry::UserRegistryContractRef,
 };
 
 // =============================================================================
@@ -77,6 +78,11 @@ pub mod events {
     pub struct LeaseSet {
         pub lease: Address,
     }
+
+    #[odra::event]
+    pub struct UserRegistrySet {
+        pub user_registry: Address,
+    }
 }
 
 // =============================================================================
@@ -110,6 +116,7 @@ pub mod errors {
   ComplianceConfigSet,
   TransferExemptSet,
   LeaseSet,
+  UserRegistrySet,
 ])]
 pub struct CompliancePolicy {
     /// Access control module for DEFAULT_ADMIN_ROLE and COMPLIANCE_MANAGER roles.
@@ -120,7 +127,7 @@ pub struct CompliancePolicy {
     property_registry: External<PropertyRegistryContractRef>,
     /// External reference to the Lease contract for equity-eligibility gating.
     lease: External<LeaseContractRef>,
-    /// Per-property compliance configuration (transfers enabled, equity distribution rules).
+    user_registry: External<UserRegistryContractRef>,
     configs: Mapping<U256, ComplianceConfig>,
     /// Accounts that are exempt from investor verification checks (e.g. issuance escrows).
     transfer_exempt_accounts: Mapping<Address, bool>,
@@ -139,6 +146,7 @@ impl CompliancePolicy {
         investor_registry: Address,
         property_registry: Address,
         lease: Address,
+        user_registry: Address,
     ) {
         if self.initialized.get_or_default() {
             self.env().revert(Error::AlreadyInitialized);
@@ -149,8 +157,7 @@ impl CompliancePolicy {
         self.investor_registry.set(investor_registry);
         self.property_registry.set(property_registry);
         self.lease.set(lease);
-
-        self.initialized.set(true);
+        self.user_registry.set(user_registry);
     }
 
     // =============================================================================
@@ -161,12 +168,7 @@ impl CompliancePolicy {
     /// Restricted to `DEFAULT_ADMIN_ROLE`.
     /// @dev This replaces the KYC provider used for verification checks.
     pub fn set_investor_registry(&mut self, investor_registry: Address) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
+        self.assert_admin();
 
         self.investor_registry.set(investor_registry);
 
@@ -176,12 +178,7 @@ impl CompliancePolicy {
     /// Sets the property registry contract address.
     /// Restricted to `DEFAULT_ADMIN_ROLE`.
     pub fn set_property_registry(&mut self, property_registry: Address) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
+        self.assert_admin();
 
         self.property_registry.set(property_registry);
 
@@ -191,16 +188,23 @@ impl CompliancePolicy {
     /// Sets the lease contract address.
     /// Restricted to `DEFAULT_ADMIN_ROLE`.
     pub fn set_lease(&mut self, lease: Address) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
+        self.assert_admin();
 
         self.lease.set(lease);
 
         self.env().emit_event(LeaseSet { lease });
+    }
+
+    /// Sets the user registry used to resolve wallets to user IDs for lease eligibility checks
+    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`. No zero-address guard is applied
+    ///      per the project's `odra.rulebook.md` (Security: Address Handling),
+    ///      as Odra addresses have no default/zero value.
+    pub fn set_user_registry(&mut self, user_registry: Address) {
+        self.assert_admin();
+
+        self.user_registry.set(user_registry);
+
+        self.env().emit_event(UserRegistrySet { user_registry });
     }
 
     /// Sets the transfer configuration for a property
@@ -252,6 +256,11 @@ impl CompliancePolicy {
     /// Returns the lease contract address.
     pub fn get_lease_contract(&self) -> Address {
         *self.lease.address()
+    }
+
+    /// Returns the user registry contract address.
+    pub fn get_user_registry_contract(&self) -> Address {
+        *self.user_registry.address()
     }
 
     /// Returns the compliance config for a property
@@ -319,6 +328,15 @@ impl CompliancePolicy {
 // =============================================================================
 
 impl CompliancePolicy {
+    fn assert_admin(&self) {
+        if !self
+            .access_control
+            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
+        {
+            self.env().revert(Error::NotAuthorized);
+        }
+    }
+
     fn assert_role(&self, role_name: &str) {
         let role = common::hash_role(role_name);
 
@@ -370,11 +388,16 @@ impl CompliancePolicy {
 
         let is_equity_distribution = from_exempt && !to_exempt;
 
-        if is_equity_distribution
-            && config.equity_distribution_requires_lease_option
-            && !self.lease.is_equity_eligible(property_id, to)
-        {
-            return Some(Error::RecipientNotEquityEligible);
+        if is_equity_distribution && config.equity_distribution_requires_lease_option {
+            let Some(user_id) = self.user_registry.get_user_id_by_wallet(to) else {
+                return Some(Error::RecipientNotEquityEligible);
+            };
+
+            if !self.user_registry.is_active_wallet(user_id, to)
+                || !self.lease.is_equity_eligible(property_id, user_id)
+            {
+                return Some(Error::RecipientNotEquityEligible);
+            }
         }
 
         None

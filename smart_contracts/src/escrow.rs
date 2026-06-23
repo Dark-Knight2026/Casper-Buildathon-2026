@@ -17,6 +17,7 @@ use crate::{
         },
         types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind, SecurityDepositRecord},
     },
+    user_registry::UserRegistryContractRef,
 };
 
 // =============================================================================
@@ -24,7 +25,7 @@ use crate::{
 // =============================================================================
 
 pub mod types {
-    use odra::{casper_types::U256, prelude::*};
+    use odra::casper_types::U256;
 
     use crate::common::CurrencyAmount;
 
@@ -39,11 +40,11 @@ pub mod types {
     pub struct Invoice {
         /// Invoice category.
         pub kind: InvoiceKind,
-        /// Wallet required to pay the invoice.
-        pub buyer: Address,
-        /// Primary recipient of the invoice.
-        /// @dev For lease invoices, this is the landlord. For security deposits, this is the lease contract.
-        pub seller: Address,
+        /// User required to pay the invoice.
+        pub buyer: U256,
+        /// Primary recipient user of the invoice.
+        /// @dev For lease invoices, this is the landlord. For security deposits, this is the landlord user until release.
+        pub seller: U256,
         /// Total amount due for this invoice.
         /// @dev Lease invoices are rent-only. Security deposits must use the configured USDC token.
         pub amount_due: CurrencyAmount,
@@ -53,8 +54,8 @@ pub mod types {
         /// Base rent amount already paid.
         /// @dev Used for partial lease payments.
         pub rent_paid: U256,
-        /// Optional property manager that receives a percentage of gross base rent.
-        pub property_manager: Option<Address>,
+        /// Optional property manager user that receives a percentage of base rent.
+        pub property_manager: Option<U256>,
         /// Property manager rent share in basis points.
         /// @dev 10_000 = 100%. Applied to gross rent paid (PM not diluted by protocol fee).
         pub property_manager_bps: u32,
@@ -66,15 +67,14 @@ pub mod types {
 
     #[odra::odra_type]
     pub struct CreateLeaseInvoiceParams {
-        /// Tenant wallet responsible for paying rent.
-        pub tenant: Address,
-        /// Landlord wallet receiving rent after protocol fee (of gross) and manager split.
-        pub landlord: Address,
+        /// Tenant user responsible for paying rent.
+        pub tenant: U256,
+        /// Landlord user receiving rent after protocol fee and manager split.
+        pub landlord: U256,
         /// Rent amount and currency for this invoice.
         pub rent: CurrencyAmount,
-        /// Optional property manager receiving a percentage of gross rent.
-        /// @dev BPS applied to gross tenant payment (before protocol fee); see M-1.
-        pub property_manager: Option<Address>,
+        /// Optional property manager user receiving a percentage of rent.
+        pub property_manager: Option<U256>,
         /// Property manager rent share in basis points.
         /// @dev 10_000 = 100%. Applied to gross (PM not diluted by the 2% tx fee).
         pub property_manager_bps: u32,
@@ -125,7 +125,7 @@ pub mod events {
     #[odra::event]
     pub struct InvoicePaymentApplied {
         pub invoice_id: U256,
-        pub payer: Address,
+        pub payer: U256,
         pub amount: U256,
         pub protocol_fee: U256,
         pub rent_paid: U256,
@@ -140,15 +140,15 @@ pub mod events {
     #[odra::event]
     pub struct SecurityDepositHeld {
         pub invoice_id: U256,
-        pub tenant: Address,
+        pub tenant: U256,
         pub amount: U256,
     }
 
     #[odra::event]
     pub struct SecurityDepositReleased {
         pub invoice_id: U256,
-        pub landlord: Address,
-        pub tenant: Address,
+        pub landlord: U256,
+        pub tenant: U256,
         pub landlord_charge: U256,
         pub tenant_refund: U256,
     }
@@ -191,8 +191,7 @@ pub mod errors {
         SecurityDepositNotPaid = 315,
         SecurityDepositAlreadyReleased = 316,
         SecurityDepositChargeTooHigh = 317,
-        RenounceOwnershipNotAllowed = 318,
-        AlreadyInitialized = 319,
+        UserRegistryContractIsNotSet = 318,
     }
 }
 
@@ -218,6 +217,8 @@ pub struct Escrow {
     lease: Var<Address>,
     /// Treasury wallet/contract receiving LeaseFi transaction fees.
     treasury: Var<Address>,
+    /// User registry used to resolve user IDs to active wallets.
+    user_registry: External<UserRegistryContractRef>,
     /// USDC CEP-18 token used for all security deposits.
     security_deposit_token: External<Cep18ContractRef>,
     /// Invoices keyed by invoice ID.
@@ -237,12 +238,9 @@ impl Escrow {
     // Initialization
     // =========================================================================
 
-    pub fn init(&mut self, owner: Address, min_deadline: u64) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
+    pub fn init(&mut self, owner: Address, min_deadline: u64, user_registry: Address) {
         self.ownable.init(owner);
+        self.user_registry.set(user_registry);
         self.set_min_deadline(min_deadline);
 
         self.initialized.set(true);
@@ -282,6 +280,12 @@ impl Escrow {
         self.env().emit_event(TreasurySet { treasury });
     }
 
+    /// Sets the UserRegistry contract address by the owner
+    pub fn set_user_registry(&mut self, user_registry: Address) {
+        self.assert_owner();
+        self.user_registry.set(user_registry);
+    }
+
     pub fn set_security_deposit_token(&mut self, token: Address) {
         self.assert_owner();
         self.security_deposit_token.set(token);
@@ -302,6 +306,11 @@ impl Escrow {
     pub fn get_treasury_contract_address(&self) -> Address {
         self.treasury
             .get_or_revert_with(Error::TreasuryContractIsNotSet)
+    }
+
+    /// Returns the UserRegistry contract address
+    pub fn get_user_registry_contract_address(&self) -> Address {
+        *self.user_registry.address()
     }
 
     /// Returns the USDC token used for security deposits
@@ -368,7 +377,8 @@ impl Escrow {
     #[odra(non_reentrant)]
     pub fn create_security_deposit_invoice(
         &mut self,
-        tenant: Address,
+        tenant: U256,
+        landlord: U256,
         mut amount_due: CurrencyAmount,
         deadline: u64,
     ) -> U256 {
@@ -378,7 +388,7 @@ impl Escrow {
         self.create_invoice(Invoice {
             kind: InvoiceKind::SecurityDeposit,
             buyer: tenant,
-            seller: self.get_lease_contract_address(),
+            seller: landlord,
             amount_due,
             rent_amount: U256::zero(),
             rent_paid: U256::zero(),
@@ -399,7 +409,8 @@ impl Escrow {
             .get(&invoice_id)
             .unwrap_or_revert_with(&self.env(), Error::InvalidInvoiceId);
 
-        self.assert_invoice_payable(&invoice, amount);
+        let payer = self.user_registry.get_active_wallet(invoice.buyer);
+        self.assert_invoice_payable(&invoice, payer, amount);
 
         match invoice.kind {
             InvoiceKind::SecurityDeposit => {
@@ -415,10 +426,11 @@ impl Escrow {
 
     /// Releases a held security deposit when a lease is finalized.
     /// @dev Only the Lease contract may call this. `security_deposit_charge` goes to the landlord and the remaining balance is refunded to the tenant.
+    #[odra(non_reentrant)]
     pub fn release_security_deposit(
         &mut self,
         invoice_id: U256,
-        landlord: Address,
+        landlord: U256,
         security_deposit_charge: U256,
     ) {
         self.assert_lease();
@@ -445,8 +457,14 @@ impl Escrow {
 
         let tenant_refund = deposit.amount - security_deposit_charge;
 
-        self.transfer_from_escrow(landlord, security_deposit_charge);
-        self.transfer_from_escrow(invoice.buyer, tenant_refund);
+        self.transfer_from_escrow(
+            self.user_registry.get_active_wallet(landlord),
+            security_deposit_charge,
+        );
+        self.transfer_from_escrow(
+            self.user_registry.get_active_wallet(invoice.buyer),
+            tenant_refund,
+        );
 
         deposit.released = true;
         deposit.landlord_charge = security_deposit_charge;
@@ -504,8 +522,8 @@ impl Escrow {
     }
 
     #[inline]
-    fn assert_invoice_payable(&self, invoice: &Invoice, amount: U256) {
-        if self.env().caller() != invoice.buyer {
+    fn assert_invoice_payable(&self, invoice: &Invoice, payer: Address, amount: U256) {
+        if self.env().caller() != payer {
             self.env().revert(Error::CallerIsNotBuyer);
         }
 
@@ -588,7 +606,7 @@ impl Escrow {
             self.env().revert(Error::InvalidPaymentAmount);
         }
 
-        self.transfer_to_escrow(invoice.buyer, amount);
+        self.transfer_to_escrow(self.user_registry.get_active_wallet(invoice.buyer), amount);
 
         self.security_deposits.set(
             &invoice_id,
@@ -625,7 +643,7 @@ impl Escrow {
 
         self.transfer_payment(
             currency,
-            invoice.buyer,
+            self.user_registry.get_active_wallet(invoice.buyer),
             self.get_treasury_contract_address(),
             protocol_fee,
         );
@@ -683,13 +701,18 @@ impl Escrow {
         if let Some(property_manager) = invoice.property_manager {
             self.transfer_payment(
                 currency,
-                invoice.buyer,
-                property_manager,
+                self.user_registry.get_active_wallet(invoice.buyer),
+                self.user_registry.get_active_wallet(property_manager),
                 property_manager_amount,
             );
         }
 
-        self.transfer_payment(currency, invoice.buyer, invoice.seller, landlord_amount);
+        self.transfer_payment(
+            currency,
+            self.user_registry.get_active_wallet(invoice.buyer),
+            self.user_registry.get_active_wallet(invoice.seller),
+            landlord_amount,
+        );
     }
 
     fn transfer_payment(
