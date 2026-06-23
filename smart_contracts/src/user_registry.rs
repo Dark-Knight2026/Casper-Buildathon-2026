@@ -287,7 +287,7 @@ impl UserRegistry {
         let mut record = self.get_user(user_id);
         let old_wallet = record.active_wallet;
 
-        self.assert_wallet_not_alread_active(old_wallet, new_wallet);
+        self.assert_wallet_not_already_active(old_wallet, new_wallet);
         self.assert_wallet_not_linked_to_other_user(user_id, new_wallet);
 
         if self.get_user_id_by_wallet(new_wallet).is_none() {
@@ -401,7 +401,7 @@ impl UserRegistry {
     }
 
     #[inline]
-    fn assert_wallet_not_alread_active(&self, active_wallet: Address, wallet: Address) {
+    fn assert_wallet_not_already_active(&self, active_wallet: Address, wallet: Address) {
         if active_wallet == wallet {
             self.env().revert(Error::WalletAlreadyActive);
         }
