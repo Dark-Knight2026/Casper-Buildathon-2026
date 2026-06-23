@@ -324,6 +324,10 @@ impl PropertyRegistry {
             self.env().revert(Error::EmptyMetadataUri);
         }
 
+        if params.total_supply.is_zero() {
+            self.env().revert(Error::ZeroTotalSupply);
+        }
+
         let property_id = self.properties_count.next_value();
         let issuer = params.issuer;
         let total_supply = params.total_supply;
