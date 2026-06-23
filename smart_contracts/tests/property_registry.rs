@@ -110,6 +110,7 @@ fn test_create_property_should_create_draft_properly() {
             property_id,
             issuer: ctx.issuer_id,
             total_supply: U256::from(1_000_000),
+            metadata_uri: property.metadata_uri,
         }
     ));
 }

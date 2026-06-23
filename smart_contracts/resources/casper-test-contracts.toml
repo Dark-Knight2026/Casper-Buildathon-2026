@@ -33,7 +33,7 @@ package_hash = "hash-37a0253a37f16dbea63dbc6b46f5874215a42b55a3e5920d14a48e2a460
 [[contracts]]
 name = "NFT"
 package_name = "NFT"
-package_hash = "hash-d17f419ab36bb85453b671530f067cdb3b2506eacd10097bb2210b165e6f24a7"
+package_hash = "hash-ace4693ddf7b06251a1960ce7e296b01e64352cc74dd6ba0b574eefdf7dec781"
 
 [[contracts]]
 name = "Escrow"
