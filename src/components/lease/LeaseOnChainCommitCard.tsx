@@ -1,8 +1,11 @@
 /**
  * Landlord "Record on-chain" action for a fully-signed lease (`Lease` contract).
  * The landlord signs `create_lease_agreement` from their own wallet via
- * CSPR.click, then we hand the deploy hash to the backend (`POST /commit`),
- * whose indexer derives the on-chain ids from the event and activates the lease.
+ * CSPR.click; once the deploy confirms we read the assigned ids from its CES
+ * events (`extractLeaseCommitIds`) and report them with the hash to the backend
+ * (`POST /commit`), which records them and activates the lease. The id read is
+ * best-effort — if it fails we still commit the hash and the backend indexer
+ * derives the lease id from the same event (the NFT token id has no fallback).
  *
  * Targets the contract deployed from `2025_anthony_leasefi` user-registry:
  * `tenant` is the tenant's on-chain UserRegistry user id (`U256`), prefilled
@@ -18,7 +21,7 @@
  * after the landlord starts.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, ShieldCheck } from 'lucide-react';
 
@@ -35,6 +38,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useLeaseAgreementOnChain } from '@/hooks/lease/useLeaseAgreementOnChain';
 import { isLeaseAgreementEnabled } from '@/lib/casper/leaseAgreement';
+import {
+  extractLeaseCommitIds,
+  type LeaseCommitIds,
+} from '@/lib/casper/leaseAgreementEvents';
 import { commitLease } from '@/services/leaseService';
 import { LEASE_CURRENCY, scaleToSmallestUnit } from '@/lib/leaseCurrency';
 import {
@@ -64,21 +71,43 @@ function CommitFlow({ lease }: { lease: Lease }) {
   // The `/commit` push can fail after the deploy already succeeded on-chain; that
   // must be retryable WITHOUT re-signing (a second deploy = duplicate lease/NFT).
   const [pushFailed, setPushFailed] = useState(false);
+  // On-chain ids read from the confirmed deploy's CES events, cached so a retry
+  // re-sends them without re-reading the deploy. Starts as nulls (= "send the
+  // hash only") so a retry before/without a successful read still works.
+  const commitIdsRef = useRef<LeaseCommitIds>({
+    onchainLeaseId: null,
+    nftTokenId: null,
+  });
 
-  // Hand the deploy hash to the backend; its indexer derives the on-chain ids
-  // and activates the lease. Reusable so a failed push can be retried in place
-  // with the same hash. The hash is the only input — the duplicate guard lives
-  // on the backend, keyed on the deploy/commit hash.
+  // Hand the deploy hash + parsed ids to the backend, which records them and
+  // activates the lease. Reusable so a failed push can be retried in place with
+  // the same hash + ids. The duplicate guard lives on the backend, keyed on the
+  // deploy/commit hash; null ids are omitted (the indexer fills the lease id).
   const pushCommit = useCallback(
-    (hash: string) => {
+    (hash: string, ids: LeaseCommitIds) => {
       setPushFailed(false);
-      commitLease(lease.id, { commitTxHash: hash })
+      commitLease(lease.id, {
+        commitTxHash: hash,
+        ...(ids.onchainLeaseId ? { onchainLeaseId: ids.onchainLeaseId } : {}),
+        ...(ids.nftTokenId ? { nftTokenId: ids.nftTokenId } : {}),
+      })
         .then(() =>
           queryClient.invalidateQueries({ queryKey: ['lease', lease.id] })
         )
         .catch(() => setPushFailed(true));
     },
     [lease.id, queryClient]
+  );
+
+  // Read the lease + NFT ids from the confirmed deploy, then push. Best-effort:
+  // if the read fails it caches nulls and the push proceeds with just the hash.
+  const recordCommit = useCallback(
+    async (hash: string) => {
+      const ids = await extractLeaseCommitIds(hash);
+      commitIdsRef.current = ids;
+      pushCommit(hash, ids);
+    },
+    [pushCommit]
   );
 
   // onSuccess/onError fire exactly once per attempt, so no manual once-guards:
@@ -101,7 +130,7 @@ function CommitFlow({ lease }: { lease: Lease }) {
             </a>
           ),
         });
-        pushCommit(txHash);
+        void recordCommit(txHash);
       },
       onError: (message) =>
         toast({
@@ -193,7 +222,10 @@ function CommitFlow({ lease }: { lease: Lease }) {
             The deploy succeeded on-chain, but the platform wasn’t notified.
             Retry — this re-sends the same deploy, it does not sign again.
           </p>
-          <Button variant="outline" onClick={() => pushCommit(txHash)}>
+          <Button
+            variant="outline"
+            onClick={() => pushCommit(txHash, commitIdsRef.current)}
+          >
             Retry recording
           </Button>
         </div>

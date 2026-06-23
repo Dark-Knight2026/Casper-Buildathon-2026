@@ -172,12 +172,18 @@ export interface SignLeaseBody {
 }
 
 export interface CommitLeaseBody {
-  /**
-   * Deploy/tx hash of the `create_lease_agreement` call. The backend indexer
-   * derives `onchainLeaseId`/`nftTokenId` from the deploy's on-chain event and
-   * activates the lease, so the hash is all the frontend sends.
-   */
+  /** Deploy/tx hash of the `create_lease_agreement` call. */
   commitTxHash: string;
+  /**
+   * On-chain ids the frontend reads from the deploy's CES events
+   * (`LeaseAgreementCreated.lease_agreement_id` / lease-NFT `Mint.token_id`) and
+   * reports alongside the hash. Both are U256 decimal strings. Optional: when
+   * the frontend can't read them, it omits them and the backend indexer derives
+   * the lease id from the same event (the NFT token id has no indexer fallback,
+   * so reporting it here is the only way it gets recorded).
+   */
+  onchainLeaseId?: string;
+  nftTokenId?: string;
 }
 
 /** Query filters for `GET /api/v1/leases`. */
