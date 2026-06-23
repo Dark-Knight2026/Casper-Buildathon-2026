@@ -331,6 +331,7 @@ async fn full_lifecycle_draft_to_active(pool: PgPool) {
             "onchainLeaseId": "0",
             "nftTokenId": "1",
             "commitTxHash": "deploy-test-1",
+            "invoiceValidityDuration": 0,
         }),
     )
     .await;
@@ -339,6 +340,18 @@ async fn full_lifecycle_draft_to_active(pool: PgPool) {
     assert_eq!(committed["status"], "active");
     assert_eq!(committed["onchainLeaseId"].as_str().unwrap(), "0");
     assert_eq!(committed["nftTokenId"].as_str().unwrap(), "1");
+
+    // Activation seeds invoice mirrors in the same transaction: a 30-day term is
+    // one month, so one security deposit + one rent invoice, both `scheduled`.
+    let lease_uuid = Uuid::parse_str(&id).unwrap();
+    let scheduled_invoices = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM invoices WHERE lease_id = $1 AND status = 'scheduled'",
+    )
+    .bind(lease_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(scheduled_invoices, 2);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -386,6 +399,7 @@ async fn commit_blocked_until_both_signatures(pool: PgPool) {
             "onchainLeaseId": "0",
             "nftTokenId": "1",
             "commitTxHash": "deploy-test-1",
+            "invoiceValidityDuration": 0,
         }),
     )
     .await;
@@ -1029,6 +1043,7 @@ async fn commit_idempotent_when_already_active(pool: PgPool) {
         "onchainLeaseId": "0",
         "nftTokenId": "1",
         "commitTxHash": "deploy-test-1",
+        "invoiceValidityDuration": 0,
     });
 
     let (s_first, _) = common::authed_request::<Value>(
@@ -1066,7 +1081,7 @@ async fn commit_rejects_non_owner(pool: PgPool) {
         &Method::POST,
         &format!("/api/v1/leases/{}/commit", p.id),
         &other_landlord,
-        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x" }),
+        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x", "invoiceValidityDuration": 0 }),
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -1082,7 +1097,7 @@ async fn commit_not_found(pool: PgPool) {
         &Method::POST,
         &format!("/api/v1/leases/{}/commit", Uuid::new_v4()),
         &token,
-        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x" }),
+        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x", "invoiceValidityDuration": 0 }),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
