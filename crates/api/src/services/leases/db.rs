@@ -6,8 +6,9 @@
 //! (`clauses`, `signature_progress`, `consent_signatures`) map to `Json<Value>`.
 
 use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::prelude::ToPrimitive;
 use serde_json::Value;
-use sqlx::{Error, FromRow, PgPool, types::Json};
+use sqlx::{Error, FromRow, PgConnection, PgPool, types::Json};
 use uuid::Uuid;
 
 /// Validated payload for creating a lease draft.
@@ -521,13 +522,16 @@ pub async fn update_consent(
 /// Activates a lease by persisting the on-chain binding returned by
 /// `create_lease_agreement` and moving it to `active`.
 ///
+/// Accepts a bare `&mut PgConnection` so the caller can run it inside a
+/// transaction alongside [`create_lease_invoices`].
+///
 /// # Errors
 ///
 /// Returns [`Error::RowNotFound`] when the lease is not in `pending_signatures`
 /// (e.g. already activated), or any other database error.
 #[inline]
 pub async fn commit_lease(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     lease_id: Uuid,
     onchain_lease_id: &str,
     nft_token_id: &str,
@@ -567,8 +571,103 @@ pub async fn commit_lease(
         nft_token_id,
         commit_tx_hash,
     )
-    .fetch_one(pool)
+    .fetch_one(conn)
     .await
+}
+
+/// Seeds `scheduled` invoice mirrors for an activated lease.
+///
+/// Creates one `security_deposit` invoice and N `rent` invoices (one per 30-day
+/// month). Deadlines are derived from `NOW()` as a proxy for the on-chain block
+/// timestamp at commit time — off by at most a few seconds, irrelevant since
+/// `deadline` is a `DATE`.
+///
+/// Idempotent: skips silently if invoices already exist for this lease (e.g.
+/// `/commit` is retried after the indexer already activated the lease).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn create_lease_invoices(
+    conn: &mut PgConnection,
+    row: &LeaseRow,
+    validity_secs: i64,
+) -> Result<(), Error> {
+    let already_seeded = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM invoices WHERE lease_id = $1) AS "exists!""#,
+        row.id,
+    )
+    .fetch_one(conn.as_mut())
+    .await?;
+
+    if already_seeded {
+        return Ok(());
+    }
+
+    let tenant_id = row.tenant_ids[0];
+    let n_months = ((row.end_date - row.start_date).num_days() / 30)
+        .to_i32()
+        .unwrap_or(i32::MAX);
+
+    // Security deposit: deadline = NOW() + validity_secs.
+    sqlx::query!(
+        r#"
+            INSERT INTO invoices (
+                lease_id, kind, tenant_id, landlord_id, property_id,
+                amount_due, rent_paid, property_manager_id, property_manager_bps,
+                status, deadline
+            ) VALUES (
+                $1, 'security_deposit', $2, $3, $4,
+                $5::double precision, 0, $6, $7,
+                'scheduled',
+                (NOW() + $8::bigint * INTERVAL '1 second')::date
+            )
+        "#,
+        row.id,
+        tenant_id,
+        row.landlord_id,
+        row.property_id,
+        row.security_deposit,
+        row.property_manager_id,
+        row.property_manager_bps,
+        validity_secs,
+    )
+    .execute(conn.as_mut())
+    .await?;
+
+    // Rent invoices: deadline[i] = NOW() + (i * 30d + validity_secs).
+    // generate_series produces i = 0..N-1 matching the contract's loop.
+    let one_month = 60 * 60 * 24 * 30_i64;
+    sqlx::query!(
+        r#"
+            INSERT INTO invoices (
+                lease_id, kind, tenant_id, landlord_id, property_id,
+                amount_due, rent_paid, property_manager_id, property_manager_bps,
+                status, deadline
+            )
+            SELECT
+                $1, 'rent', $2, $3, $4,
+                $5::double precision, 0, $6, $7,
+                'scheduled',
+                (NOW() + (gs::bigint * $8::bigint + $9::bigint) * INTERVAL '1 second')::date
+            FROM generate_series(0, $10 - 1) AS gs
+        "#,
+        row.id,
+        tenant_id,
+        row.landlord_id,
+        row.property_id,
+        row.monthly_rent,
+        row.property_manager_id,
+        row.property_manager_bps,
+        one_month,
+        validity_secs,
+        n_months,
+    )
+    .execute(conn)
+    .await?;
+
+    Ok(())
 }
 
 /// Records a freshly rendered lease document on the lease: the stored

@@ -8,6 +8,7 @@ use axum::{
     http::StatusCode,
 };
 use chrono::Utc;
+use rust_decimal::prelude::ToPrimitive;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -570,14 +571,23 @@ pub async fn commit_lease(
             "on-chain lease is already finished".to_owned(),
         ));
     }
+    let validity_secs = payload
+        .invoice_validity_duration
+        .to_i64()
+        .unwrap_or_default();
+
+    let mut tx = state.db.begin().await?;
     let row = db::commit_lease(
-        &state.db,
+        tx.as_mut(),
         lease_id,
         &payload.onchain_lease_id,
         &payload.nft_token_id,
         &payload.commit_tx_hash,
     )
     .await?;
+    db::create_lease_invoices(tx.as_mut(), &row, validity_secs).await?;
+
+    tx.commit().await?;
     Ok(Json(Lease::from(row)))
 }
 

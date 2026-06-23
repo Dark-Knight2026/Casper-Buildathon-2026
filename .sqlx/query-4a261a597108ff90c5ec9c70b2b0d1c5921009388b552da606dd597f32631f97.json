@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO invoices (\n                lease_id, kind, tenant_id, landlord_id, property_id,\n                amount_due, rent_paid, property_manager_id, property_manager_bps,\n                status, deadline\n            ) VALUES (\n                $1, 'security_deposit', $2, $3, $4,\n                $5::double precision, 0, $6, $7,\n                'scheduled',\n                (NOW() + $8::bigint * INTERVAL '1 second')::date\n            )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Uuid",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4a261a597108ff90c5ec9c70b2b0d1c5921009388b552da606dd597f32631f97"
+}

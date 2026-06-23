@@ -307,6 +307,9 @@ pub struct CommitLeaseRequest {
     pub nft_token_id: String,
     /// Deploy/tx hash of the `create_lease_agreement` call.
     pub commit_tx_hash: String,
+    /// Seconds the landlord passed as `invoice_validity_duration` to
+    /// `create_lease_agreement`; used to compute off-chain invoice deadlines.
+    pub invoice_validity_duration: u64,
 }
 
 /// Query for `GET /leases`: scope to the caller as landlord and/or tenant,
