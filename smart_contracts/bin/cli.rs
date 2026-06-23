@@ -281,6 +281,7 @@ impl DeployScript for LeasefiDeployScript {
                 equity_distribution_requires_lease_option: false,
             },
         );
+        compliance.revoke_role(&compliance.compliance_manager_role(), &env.caller());
         property_registry.set_revenue_distributor(sample_property_id, treasury.address());
         property_registry.set_property_status(sample_property_id, PropertyStatus::Active);
 
