@@ -91,6 +91,45 @@ async fn onchain_registration_returns_hash_and_flags(pool: PgPool) {
     assert_eq!(body["role_flags"].as_u64(), Some(1));
 }
 
+/// `role_flags` is asserted per remaining role so a transposed constant would be
+/// caught: a Landlord maps to 2 and an Agent to 4 (Tenant=1 is covered above).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn onchain_registration_role_flags_per_role(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+
+    for (role, expected) in [("landlord", 2_u64), ("agent", 4_u64)] {
+        // Each wallet login creates a fresh user (and links the wallet); promote
+        // it to the role under test so the endpoint reports that role's flag.
+        let session = common::login_and_extract(&env).await;
+        sqlx::query("UPDATE users SET role = $1 WHERE id = $2")
+            .bind(role)
+            .bind(session.user_id)
+            .execute(&pool)
+            .await
+            .expect("set role under test");
+
+        let (status, body) = common::authed_request::<Value>(
+            &env.server,
+            &Method::GET,
+            "/api/v1/users/me/onchain-registration",
+            &session.access_token,
+            &json!({}),
+        )
+        .await;
+
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "{role} is eligible for on-chain registration"
+        );
+        assert_eq!(
+            body.expect("200 returns a JSON body")["role_flags"].as_u64(),
+            Some(expected),
+            "{role} must map to role_flags {expected}"
+        );
+    }
+}
+
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn onchain_registration_identity_hash_is_deterministic(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;

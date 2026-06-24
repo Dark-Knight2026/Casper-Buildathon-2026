@@ -10,7 +10,7 @@ use sqlx::{FromRow, PgPool};
 
 use api::{
     UserRole,
-    common::{RedisStore, VerificationLevel},
+    common::{RedisStore, VerificationLevel, tokens},
     services::auth,
 };
 use common::{CapturingMailer, TestEnv};
@@ -652,6 +652,83 @@ async fn reset_password_token_is_single_use(pool: PgPool) {
         .json(&json!({ "token": token, "new_password": "An0therPass" }))
         .await;
     assert_eq!(second.status_code(), StatusCode::BAD_REQUEST);
+}
+
+/// The reset slot carries a positive TTL (it was stored with `EX`), and once
+/// that TTL elapses the token is rejected with the generic 400 - TTL
+/// enforcement is the only thing stopping an intercepted link from being
+/// redeemable forever. A slot stored without expiry would read `TTL = -1` and
+/// fail the first assertion.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_rejects_expired_token(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "expired@example.com").await;
+    let token = forgot_and_take_token(&env, &mailer, "expired@example.com").await;
+
+    let hash = tokens::hash_presented(&token);
+    let key = RedisStore::password_reset_key(&hash);
+    let redis_env = env.redis.as_ref().expect("redis env");
+    let mut conn = redis_env
+        .client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("redis connection");
+
+    // The freshly-issued slot must have a positive, bounded TTL: proof it was
+    // stored with `EX` and is not a permanent (TTL = -1) entry.
+    let ttl = redis::cmd("TTL")
+        .arg(&key)
+        .query_async::<i64>(&mut conn)
+        .await
+        .expect("TTL on reset slot");
+    assert!(
+        ttl > 0 && ttl <= 30 * 60,
+        "reset slot must carry a positive bounded TTL, got {ttl}"
+    );
+
+    // Force the slot to expire (EXPIRE 0 evicts it immediately, the same effect
+    // the TTL has) and confirm the redeem path now rejects the token with 400.
+    redis::cmd("EXPIRE")
+        .arg(&key)
+        .arg(0)
+        .query_async::<i64>(&mut conn)
+        .await
+        .expect("EXPIRE the reset slot");
+
+    let response = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token, "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+/// A weak new password on reset is rejected (400) WITHOUT burning the one-shot
+/// token: the policy check runs before the Redis `GETDEL`, so the same token
+/// then completes the reset with a valid password. Pins the documented
+/// "fat-finger keeps the token live" UX invariant.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_weak_password_preserves_token(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "fatfinger@example.com").await;
+    let token = forgot_and_take_token(&env, &mailer, "fatfinger@example.com").await;
+
+    // A weak password fails the policy with 400 before the token is consumed.
+    let weak = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token.clone(), "new_password": "weak" }))
+        .await;
+    assert_eq!(weak.status_code(), StatusCode::BAD_REQUEST);
+
+    // The token survived: the same one now completes the reset with a valid
+    // password and re-logs the user in.
+    let strong = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token, "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(strong.status_code(), StatusCode::OK);
 }
 
 // Rate limiting ---------------------------------------------------------------
