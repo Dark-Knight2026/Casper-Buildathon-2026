@@ -391,7 +391,7 @@ fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_1()
     let mut ctx = setup(odra_test::env(), false);
     let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
 
-    ctx.env.advance_block_time(ONE_MINUTE * 1_000);
+    ctx.env.advance_block_time(ONE_MINUTE);
 
     let now = ctx.env.block_time();
 
@@ -1371,7 +1371,8 @@ fn test_get_ico_token_price_should_return_proper_ico_token_price_in_usd() {
 //                                 Helpers                                 //
 /////////////////////////////////////////////////////////////////////////////
 
-const ONE_MINUTE: u64 = 60;
+const ONE_SECOND: u64 = 1_000;
+const ONE_MINUTE: u64 = 60 * ONE_SECOND;
 const ONE_HOUR: u64 = 60 * ONE_MINUTE;
 const ONE_DAY: u64 = 24 * ONE_HOUR;
 const ONE_MONTH: u64 = 30 * ONE_DAY;
