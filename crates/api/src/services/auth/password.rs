@@ -51,14 +51,20 @@ fn invalid_credentials() -> ApiError {
 ///
 /// Fails open like the wallet-login limiter: a Redis outage degrades to "no
 /// extra limit" - the global `GovernorLayer` still applies - rather than taking
-/// registration down. A missing peer IP (no `ConnectInfo`, only off the real
-/// HTTP transport) skips the per-IP counter since there is nothing to key on.
-/// Invoked only after the payload validates, so malformed bodies the validator
-/// rejects never reach this gate and cannot burn an IP's registration budget.
+/// registration down. A missing peer IP (stripped forwarded-for header, or no
+/// `ConnectInfo`) is keyed under a shared `unknown` sentinel rather than
+/// skipped, so a proxy that drops the client IP cannot be used to register
+/// without limit; all such requests share one conservative bucket and a warning
+/// is emitted. Invoked only after the payload validates, so malformed bodies the
+/// validator rejects never reach this gate and cannot burn the budget.
 async fn enforce_register_rate_limit(state: &AppState, ip: Option<&str>) -> ApiResult<()> {
-    let Some(ip) = ip else {
-        return Ok(());
-    };
+    let ip = ip.unwrap_or_else(|| {
+        tracing::warn!(
+            event = "register_ip_missing",
+            "Registration request carries no client IP; rate-limiting under the shared sentinel"
+        );
+        "unknown"
+    });
     if state
         .redis
         .is_register_rate_limited(ip)

@@ -4,7 +4,7 @@ mod common;
 
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
-use serde_json::json;
+use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use common::TestEnv;
@@ -244,4 +244,45 @@ async fn change_password_requires_authentication(pool: PgPool) {
         .await;
 
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// Five wrong `current_password` attempts exhaust the per-user failure cap; the
+/// sixth is rejected by the limiter (429) rather than the credential check
+/// (401) - even the correct password is blocked while the lockout holds. This
+/// bounds brute-forcing `current_password` with a stolen but still-valid access
+/// cookie.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn change_password_rate_limited_after_five_failures(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+    let access = register_and_access(&env, "brutecur@example.com").await;
+
+    for _ in 0..5 {
+        let response = env
+            .server
+            .post("/api/v1/users/me/password")
+            .add_header(COOKIE, format!("access_token={access}"))
+            .json(&json!({
+                "current_password": "WrongGuess1",
+                "new_password": NEW_PASSWORD,
+            }))
+            .await;
+        assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    }
+
+    // The limiter now sits ahead of the credential check: even the correct
+    // current_password is blocked with 429 while the lockout holds.
+    let blocked = env
+        .server
+        .post("/api/v1/users/me/password")
+        .add_header(COOKIE, format!("access_token={access}"))
+        .json(&json!({
+            "current_password": VALID_PASSWORD,
+            "new_password": NEW_PASSWORD,
+        }))
+        .await;
+    assert_eq!(blocked.status_code(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        blocked.json::<Value>()["error"].as_str(),
+        Some("rate_limited")
+    );
 }

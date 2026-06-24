@@ -1032,6 +1032,8 @@ pub async fn patch_me_role(
 /// - 403 (`Forbidden`, code `reauthentication_required`) when the set path is
 ///   taken with a stale session.
 /// - 404 (`NotFound`) if the user row was soft-deleted mid-flow.
+/// - 429 (`TooManyRequests`, code `rate_limited`) when too many
+///   `current_password` attempts have failed for this user.
 /// - 500 for hashing, token-issuance, or DB failures.
 #[utoipa::path(
     post,
@@ -1044,6 +1046,7 @@ pub async fn patch_me_role(
         (status = 401, description = "Current password incorrect, or unauthorized", body = ErrorResponse),
         (status = 403, description = "Re-authentication required to set a first password", body = ErrorResponse),
         (status = 404, description = "User no longer exists", body = ErrorResponse),
+        (status = 429, description = "Too many failed current-password attempts", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
@@ -1060,13 +1063,33 @@ pub async fn change_password(
     let validated = payload.into_validated()?;
 
     if let Some(stored_hash) = db::fetch_password_hash(&state.db, user_id).await? {
-        // Change path: prove possession of the existing password.
+        // Change path: prove possession of the existing password. A per-user
+        // failure counter bounds brute-forcing `current_password` with a stolen
+        // access cookie; like the login limiter it fails open on a Redis error
+        // so an outage cannot block a legitimate change.
+        if state
+            .redis
+            .is_change_password_rate_limited(user_id)
+            .await
+            .unwrap_or(false)
+        {
+            tracing::warn!(
+                event = "password_change_rate_limited",
+                user_id = %user_id,
+                "Password change rejected: too many recent failures for this user"
+            );
+            return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
+        }
+
         let Some(current_password) = validated.current_password.as_ref() else {
             return Err(ApiError::BadRequest(
                 "current_password is required to change an existing password".to_owned(),
             ));
         };
         if !password::verify_password(current_password.expose_secret(), &stored_hash) {
+            if let Err(err) = state.redis.record_change_password_failure(user_id).await {
+                tracing::warn!(error = %err, user_id = %user_id, "failed to record change-password failure");
+            }
             tracing::info!(
                 event = "password_change_failed",
                 reason = "bad_current_password",

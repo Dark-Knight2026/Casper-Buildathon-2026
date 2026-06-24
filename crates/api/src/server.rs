@@ -30,7 +30,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     ApiDoc, AppState, EmailSender, LoggingEmailSender, PostmarkSender, RedisStore, S3MediaStorage,
-    ServerConfig, ServerError, SharedMediaStorage, StubMediaStorage, onchain, services, workers,
+    ServerConfig, ServerError, SharedMediaStorage, StubMediaStorage, common::password, onchain,
+    services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -232,6 +233,14 @@ pub async fn main() -> Result<(), ServerError> {
 
     // 4. Build app with production middleware
     let app = create_app(state)?;
+
+    // Pre-warm the constant-time login decoy before accepting traffic:
+    // `DUMMY_PASSWORD_HASH` is a `LazyLock` whose first Argon2 hash (~100ms)
+    // would otherwise run on the first unknown-email login after a restart,
+    // leaking a cold-start timing differential. Forcing it now puts that first
+    // request on the same timing as every later one.
+    password::dummy_verify("startup warmup");
+
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(address = %addr, "Server listening");
     let listener = TcpListener::bind(addr).await?;
