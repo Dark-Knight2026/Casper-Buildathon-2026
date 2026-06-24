@@ -92,7 +92,7 @@ test-one: ## Run single test: `make test-one <test_name>`
 	@$(MAKE) test ARGS="$(filter-out $@,$(MAKECMDGOALS))"
 
 test-in: ## Run tests in module: `make test-in <module_name>`
-	@$(MAKE) test ARGS="--test $(filter-out $@,$(MAKECMDGOALS))"
+	@$(MAKE) test ARGS="$(patsubst %,--test %,$(filter-out $@,$(MAKECMDGOALS)))"
 
 test-not: ## Exclude tests: `make test-not <test1> <test2> ...`
 	@expr=$$(echo "$(filter-out $@,$(MAKECMDGOALS))" \
