@@ -15,7 +15,7 @@
 use std::sync::LazyLock;
 
 use argon2::{
-    Argon2,
+    Algorithm, Argon2, Params, Version,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 
@@ -37,13 +37,29 @@ pub const MIN_PASSWORD_LEN: usize = 8;
 /// this bounds the hashed value independently of that.
 pub const MAX_PASSWORD_LEN: usize = 128;
 
+/// Builds the Argon2id hasher with the project's cost parameters.
+///
+/// 64 MiB memory, 2 iterations, 1 lane (`m=65536, t=2, p=1`) - the OWASP
+/// Password Storage Cheat Sheet minimum for Argon2id, well above the argon2
+/// crate's 19 MiB default. Defined once so [`hash_password`] and
+/// [`verify_password`] cannot drift onto different settings. Verification reads
+/// the cost from the stored hash, so raising these affects only newly produced
+/// hashes; every existing hash keeps verifying under its own embedded params.
+fn argon2() -> Argon2<'static> {
+    Argon2::new(
+        Algorithm::Argon2id,
+        Version::V0x13,
+        // m=65536 KiB (64 MiB), t=2, p=1; no secret or output-length override.
+        Params::new(65_536, 2, 1, None).expect("static Argon2 params are valid"),
+    )
+}
+
 /// Hashes a plaintext password into a storable PHC string.
 ///
-/// Uses [`Argon2::default`] - Argon2id, version 0x13, with the crate's default
-/// parameters (the agreed starting point). The salt is freshly generated from
-/// the OS CSPRNG ([`OsRng`]) per call, so identical passwords never produce
-/// identical hashes. The returned string is the only thing that needs to be
-/// persisted.
+/// Uses Argon2id at the OWASP-minimum cost (see [`argon2`]). The salt is freshly
+/// generated from the OS CSPRNG ([`OsRng`]) per call, so identical passwords
+/// never produce identical hashes. The returned string is the only thing that
+/// needs to be persisted.
 ///
 /// # Errors
 ///
@@ -53,7 +69,7 @@ pub const MAX_PASSWORD_LEN: usize = 128;
 #[inline]
 pub fn hash_password(plaintext: &str) -> ApiResult<String> {
     let salt = SaltString::generate(&mut OsRng);
-    Argon2::default()
+    argon2()
         .hash_password(plaintext.as_bytes(), &salt)
         .map(|hash| hash.to_string())
         .map_err(|err| ApiError::Internal(format!("password hashing failed: {err}")))
@@ -73,7 +89,7 @@ pub fn verify_password(plaintext: &str, stored_hash: &str) -> bool {
     let Ok(parsed) = PasswordHash::new(stored_hash) else {
         return false;
     };
-    Argon2::default()
+    argon2()
         .verify_password(plaintext.as_bytes(), &parsed)
         .is_ok()
 }

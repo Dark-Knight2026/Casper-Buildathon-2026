@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, application_id, requested_by, check_type, status,\n                result AS \"result?: Json<serde_json::Value>\", reference,\n                created_at, completed_at\n            FROM background_checks\n            WHERE application_id = $1\n            ORDER BY created_at DESC\n        ",
+  "query": "\n            SELECT\n                id, application_id, requested_by, check_type, status,\n                result AS \"result?: Json<Value>\", reference,\n                created_at, completed_at\n            FROM background_checks\n            WHERE application_id = $1\n            ORDER BY created_at DESC\n        ",
   "describe": {
     "columns": [
       {
@@ -60,7 +60,7 @@
       },
       {
         "ordinal": 5,
-        "name": "result?: Json<serde_json::Value>",
+        "name": "result?: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -120,5 +120,5 @@
       true
     ]
   },
-  "hash": "4574ba9ca63664094f351410da2dbbf3e70159064ed4e4163b800b5087cf6c38"
+  "hash": "33138be13485aab61cb964236f891393a6ea1a04652d7b9629e75043e63e1a15"
 }

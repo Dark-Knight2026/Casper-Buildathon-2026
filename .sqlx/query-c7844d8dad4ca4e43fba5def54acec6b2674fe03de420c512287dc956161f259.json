@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                intent,\n                state,\n                title,\n                days_on_market,\n                expires_at,\n                views,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM listings\n            WHERE property_id = $1 AND deleted_at IS NULL\n            ORDER BY created_at DESC\n        ",
+  "query": "\n            SELECT\n                id,\n                intent,\n                state,\n                title,\n                days_on_market,\n                expires_at,\n                views,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM listings\n            WHERE property_id = $1 AND deleted_at IS NULL\n            ORDER BY created_at DESC\n            LIMIT $2 OFFSET $3\n        ",
   "describe": {
     "columns": [
       {
@@ -105,7 +105,9 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -120,5 +122,5 @@
       true
     ]
   },
-  "hash": "b2ece0ee04828851326df2d5831fdb5fe4fdc1d56bf72596e61e50db89f5a59a"
+  "hash": "c7844d8dad4ca4e43fba5def54acec6b2674fe03de420c512287dc956161f259"
 }

@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{Error, PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::common::{UserRole, VerificationLevel, crypto};
+use crate::common::{UserRole, UserStatus, VerificationLevel, crypto};
 
 /// User record returned after login/registration.
 #[derive(Debug)]
@@ -459,9 +459,10 @@ pub struct PasswordLoginRecord {
     pub role: UserRole,
     /// Aggregate verification level, copied into the access-token claims.
     pub verification_level: VerificationLevel,
-    /// Account status (`active` / `pending_verification` / `suspended` /
-    /// `inactive`); the handler gates login on it.
-    pub status: Option<String>,
+    /// Account status; the handler gates login on it. `Option` because
+    /// `users.status` is nullable (DEFAULT `'active'`, no `NOT NULL`), so a row
+    /// can carry NULL, which the handler treats as not-loginable.
+    pub status: Option<UserStatus>,
 }
 
 /// Looks up the password-login fields for an email, or `None` when no live
@@ -510,12 +511,24 @@ pub async fn find_password_login_by_email(
             }
         })?;
 
+    // Decode the nullable status into the typed enum at this boundary so the
+    // handler matches on variants instead of stringly-typed values; an
+    // unrecognized value fails loudly rather than silently passing the gate.
+    let status = row
+        .status
+        .map(|value| UserStatus::from_str(&value))
+        .transpose()
+        .map_err(|err| Error::ColumnDecode {
+            index: "status".to_owned(),
+            source: Box::new(err),
+        })?;
+
     Ok(Some(PasswordLoginRecord {
         id: row.id,
         password_hash: row.password_hash,
         role,
         verification_level,
-        status: row.status,
+        status,
     }))
 }
 

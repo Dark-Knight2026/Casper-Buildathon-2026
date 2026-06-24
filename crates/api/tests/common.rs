@@ -24,6 +24,7 @@ use chrono::{Duration, Utc};
 use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rand::Rng;
+use redis::Client as RedisClient;
 use s3::{Bucket, BucketConfiguration, Region, creds::Credentials};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
@@ -37,15 +38,17 @@ use testcontainers::{
 use uuid::Uuid;
 
 use api::{
-    AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId, UserRole,
+    AppEnv, AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId,
+    UserRole,
     common::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
         VerificationLevel, tokens,
     },
     providers::{
-        EmailError, EmailMessage, EmailSender, FakeBackgroundCheckProvider, FakeKycProvider,
-        FakeLeaseChainReader, FakePinner, KycOutcome, KycProvider, KycResult, NoopMetadataStripper,
-        SharedMediaStorage, SimpleLeaseDocumentRenderer, StubFairHousingScreen, StubMediaStorage,
+        ContentPinner, EmailError, EmailMessage, EmailSender, FakeBackgroundCheckProvider,
+        FakeKycProvider, FakeLeaseChainReader, FakePinner, KycOutcome, KycProvider, KycResult,
+        NoopMetadataStripper, PinError, PinResult, SharedContentPinner, SharedMediaStorage,
+        SimpleLeaseDocumentRenderer, StubFairHousingScreen, StubMediaStorage,
     },
     server,
 };
@@ -63,7 +66,7 @@ pub const TEST_CORS_ORIGIN: &str = "http://localhost:8080";
 /// Container stays alive as long as this struct exists.
 pub struct RedisTestEnv {
     /// Redis client for test connections.
-    pub client: redis::Client,
+    pub client: RedisClient,
     /// Redis connection URL.
     pub url: String,
     /// Keeps the container alive for the duration of the test.
@@ -74,7 +77,7 @@ impl Debug for RedisTestEnv {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("RedisTestEnv")
-            .field("client", &"redis::Client")
+            .field("client", &"RedisClient")
             .field("url", &self.url)
             .finish_non_exhaustive()
     }
@@ -95,7 +98,7 @@ impl RedisTestEnv {
             .expect("Failed to get Redis port");
 
         let url = format!("redis://127.0.0.1:{port}");
-        let client = redis::Client::open(url.clone()).expect("Invalid Redis URL");
+        let client = RedisClient::open(url.clone()).expect("Invalid Redis URL");
 
         Self {
             client,
@@ -159,6 +162,13 @@ pub struct TestOverrides {
     /// the `-> active` gate's identity branch to its rejection - the default
     /// fake can never fail it.
     pub kyc: Option<Arc<dyn KycProvider>>,
+    /// Custom content pinner for the test (defaults to `FakePinner`, which
+    /// always succeeds).
+    ///
+    /// The property-create atomicity test installs a [`FailingContentPinner`]
+    /// here to drive the IPFS-pin branch of `create_property` to its error and
+    /// assert no orphaned property row is committed.
+    pub content_pinner: Option<SharedContentPinner>,
 }
 
 impl Debug for TestOverrides {
@@ -175,6 +185,10 @@ impl Debug for TestOverrides {
             .field("email_change_max_attempts", &self.email_change_max_attempts)
             .field("request_body_limit_mb", &self.request_body_limit_mb)
             .field("kyc", &self.kyc.as_ref().map(|_| "KycProvider"))
+            .field(
+                "content_pinner",
+                &self.content_pinner.as_ref().map(|_| "ContentPinner"),
+            )
             .finish()
     }
 }
@@ -205,7 +219,7 @@ pub async fn setup_test_server_with(
     } else {
         // Fake Redis URL - will fail if actually used
         let url = "redis://127.0.0.1:6379";
-        let client = redis::Client::open(url).expect("Invalid Redis URL");
+        let client = RedisClient::open(url).expect("Invalid Redis URL");
         (SecretString::from(url), client, None)
     };
 
@@ -219,6 +233,7 @@ pub async fn setup_test_server_with(
         frontend_url: "http://localhost:3000".to_owned(),
         request_body_limit_mb: overrides.request_body_limit_mb.unwrap_or(8),
         cookie_secure: false,
+        app_env: AppEnv::Development,
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
@@ -243,7 +258,9 @@ pub async fn setup_test_server_with(
             .kyc
             .unwrap_or_else(|| Arc::new(FakeKycProvider::new()) as Arc<dyn KycProvider>),
         fair_housing: Arc::new(StubFairHousingScreen::new()),
-        content_pinner: Arc::new(FakePinner::new()),
+        content_pinner: overrides
+            .content_pinner
+            .unwrap_or_else(|| Arc::new(FakePinner::new()) as SharedContentPinner),
         metadata_stripper: Arc::new(NoopMetadataStripper::new()),
         lease_chain_reader: Arc::new(FakeLeaseChainReader::new()),
         lease_document_renderer: Arc::new(SimpleLeaseDocumentRenderer::new()),
@@ -327,6 +344,26 @@ impl KycProvider for FailingKycProvider {
     }
 }
 
+/// Content pinner whose `pin` always fails with a transport error.
+///
+/// The default `FakePinner` always succeeds, so the IPFS-pin failure branch of
+/// `create_property` can never be exercised under it. Tests that must drive that
+/// branch to its error install this via [`TestOverrides::content_pinner`]. A
+/// `PinError::Transport` maps to a `500`; with an atomic create path it must
+/// also leave no committed property row behind.
+#[derive(Debug, Default)]
+pub struct FailingContentPinner;
+
+#[async_trait]
+impl ContentPinner for FailingContentPinner {
+    #[inline]
+    async fn pin(&self, _bytes: &[u8]) -> PinResult<String> {
+        Err(PinError::Transport(
+            "failing content pinner (test fixture)".to_owned(),
+        ))
+    }
+}
+
 /// Mailer that records every successfully-sent message in memory.
 ///
 /// Used wherever a test needs the plaintext payload that travels only inside
@@ -397,6 +434,22 @@ pub async fn setup_test_server_failing_kyc(pool: PgPool) -> TestEnv {
         false,
         TestOverrides {
             kyc: Some(Arc::new(FailingKycProvider) as Arc<dyn KycProvider>),
+            ..TestOverrides::default()
+        },
+    )
+    .await
+}
+
+/// Builds a test server whose content pinner always fails (see
+/// [`FailingContentPinner`]). Used by the property-create atomicity test; keeps
+/// the `Arc<dyn ContentPinner>` coercion in one place.
+#[inline]
+pub async fn setup_test_server_failing_pinner(pool: PgPool) -> TestEnv {
+    setup_test_server_with(
+        pool,
+        false,
+        TestOverrides {
+            content_pinner: Some(Arc::new(FailingContentPinner) as SharedContentPinner),
             ..TestOverrides::default()
         },
     )

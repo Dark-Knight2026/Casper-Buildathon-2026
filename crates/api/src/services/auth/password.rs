@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, http::StatusCode};
 use axum_extra::extract::CookieJar;
 use chrono::{Duration, Utc};
 use secrecy::ExposeSecret;
@@ -16,7 +16,8 @@ use uuid::Uuid;
 
 use crate::{
     common::{
-        ApiError, ApiResult, AppState, ErrorResponse, SendReservation, UserInfo, password, tokens,
+        ApiError, ApiResult, AppState, ErrorResponse, SendReservation, UserInfo, UserStatus,
+        password, tokens,
     },
     providers::{EmailError, EmailMessage},
     services::{
@@ -50,17 +51,27 @@ fn invalid_credentials() -> ApiError {
 ///
 /// Fails open like the wallet-login limiter: a Redis outage degrades to "no
 /// extra limit" - the global `GovernorLayer` still applies - rather than taking
-/// registration down. A missing peer IP (no `ConnectInfo`, only off the real
-/// HTTP transport) skips the per-IP counter since there is nothing to key on.
-/// On a pass the attempt is recorded before any work, so a flood of bodies the
-/// validator would reject still counts toward the cap.
+/// registration down. A missing peer IP (stripped forwarded-for header, or no
+/// `ConnectInfo`) is keyed under a shared `unknown` sentinel rather than
+/// skipped, so a proxy that drops the client IP cannot be used to register
+/// without limit; all such requests share one conservative bucket and a warning
+/// is emitted. Invoked only after the payload validates, so malformed bodies the
+/// validator rejects never reach this gate and cannot burn the budget.
 async fn enforce_register_rate_limit(state: &AppState, ip: Option<&str>) -> ApiResult<()> {
-    let Some(ip) = ip else {
-        return Ok(());
-    };
+    let ip = ip.unwrap_or_else(|| {
+        tracing::warn!(
+            event = "register_ip_missing",
+            "Registration request carries no client IP; rate-limiting under the shared sentinel"
+        );
+        "unknown"
+    });
+    // One atomic INCR-then-check: counts this attempt and reports whether the IP
+    // is now over the cap, with no check-then-act gap between concurrent
+    // requests. Fails open on a Redis error (the global GovernorLayer still
+    // applies) so an outage cannot take registration down.
     if state
         .redis
-        .is_register_rate_limited(ip)
+        .record_and_check_register_rate_limit(ip)
         .await
         .unwrap_or(false)
     {
@@ -70,9 +81,6 @@ async fn enforce_register_rate_limit(state: &AppState, ip: Option<&str>) -> ApiR
             "Too many registration attempts from this client"
         );
         return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
-    }
-    if let Err(err) = state.redis.record_register_attempt(ip).await {
-        tracing::warn!(error = %err, %ip, "failed to record registration attempt");
     }
     Ok(())
 }
@@ -100,8 +108,9 @@ async fn note_login_failure(state: &AppState, email: &str) {
 /// `primary_auth_method = 'password'`, `status = 'pending_verification'`,
 /// `verification_level = 'none'`, and no wallet; a duplicate email yields 409.
 /// Finally the new user is auto-logged-in: an access JWT and refresh token are
-/// minted and returned via `Set-Cookie`, with the profile in the body - the
-/// same shape as wallet login.
+/// minted and returned via `Set-Cookie`, with the profile in the body, and the
+/// response carries `201 Created` since a new user resource was provisioned -
+/// unlike wallet/password *login*, which is not resource creation and stays 200.
 ///
 /// The verification email is intentionally NOT sent here; the user triggers it
 /// separately via `POST /auth/verify/email/send`, so a fresh account starts at
@@ -114,8 +123,8 @@ async fn note_login_failure(state: &AppState, email: &str) {
 ///
 /// # Returns
 ///
-/// `(CookieJar, Json<LoginResponse>)` - jar carries `access_token` and
-/// `refresh_token`; body has the user profile only.
+/// `(StatusCode::CREATED, CookieJar, Json<LoginResponse>)` - jar carries
+/// `access_token` and `refresh_token`; body has the user profile only.
 ///
 /// # Errors
 ///
@@ -130,7 +139,7 @@ async fn note_login_failure(state: &AppState, email: &str) {
     tag = "Auth",
     request_body = RegisterRequest,
     responses(
-        (status = 200, description = "Registration successful; user auto-logged in", body = LoginResponse),
+        (status = 201, description = "Registration successful; user created and auto-logged in", body = LoginResponse),
         (status = 400, description = "Invalid email, weak password, disallowed role, or empty name", body = ErrorResponse),
         (status = 409, description = "Email already registered", body = ErrorResponse),
         (status = 429, description = "Too many registration attempts from this client", body = ErrorResponse),
@@ -142,10 +151,13 @@ pub async fn register(
     State(state): State<Arc<AppState>>,
     audit: RequestAudit,
     Json(payload): Json<RegisterRequest>,
-) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
+) -> ApiResult<(StatusCode, CookieJar, Json<LoginResponse>)> {
+    // Validate first so a flood of malformed bodies cannot consume the per-IP
+    // registration budget; only well-formed requests reach the rate-limit gate.
+    let validated = payload.into_validated()?;
+
     enforce_register_rate_limit(&state, audit.ip.as_deref()).await?;
 
-    let validated = payload.into_validated()?;
     let password_hash = password::hash_password(validated.password.expose_secret())?;
 
     let user_record = match db::create_password_user(
@@ -194,6 +206,7 @@ pub async fn register(
     );
 
     Ok((
+        StatusCode::CREATED,
         jar,
         Json(LoginResponse {
             user: UserInfo::from(profile),
@@ -299,8 +312,8 @@ pub async fn login_password(
     // must be able to log in; protected resources are gated separately by the
     // `VerifiedUser<_>` extractor.
     if !matches!(
-        record.status.as_deref(),
-        Some("active" | "pending_verification")
+        record.status,
+        Some(UserStatus::Active | UserStatus::PendingVerification)
     ) {
         tracing::warn!(
             event = "login_failed",

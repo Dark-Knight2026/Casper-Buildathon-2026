@@ -18,6 +18,38 @@ Session-management endpoints live in [`auth_sessions.md`](auth_sessions.md).
 - **Errors:** 400 (invalid wallet/signature/role), 401 (expired nonce or signature mismatch), 403 (account not active), 429 (per-wallet rate limit), 500
 - **Auth:** Public
 
+## POST `/api/v1/auth/register`
+
+- **Input:** `{ "email": "...", "password": "...", "first_name": "...", "last_name": "...", "role"?: "tenant"|"landlord"|"agent" }`
+- **Response (201):** `{ "user": UserInfo }` plus `Set-Cookie: access_token=...; refresh_token=...`. The new user is auto-logged-in. See [`users.md`](users.md) for the `UserInfo` shape.
+- **Behavior:** off-chain account creation - `primary_auth_method = password`, `status = pending_verification`, `verification_level = none`, no wallet. `role` defaults to `tenant`. The verification email is NOT sent here; trigger it separately via `POST /auth/verify/email/send`. Password policy: at least 8 characters, one digit, and both upper- and lowercase letters. The per-IP rate-limit counter is consumed only by well-formed requests (validation runs first).
+- **Errors:** 400 (invalid email, weak password, disallowed role, or empty name), 409 (email already registered), 429 (per-IP registration rate limit), 500
+- **Auth:** Public
+
+## POST `/api/v1/auth/login/password`
+
+- **Input:** `{ "email": "...", "password": "..." }`
+- **Response (200):** `{ "user": UserInfo }` plus `Set-Cookie: access_token=...; refresh_token=...`
+- **Behavior:** constant-time password verify. An unknown email, a wrong password, and a wallet-only account (no password hash) all return the same generic 401 - the response never reveals which check failed (anti-enumeration). `active` and `pending_verification` accounts may log in; `suspended`/`inactive` are rejected with 403.
+- **Errors:** 401 (invalid email or password - never distinguishes the cases), 403 (account suspended or inactive), 429 (per-email failed-login rate limit), 500
+- **Auth:** Public
+
+## POST `/api/v1/auth/password/forgot`
+
+- **Input:** `{ "email": "..." }`
+- **Response (200):** `{ "status": "sent" }` - always, regardless of whether the email maps to a reset-eligible account (anti-enumeration). A real reset link is mailed only for a live account that actually has a password.
+- **Behavior:** the reset token is single-use and expires in 30 minutes. Send is rate-limited (1/min, 5/hour per user); a throttled or wallet-only request still returns `sent` with no email.
+- **Errors:** 500 (underlying Redis/DB failure only - input-independent, so it leaks nothing; a mailer failure is swallowed into `sent`)
+- **Auth:** Public
+
+## POST `/api/v1/auth/password/reset`
+
+- **Input:** `{ "token": "<reset token from the email link>", "new_password": "..." }`
+- **Response (200):** `{ "user": UserInfo }` plus `Set-Cookie` rotating both `access_token` and `refresh_token`. Every prior session is force-revoked and the user is re-logged-in on a fresh pair.
+- **Behavior:** the new password is policy-checked BEFORE the token is consumed, so a weak password (400) keeps the one-shot token live for another try. The token is single-use (`GETDEL`).
+- **Errors:** 400 (invalid/expired/consumed token, or weak password - one generic message, never distinguishing the cases), 404 (account soft-deleted between forgot and reset), 500
+- **Auth:** Public (possession of the emailed token is the only credential)
+
 ## POST `/api/v1/auth/refresh`
 
 - **Input:** none (reads `refresh_token` cookie)

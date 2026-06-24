@@ -59,9 +59,15 @@ pub async fn create_property(
     Json(payload): Json<CreatePropertyRequest>,
 ) -> ApiResult<(StatusCode, Json<Property>)> {
     let new_property = payload.try_into()?;
-    let (mut row, was_inserted) = db::upsert_property(&state.db, user.0.sub, new_property).await?;
+    // Atomic create: the row is committed only once its metadata is pinned and
+    // the URI is written. A pin failure drops the transaction, so a failed
+    // create never leaves a committed property row without a metadata URI.
+    let mut tx = state.db.begin().await?;
+    let (mut row, was_inserted) =
+        db::upsert_property(tx.as_mut(), user.0.sub, new_property).await?;
     let metadata_uri = metadata::pin_property_metadata(state.content_pinner.as_ref(), &row).await?;
-    db::set_property_metadata_uri(&state.db, row.id, &metadata_uri).await?;
+    db::set_property_metadata_uri(tx.as_mut(), row.id, &metadata_uri).await?;
+    tx.commit().await?;
     row.metadata_uri = Some(metadata_uri);
     let status = if was_inserted {
         StatusCode::CREATED
@@ -161,10 +167,11 @@ pub async fn get_property(
 
 // `GET /api/v1/properties/{id}/listings`
 //
-/// Lists every listing (offer history) made against this property.
+/// Lists a page of the listings (offer history) made against this property.
 ///
 /// Landlord only, scoped to the property's owner: a non-owner gets `403`, a
-/// missing property `404`.
+/// missing property `404`. Paged via `page`/`page_size`; the response carries
+/// the page slice plus the full `itemCount`/`pageCount`.
 ///
 /// # Errors
 ///
@@ -175,10 +182,11 @@ pub async fn get_property(
     path = "/properties/{id}/listings",
     tag = "Properties",
     params(
-        ("id" = Uuid, Path, description = "Property id")
+        ("id" = Uuid, Path, description = "Property id"),
+        Pagination,
     ),
     responses(
-        (status = 200, description = "Listing history for the property", body = Vec<PropertyListingSummary>),
+        (status = 200, description = "Listing history for the property (paginated)", body = PaginatedResponse<PropertyListingSummary>),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 403, description = "Not the property owner", body = ErrorResponse),
         (status = 404, description = "Property not found", body = ErrorResponse),
@@ -193,16 +201,23 @@ pub async fn get_property_listings(
     State(state): State<Arc<AppState>>,
     user: RoleUser<LandlordRole>,
     Path(property_id): Path<Uuid>,
-) -> ApiResult<Json<Vec<PropertyListingSummary>>> {
+    Query(pagination): Query<Pagination>,
+) -> ApiResult<Json<PaginatedResponse<PropertyListingSummary>>> {
     let owner = db::fetch_property_owner(&state.db, property_id)
         .await?
         .ok_or_else(|| ApiError::NotFound("property not found".to_owned()))?;
     if owner != user.0.sub {
         return Err(ApiError::Forbidden("not_property_owner".to_owned()));
     }
-    let rows = db::list_property_listings(&state.db, property_id).await?;
+    let (rows, total) = db::list_property_listings(
+        &state.db,
+        property_id,
+        pagination.page_size(),
+        pagination.offset(),
+    )
+    .await?;
     let listings = rows.into_iter().map(PropertyListingSummary::from).collect();
-    Ok(Json(listings))
+    Ok(Json(PaginatedResponse::new(listings, total, &pagination)))
 }
 
 // `GET /api/v1/properties/search`

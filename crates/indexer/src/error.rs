@@ -56,6 +56,11 @@ pub enum IndexerError {
     /// Event name not recognized by a contract event type's `FromStr` parser.
     #[error("Invalid event name: '{0}'")]
     InvalidEventName(String),
+
+    /// A database invariant the indexer relies on was violated (e.g. a single
+    /// on-chain event matched more rows than it ever should).
+    #[error("Data integrity error: {0}")]
+    DataIntegrity(String),
 }
 
 /// Shorthand for `Result<T, IndexerError>` used throughout the indexer crate.
