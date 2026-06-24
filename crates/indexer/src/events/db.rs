@@ -1328,6 +1328,76 @@ pub async fn bind_invoice_onchain_id_by_commit_tx_hash(
     Ok(result.rows_affected() > 0)
 }
 
+/// Records a partial (or running-total) rent payment on the invoice bound to
+/// this on-chain id, the `InvoicePaymentApplied` reconciliation step.
+///
+/// `rent_paid` is the contract's cumulative figure, written verbatim (not
+/// incremented here). The status moves to `partial`; a following `InvoicePaid`
+/// settles it to `paid` when the balance is cleared. The
+/// `status IN ('pending', 'partial')` guard keeps it idempotent and prevents a
+/// late event from disturbing a released/refunded/cancelled invoice.
+///
+/// Returns `true` when an invoice was updated, `false` when none matched.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn apply_invoice_payment_by_onchain_id(
+    tx: &mut PgTransaction<'_>,
+    onchain_invoice_id: &str,
+    rent_paid: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE invoices
+            SET rent_paid = $2::TEXT::NUMERIC,
+                status = 'partial'
+            WHERE onchain_invoice_id = $1::TEXT::NUMERIC
+              AND status IN ('pending', 'partial')
+        ",
+        onchain_invoice_id,
+        rent_paid,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// Settles the invoice bound to this on-chain id to `paid`, the `InvoicePaid`
+/// reconciliation step.
+///
+/// Applies to both kinds: a fully-paid rent invoice, and a security deposit now
+/// held in escrow custody (its later `released`/`refunded` state comes from
+/// `SecurityDepositReleased`). The `status IN ('pending', 'partial')` guard
+/// keeps it idempotent.
+///
+/// Returns `true` when an invoice was settled, `false` when none matched.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn mark_invoice_paid_by_onchain_id(
+    tx: &mut PgTransaction<'_>,
+    onchain_invoice_id: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE invoices
+            SET status = 'paid'
+            WHERE onchain_invoice_id = $1::TEXT::NUMERIC
+              AND status IN ('pending', 'partial')
+        ",
+        onchain_invoice_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
 /// Marks the backend property matching `metadata_uri` as tokenized on-chain,
 /// stamping the contract-assigned id.
 ///

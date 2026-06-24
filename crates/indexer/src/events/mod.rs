@@ -197,6 +197,8 @@ impl EventRegistry {
             EventType::Lease(LeaseEventType::EquityEligibilityGranted) => lease::EquityEligibilityGranted,
             EventType::Lease(LeaseEventType::EquityEligibilityRevoked) => lease::EquityEligibilityRevoked,
             EventType::Escrow(EscrowEventType::InvoiceCreated) => escrow::InvoiceCreated,
+            EventType::Escrow(EscrowEventType::InvoicePaymentApplied) => escrow::InvoicePaymentApplied,
+            EventType::Escrow(EscrowEventType::InvoicePaid) => escrow::InvoicePaid,
         )
     }
 }

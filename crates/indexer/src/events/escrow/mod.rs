@@ -6,8 +6,12 @@
 //! the mirror against on-chain settlement.
 
 pub mod invoice_created;
+pub mod invoice_paid;
+pub mod invoice_payment_applied;
 
 pub use invoice_created::InvoiceCreated;
+pub use invoice_paid::InvoicePaid;
+pub use invoice_payment_applied::InvoicePaymentApplied;
 
 use core::str::FromStr;
 
@@ -17,13 +21,21 @@ use crate::{
 };
 
 /// CES binary schemas for all indexed `Escrow` events.
-pub static CES_SCHEMAS: &[EventSchema] = &[<InvoiceCreated as CesEvent>::SCHEMA];
+pub static CES_SCHEMAS: &[EventSchema] = &[
+    <InvoiceCreated as CesEvent>::SCHEMA,
+    <InvoicePaymentApplied as CesEvent>::SCHEMA,
+    <InvoicePaid as CesEvent>::SCHEMA,
+];
 
 /// All indexed `Escrow` contract events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EscrowEventType {
     /// Emitted when the `Lease` contract mints an invoice via `Escrow::create_invoice`.
     InvoiceCreated,
+    /// Emitted when a (possibly partial) rent payment is applied via `pay_invoice`.
+    InvoicePaymentApplied,
+    /// Emitted when an invoice's balance is fully cleared via `pay_invoice`.
+    InvoicePaid,
 }
 
 impl EscrowEventType {
@@ -33,6 +45,8 @@ impl EscrowEventType {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::InvoiceCreated => "InvoiceCreated",
+            Self::InvoicePaymentApplied => "InvoicePaymentApplied",
+            Self::InvoicePaid => "InvoicePaid",
         }
     }
 }
@@ -44,6 +58,8 @@ impl FromStr for EscrowEventType {
     fn from_str(s: &str) -> IndexerResult<Self> {
         match s {
             "InvoiceCreated" => Ok(Self::InvoiceCreated),
+            "InvoicePaymentApplied" => Ok(Self::InvoicePaymentApplied),
+            "InvoicePaid" => Ok(Self::InvoicePaid),
             _ => Err(IndexerError::InvalidEventName(s.to_owned())),
         }
     }
