@@ -1185,3 +1185,52 @@ async fn get_lease_tenant_onchain_user_id_populated_when_registered(pool: PgPool
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.unwrap()["tenantOnchainUserId"].as_str().unwrap(), "7");
 }
+
+/// Inserts an `active` lease and returns the trigger-generated `lease_number`.
+async fn insert_lease_returning_number(
+    pool: &PgPool,
+    landlord: Uuid,
+    tenant: Uuid,
+    property: Uuid,
+) -> String {
+    sqlx::query_scalar::<_, String>(
+        r"
+            INSERT INTO leases (
+                landlord_id, property_id, tenant_ids, primary_tenant_id,
+                type, status, start_date, end_date, monthly_rent, security_deposit, created_by
+            )
+            VALUES (
+                $1, $2, ARRAY[$3]::uuid[], $3,
+                'fixed_term', 'active', CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year',
+                1000.00, 1000.00, $1
+            )
+            RETURNING lease_number
+        ",
+    )
+    .bind(landlord)
+    .bind(property)
+    .bind(tenant)
+    .fetch_one(pool)
+    .await
+    .expect("insert lease")
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn second_lease_in_year_gets_a_sequential_number(pool: PgPool) {
+    // Regression: `generate_lease_number()` sliced the running counter with
+    // `SUBSTRING(lease_number FROM 6)` - an offset written for a 2-digit year -
+    // but the format is `LS<4-digit-year>-<counter>`. The first lease in a year
+    // skips the slice (no existing rows), so the bug only bit the *second*
+    // lease, where `CAST('6-00001' AS INTEGER)` blew up. Both inserts must
+    // succeed and yield distinct, `LS`-prefixed numbers.
+    let landlord = common::seed_user(&pool, UserRole::Landlord).await;
+    let tenant = common::seed_user(&pool, UserRole::Tenant).await;
+    let property = common::seed_property(&pool, landlord).await;
+
+    let first = insert_lease_returning_number(&pool, landlord, tenant, property).await;
+    let second = insert_lease_returning_number(&pool, landlord, tenant, property).await;
+
+    assert!(first.starts_with("LS"), "unexpected format: {first}");
+    assert!(second.starts_with("LS"), "unexpected format: {second}");
+    assert_ne!(first, second, "the second lease must get a fresh number");
+}
