@@ -35,7 +35,7 @@ async fn register_password_user(env: &TestEnv, email: &str) -> String {
         .await;
     assert_eq!(
         response.status_code(),
-        StatusCode::OK,
+        StatusCode::CREATED,
         "registration must succeed"
     );
     response.cookie("access_token").value().to_owned()
@@ -160,7 +160,7 @@ async fn onchain_registration_rejects_zero_role_flags(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn onchain_registration_conflicts_without_wallet(pool: PgPool) {
+async fn onchain_registration_requires_wallet(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
     let access_token = register_password_user(&env, "nowallet@example.com").await;
 
@@ -173,8 +173,8 @@ async fn onchain_registration_conflicts_without_wallet(pool: PgPool) {
     )
     .await;
 
-    // No wallet linked yet -> the onboarding-order gate returns 409.
-    assert_eq!(status, StatusCode::CONFLICT);
+    // No wallet linked yet is an unmet precondition, not a conflict -> 422.
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]

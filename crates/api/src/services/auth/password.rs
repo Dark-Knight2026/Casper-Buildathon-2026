@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, http::StatusCode};
 use axum_extra::extract::CookieJar;
 use chrono::{Duration, Utc};
 use secrecy::ExposeSecret;
@@ -107,8 +107,9 @@ async fn note_login_failure(state: &AppState, email: &str) {
 /// `primary_auth_method = 'password'`, `status = 'pending_verification'`,
 /// `verification_level = 'none'`, and no wallet; a duplicate email yields 409.
 /// Finally the new user is auto-logged-in: an access JWT and refresh token are
-/// minted and returned via `Set-Cookie`, with the profile in the body - the
-/// same shape as wallet login.
+/// minted and returned via `Set-Cookie`, with the profile in the body, and the
+/// response carries `201 Created` since a new user resource was provisioned -
+/// unlike wallet/password *login*, which is not resource creation and stays 200.
 ///
 /// The verification email is intentionally NOT sent here; the user triggers it
 /// separately via `POST /auth/verify/email/send`, so a fresh account starts at
@@ -121,8 +122,8 @@ async fn note_login_failure(state: &AppState, email: &str) {
 ///
 /// # Returns
 ///
-/// `(CookieJar, Json<LoginResponse>)` - jar carries `access_token` and
-/// `refresh_token`; body has the user profile only.
+/// `(StatusCode::CREATED, CookieJar, Json<LoginResponse>)` - jar carries
+/// `access_token` and `refresh_token`; body has the user profile only.
 ///
 /// # Errors
 ///
@@ -137,7 +138,7 @@ async fn note_login_failure(state: &AppState, email: &str) {
     tag = "Auth",
     request_body = RegisterRequest,
     responses(
-        (status = 200, description = "Registration successful; user auto-logged in", body = LoginResponse),
+        (status = 201, description = "Registration successful; user created and auto-logged in", body = LoginResponse),
         (status = 400, description = "Invalid email, weak password, disallowed role, or empty name", body = ErrorResponse),
         (status = 409, description = "Email already registered", body = ErrorResponse),
         (status = 429, description = "Too many registration attempts from this client", body = ErrorResponse),
@@ -149,7 +150,7 @@ pub async fn register(
     State(state): State<Arc<AppState>>,
     audit: RequestAudit,
     Json(payload): Json<RegisterRequest>,
-) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
+) -> ApiResult<(StatusCode, CookieJar, Json<LoginResponse>)> {
     // Validate first so a flood of malformed bodies cannot consume the per-IP
     // registration budget; only well-formed requests reach the rate-limit gate.
     let validated = payload.into_validated()?;
@@ -204,6 +205,7 @@ pub async fn register(
     );
 
     Ok((
+        StatusCode::CREATED,
         jar,
         Json(LoginResponse {
             user: UserInfo::from(profile),

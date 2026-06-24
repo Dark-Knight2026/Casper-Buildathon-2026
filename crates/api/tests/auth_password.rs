@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use axum_test::{TestResponse, http::header::COOKIE};
 use secrecy::SecretString;
 use serde_json::{Value, json};
-use sqlx::PgPool;
+use sqlx::{FromRow, PgPool};
 
 use api::{
     UserRole,
@@ -27,7 +27,7 @@ const NEW_PASSWORD: &str = "N3wPassword";
 
 /// Auth-relevant columns of a `users` row, read back via a runtime
 /// `query_as`. Nullable columns map to `Option`.
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct UserAuthRow {
     /// `users.primary_auth_method` (NOT NULL): `'wallet' | 'password' | 'oauth'`.
     primary_auth_method: String,
@@ -59,7 +59,7 @@ async fn register_creates_user_and_logs_in(pool: PgPool) {
         }))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.status_code(), StatusCode::CREATED);
 
     // Auto-login: both auth cookies must be set.
     let access_token = response.cookie("access_token").value().to_owned();
@@ -118,7 +118,7 @@ async fn register_duplicate_email_returns_409(pool: PgPool) {
         .post("/api/v1/auth/register")
         .json(&payload)
         .await;
-    assert_eq!(first.status_code(), StatusCode::OK);
+    assert_eq!(first.status_code(), StatusCode::CREATED);
 
     let second = env
         .server
@@ -144,7 +144,7 @@ async fn register_normalizes_email_case(pool: PgPool) {
             "last_name": "A",
         }))
         .await;
-    assert_eq!(first.status_code(), StatusCode::OK);
+    assert_eq!(first.status_code(), StatusCode::CREATED);
 
     let second = env
         .server
@@ -252,7 +252,7 @@ async fn password_login_succeeds_with_valid_credentials(pool: PgPool) {
             "last_name": "In",
         }))
         .await;
-    assert_eq!(register.status_code(), StatusCode::OK);
+    assert_eq!(register.status_code(), StatusCode::CREATED);
 
     // Mixed case on login proves the handler normalizes before lookup.
     let response = env
@@ -300,7 +300,7 @@ async fn password_login_rejects_wrong_password(pool: PgPool) {
             "last_name": "Pass",
         }))
         .await;
-    assert_eq!(register.status_code(), StatusCode::OK);
+    assert_eq!(register.status_code(), StatusCode::CREATED);
 
     let response = env
         .server
@@ -378,7 +378,7 @@ async fn password_login_rejects_suspended_account(pool: PgPool) {
             "last_name": "Pended",
         }))
         .await;
-    assert_eq!(register.status_code(), StatusCode::OK);
+    assert_eq!(register.status_code(), StatusCode::CREATED);
 
     sqlx::query("UPDATE users SET status = 'suspended' WHERE email = $1")
         .bind("suspended@example.com")
@@ -414,7 +414,7 @@ async fn register_account(env: &TestEnv, email: &str) -> TestResponse {
             "last_name": "Got",
         }))
         .await;
-    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.status_code(), StatusCode::CREATED);
     response
 }
 
@@ -708,7 +708,7 @@ async fn register_rate_limited_after_five_attempts_per_ip(pool: PgPool) {
         let response = post_register(&env, &format!("burst{index}@example.com")).await;
         assert_eq!(
             response.status_code(),
-            StatusCode::OK,
+            StatusCode::CREATED,
             "registration {index} is within the per-IP cap"
         );
     }
@@ -750,7 +750,7 @@ async fn register_invalid_bodies_do_not_consume_rate_limit(pool: PgPool) {
     let valid = post_register(&env, "valid@example.com").await;
     assert_eq!(
         valid.status_code(),
-        StatusCode::OK,
+        StatusCode::CREATED,
         "invalid bodies must not consume the registration rate-limit window"
     );
 }

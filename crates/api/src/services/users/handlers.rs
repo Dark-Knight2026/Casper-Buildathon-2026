@@ -1316,7 +1316,7 @@ fn derive_identity_hash(user_id: Uuid) -> String {
 /// holds. This endpoint is removed when the proper backend write-path lands.
 ///
 /// Precondition: the wallet must already be linked (`POST /me/wallet`). A
-/// caller with no wallet gets 409 - they have nothing to sign the on-chain
+/// caller with no wallet gets 422 - they have nothing to sign the on-chain
 /// deploy with, so producing the hash now would be premature. The hash and
 /// flags themselves do not depend on the wallet; the gate just enforces the
 /// onboarding order.
@@ -1326,8 +1326,8 @@ fn derive_identity_hash(user_id: Uuid) -> String {
 /// # Errors
 ///
 /// - 401 (`Unauthorized`) when the access cookie is missing/invalid (upstream).
-/// - 409 (`Conflict`) when no wallet is linked to the account yet.
-/// - 422 (`UnprocessableEntity`) when the role maps to no on-chain flag.
+/// - 422 (`UnprocessableEntity`) when no wallet is linked yet, or the role
+///   maps to no on-chain flag.
 /// - 500 for DB failures.
 #[utoipa::path(
     get,
@@ -1336,8 +1336,7 @@ fn derive_identity_hash(user_id: Uuid) -> String {
     responses(
         (status = 200, description = "On-chain registration arguments", body = OnchainRegistrationResponse),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
-        (status = 409, description = "Wallet not linked yet", body = ErrorResponse),
-        (status = 422, description = "Role is not eligible for on-chain registration", body = ErrorResponse),
+        (status = 422, description = "Wallet not linked yet, or role not eligible for on-chain registration", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
@@ -1353,7 +1352,9 @@ pub async fn get_onchain_registration(
     let profile = db::fetch_user_profile(&state.db, user_id).await?;
 
     if profile.wallet_address.is_none() {
-        return Err(ApiError::Conflict(
+        // Unmet precondition (the prior link step has not run), not a conflict
+        // with existing state - 422, not 409.
+        return Err(ApiError::UnprocessableEntity(
             "Wallet must be linked before on-chain registration".to_owned(),
         ));
     }

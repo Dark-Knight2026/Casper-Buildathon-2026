@@ -30,7 +30,7 @@ async fn register_and_access(env: &TestEnv, email: &str) -> String {
             "last_name": "Word",
         }))
         .await;
-    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.status_code(), StatusCode::CREATED);
     response.cookie("access_token").value().to_owned()
 }
 
@@ -99,7 +99,7 @@ async fn change_password_revokes_other_sessions_but_keeps_current(pool: PgPool) 
             "last_name": "Tate",
         }))
         .await;
-    assert_eq!(register.status_code(), StatusCode::OK);
+    assert_eq!(register.status_code(), StatusCode::CREATED);
     let old_access = register.cookie("access_token").value().to_owned();
     let old_refresh = register.cookie("refresh_token").value().to_owned();
 
