@@ -544,7 +544,12 @@ pub async fn fetch_property_owner(pool: &PgPool, property_id: Uuid) -> Result<Op
     .await
 }
 
-/// Lists every live listing made against a property, newest first.
+/// Lists a page of the live listings made against a property, newest first,
+/// alongside the total match count for pagination metadata.
+///
+/// Paged with `LIMIT`/`OFFSET` so a property with a long offer history does not
+/// load its entire listing set into memory on every request. Count and page are
+/// read in one transaction so they share a snapshot.
 ///
 /// # Errors
 ///
@@ -553,8 +558,23 @@ pub async fn fetch_property_owner(pool: &PgPool, property_id: Uuid) -> Result<Op
 pub async fn list_property_listings(
     pool: &PgPool,
     property_id: Uuid,
-) -> Result<Vec<ListingSummaryRow>, Error> {
-    sqlx::query_as!(
+    limit: i64,
+    offset: i64,
+) -> Result<(Vec<ListingSummaryRow>, i64), Error> {
+    let mut tx = pool.begin().await?;
+
+    let total = sqlx::query_scalar!(
+        r#"
+            SELECT COUNT(*) AS "count!"
+            FROM listings
+            WHERE property_id = $1 AND deleted_at IS NULL
+        "#,
+        property_id,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    let rows = sqlx::query_as!(
         ListingSummaryRow,
         r#"
             SELECT
@@ -570,11 +590,17 @@ pub async fn list_property_listings(
             FROM listings
             WHERE property_id = $1 AND deleted_at IS NULL
             ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
         "#,
         property_id,
+        limit,
+        offset,
     )
-    .fetch_all(pool)
-    .await
+    .fetch_all(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+    Ok((rows, total))
 }
 
 /// Geo + paginated property search. Returns the matching page and the total

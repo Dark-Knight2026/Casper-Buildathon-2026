@@ -1245,5 +1245,21 @@ pub async fn set_property_tokenized(
     .execute(tx.as_mut())
     .await?;
 
-    Ok(result.rows_affected() > 0)
+    let affected = result.rows_affected();
+    if affected > 1 {
+        // The UNIQUE constraint on `properties.metadata_uri` should make this
+        // unreachable; if it ever fires, one on-chain event has tokenized
+        // several rows, so fail loudly instead of silently inflating the set.
+        tracing::error!(
+            metadata_uri = %metadata_uri,
+            onchain_property_id = %onchain_property_id,
+            rows_affected = affected,
+            "PropertyCreated matched multiple property rows by metadata_uri"
+        );
+        return Err(IndexerError::DataIntegrity(format!(
+            "metadata_uri {metadata_uri} matched {affected} property rows; expected at most one"
+        )));
+    }
+
+    Ok(affected > 0)
 }

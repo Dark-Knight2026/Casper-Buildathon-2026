@@ -446,7 +446,43 @@ async fn property_listings_returns_empty_for_owner(pool: PgPool) {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body.unwrap(), json!([]));
+    let body = body.unwrap();
+    assert_eq!(body["data"], json!([]), "no listings yet");
+    assert_eq!(body["itemCount"], 0);
+    assert_eq!(body["pageCount"], 0);
+}
+
+/// The offer history is paged: `page_size` caps the returned slice while
+/// `itemCount` reports the full total.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn property_listings_paginates(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_status, created) = post_property(&env, &token, &valid_payload()).await;
+    let property_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    for _ in 0..3 {
+        seed_listing(&pool, property_id, landlord_id, "active").await;
+    }
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/properties/{property_id}/listings?page=1&page_size=2"),
+        &token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["itemCount"], 3, "total across all pages");
+    assert_eq!(body["pageCount"], 2, "3 items at page_size 2 spans 2 pages");
+    assert_eq!(
+        body["data"].as_array().map(Vec::len),
+        Some(2),
+        "the first page holds exactly page_size items",
+    );
 }
 
 /// A different landlord is not the property owner -> `403 not_property_owner`.
