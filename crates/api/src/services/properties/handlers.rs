@@ -59,9 +59,15 @@ pub async fn create_property(
     Json(payload): Json<CreatePropertyRequest>,
 ) -> ApiResult<(StatusCode, Json<Property>)> {
     let new_property = payload.try_into()?;
-    let (mut row, was_inserted) = db::upsert_property(&state.db, user.0.sub, new_property).await?;
+    // Atomic create: the row is committed only once its metadata is pinned and
+    // the URI is written. A pin failure drops the transaction, so a failed
+    // create never leaves a committed property row without a metadata URI.
+    let mut tx = state.db.begin().await?;
+    let (mut row, was_inserted) =
+        db::upsert_property(tx.as_mut(), user.0.sub, new_property).await?;
     let metadata_uri = metadata::pin_property_metadata(state.content_pinner.as_ref(), &row).await?;
-    db::set_property_metadata_uri(&state.db, row.id, &metadata_uri).await?;
+    db::set_property_metadata_uri(tx.as_mut(), row.id, &metadata_uri).await?;
+    tx.commit().await?;
     row.metadata_uri = Some(metadata_uri);
     let status = if was_inserted {
         StatusCode::CREATED

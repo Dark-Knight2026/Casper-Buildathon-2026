@@ -7,7 +7,7 @@
 //! cast to `double precision` so the macro's type check passes before the DB.
 
 use chrono::{DateTime, Utc};
-use sqlx::{Error, PgPool};
+use sqlx::{Error, PgExecutor, PgPool};
 use uuid::Uuid;
 
 /// A property row as stored, using the legacy 2023 column names. The
@@ -235,7 +235,7 @@ struct UpsertRow {
 /// Returns [`Error`] on any database failure.
 #[inline]
 pub async fn upsert_property(
-    pool: &PgPool,
+    executor: impl PgExecutor<'_>,
     landlord_id: Uuid,
     new: NewProperty,
 ) -> Result<(PropertyRow, bool), Error> {
@@ -293,7 +293,7 @@ pub async fn upsert_property(
         new.parking_features.as_deref(),
         new.parcel_id,
     )
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
 
     let property = PropertyRow {
@@ -464,7 +464,7 @@ pub async fn update_property(
 /// Returns [`Error`] on any database failure.
 #[inline]
 pub async fn set_property_metadata_uri(
-    pool: &PgPool,
+    executor: impl PgExecutor<'_>,
     property_id: Uuid,
     metadata_uri: &str,
 ) -> Result<(), Error> {
@@ -477,7 +477,7 @@ pub async fn set_property_metadata_uri(
         property_id,
         metadata_uri,
     )
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(())
 }

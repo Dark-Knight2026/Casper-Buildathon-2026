@@ -628,9 +628,9 @@ pub struct ApplicationNoteRow {
 /// Adds a private landlord note to an application the caller is the landlord of.
 ///
 /// One atomic `INSERT ... SELECT`: the landlord owner-check lives in the
-/// `SELECT`'s `WHERE`, so a foreign or unknown application inserts nothing - an
-/// empty `RETURNING` becomes `None`, a `404` upstream that leaks nothing - with
-/// no check-then-insert window.
+/// `SELECT`'s `WHERE`, so a foreign, unknown, or draft application inserts
+/// nothing - an empty `RETURNING` becomes `None`, a `404` upstream that leaks
+/// nothing - with no check-then-insert window.
 ///
 /// # Errors
 ///
@@ -648,7 +648,7 @@ pub async fn add_application_note(
             INSERT INTO application_notes (application_id, author_id, body)
             SELECT $1, $2, $3
             FROM rental_applications
-            WHERE id = $1 AND landlord_id = $2
+            WHERE id = $1 AND landlord_id = $2 AND status <> 'draft'
             RETURNING id, application_id, author_id, body, created_at
         ",
         application_id,
@@ -661,9 +661,9 @@ pub async fn add_application_note(
 }
 
 /// Lists the notes on an application the caller is the landlord of (newest
-/// first). A foreign or unknown application reads as `None` (a `404` upstream),
-/// kept distinct from an owned application that simply has no notes (an empty
-/// `Vec`).
+/// first). A foreign, unknown, or draft application reads as `None` (a `404`
+/// upstream), kept distinct from an owned application that simply has no notes
+/// (an empty `Vec`).
 ///
 /// # Errors
 ///
@@ -678,7 +678,7 @@ pub async fn list_application_notes(
         r#"
             SELECT EXISTS(
                 SELECT 1 FROM rental_applications
-                WHERE id = $1 AND landlord_id = $2
+                WHERE id = $1 AND landlord_id = $2 AND status <> 'draft'
             ) AS "owns!"
         "#,
         application_id,
@@ -714,7 +714,8 @@ pub struct TenantInfo {
     pub last_name: String,
     /// Tenant's on-chain wallet address; `None` until a wallet is linked.
     pub wallet_address: Option<String>,
-    /// Contract-assigned on-chain user id (U256 as string); `None` until the user registers on-chain.
+    /// Contract-assigned on-chain user id (U256 as string);
+    /// `None` until the user registers on-chain.
     pub onchain_user_id: Option<String>,
 }
 
@@ -760,7 +761,7 @@ pub struct ApplicationSubject {
 }
 
 /// Reads the applicant subject for an application the caller is the landlord of.
-/// A foreign or unknown application reads as `None` (a `404` upstream).
+/// A foreign, unknown, or draft application reads as `None` (a `404` upstream).
 ///
 /// # Errors
 ///
@@ -775,7 +776,7 @@ pub async fn fetch_application_subject(
         r"
             SELECT full_name, date_of_birth, background_check_consent
             FROM rental_applications
-            WHERE id = $1 AND landlord_id = $2
+            WHERE id = $1 AND landlord_id = $2 AND status <> 'draft'
         ",
         application_id,
         landlord_id,
@@ -843,7 +844,7 @@ pub async fn insert_background_check(
             )
             RETURNING
                 id, application_id, requested_by, check_type, status,
-                result AS "result?: Json<serde_json::Value>", reference,
+                result AS "result?: Json<Value>", reference,
                 created_at, completed_at
         "#,
         application_id,
@@ -859,8 +860,8 @@ pub async fn insert_background_check(
 }
 
 /// Lists the background checks on an application the caller is the landlord of
-/// (newest first). A foreign or unknown application reads as `None` (a `404`
-/// upstream), distinct from an owned application with no checks (an empty
+/// (newest first). A foreign, unknown, or draft application reads as `None` (a
+/// `404` upstream), distinct from an owned application with no checks (an empty
 /// `Vec`).
 ///
 /// # Errors
@@ -876,7 +877,7 @@ pub async fn list_background_checks(
         r#"
             SELECT EXISTS(
                 SELECT 1 FROM rental_applications
-                WHERE id = $1 AND landlord_id = $2
+                WHERE id = $1 AND landlord_id = $2 AND status <> 'draft'
             ) AS "owns!"
         "#,
         application_id,
@@ -893,7 +894,7 @@ pub async fn list_background_checks(
         r#"
             SELECT
                 id, application_id, requested_by, check_type, status,
-                result AS "result?: Json<serde_json::Value>", reference,
+                result AS "result?: Json<Value>", reference,
                 created_at, completed_at
             FROM background_checks
             WHERE application_id = $1
@@ -927,8 +928,8 @@ pub struct ScoreInputs {
 
 /// Gathers the scoring inputs for an application the caller is the landlord of:
 /// the affordability/employment/reference fields, the listing's rent, and the
-/// latest completed background check per type. A foreign or unknown application
-/// reads as `None` (a `404` upstream).
+/// latest completed background check per type. A foreign, unknown, or draft
+/// application reads as `None` (a `404` upstream).
 ///
 /// # Errors
 ///
@@ -948,7 +949,7 @@ pub async fn fetch_score_inputs(
                 (l.terms->>'rentMonthly')::float8 AS rent_monthly
             FROM rental_applications a
             LEFT JOIN listings l ON l.id = a.listing_id
-            WHERE a.id = $1 AND a.landlord_id = $2
+            WHERE a.id = $1 AND a.landlord_id = $2 AND a.status <> 'draft'
         "#,
         application_id,
         landlord_id,
