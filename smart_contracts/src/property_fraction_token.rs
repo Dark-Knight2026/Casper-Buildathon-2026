@@ -2,6 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{
     access::{AccessControl, Role, DEFAULT_ADMIN_ROLE},
     cep18_token::Cep18,
+    cep96::{Cep96, Cep96ContractMetadata},
 };
 
 use crate::{
@@ -88,6 +89,8 @@ pub struct PropertyFractionToken {
     token: SubModule<Cep18>,
     compliance_policy: External<CompliancePolicyContractRef>,
     property_id: Var<U256>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -126,6 +129,15 @@ impl PropertyFractionToken {
             initial_supply: params.initial_supply,
             compliance_policy: params.compliance_policy,
         });
+
+        self.metadata.init(
+            Some("BIG LeaseFi Property Fraction Token".into()),
+            Some(
+                "Reference property ownership fraction token with compliance checks.".into(),
+            ),
+            None,
+            None,
+        );
     }
 
     // =============================================================================
@@ -191,7 +203,7 @@ impl PropertyFractionToken {
     }
 
     // =============================================================================
-    // CEP-18 Delegation
+    // Delegation
     // =============================================================================
 
     delegate! {
@@ -214,6 +226,14 @@ impl PropertyFractionToken {
             fn revoke_role(&mut self, role: &Role, address: &Address);
             fn renounce_role(&mut self, role: &Role, address: &Address);
         }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
+        }
+
     }
 }
 

@@ -4,7 +4,11 @@ use odra::{
     uints::ToU512,
     ContractRef,
 };
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use odra_modules::{
+    access::Ownable,
+    cep18_token::Cep18ContractRef,
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::{
     constants::{
@@ -41,6 +45,8 @@ pub struct ICO {
     treasury: External<TreasuryContractRef>,
     staking: External<StakingContractRef>,
     vesting: External<VestingContractRef>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -49,6 +55,12 @@ impl ICO {
         self.ownable.init(owner);
 
         self.styks_price_feed.set(styks_price_feed);
+        self.metadata.init(
+            Some("BIG LeaseFi ICO".into()),
+            Some("BIG token sale schedules and multi-currency purchases.".into()),
+            None,
+            None,
+        );
     }
 
     /// Sets the BIG token contract address by the owner
@@ -369,6 +381,13 @@ impl ICO {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
             fn get_owner(&self) -> Address;
+        }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
         }
     }
 }

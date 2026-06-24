@@ -1,5 +1,9 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use odra_modules::{
+    access::Ownable,
+    cep18_token::Cep18ContractRef,
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::{
     constants::{REWARD_CLAIM_HOLD_PERIOD, UNBONDING_PERIOD},
@@ -168,7 +172,11 @@ pub struct Staking {
     /// Global reward accumulator — cumulative rewards per staked token.
     /// This value is updated whenever newly available rewards are deposited.
     reward_per_token_stored: Var<U256>,
+
     unclaimed_rewards: Var<U256>,
+
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -179,6 +187,12 @@ impl Staking {
 
     pub fn init(&mut self, owner: Address) {
         self.ownable.init(owner);
+        self.metadata.init(
+            Some("BIG LeaseFi Staking".into()),
+            Some("BIG token staking and reward claims.".into()),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -546,6 +560,14 @@ impl Staking {
             fn transfer_ownership(&mut self, new_owner: &Address);
             fn get_owner(&self) -> Address;
         }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
+        }
+
     }
 }
 

@@ -1,5 +1,8 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::access::Ownable;
+use odra_modules::{
+    access::Ownable,
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::{
     constants::{LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS},
@@ -212,6 +215,8 @@ pub struct Lease {
     equity_eligible: Mapping<(U256, U256), bool>,
     /// Number of lease agreements created.
     leases_count: Var<U256>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -233,6 +238,12 @@ impl Lease {
         self.nft.set(nft);
         self.property_registry.set(property_registry);
         self.user_registry.set(user_registry);
+        self.metadata.init(
+            Some("BIG LeaseFi Lease".into()),
+            Some("Property lease lifecycle, invoicing, and equity eligibility.".into()),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -622,7 +633,7 @@ impl Lease {
     }
 
     // =========================================================================
-    // Ownable delegation
+    // Delegation
     // =========================================================================
 
     delegate! {
@@ -631,6 +642,14 @@ impl Lease {
             fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
+        }
+
     }
 }
 
