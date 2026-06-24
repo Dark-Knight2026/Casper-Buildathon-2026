@@ -8,10 +8,12 @@
 pub mod invoice_created;
 pub mod invoice_paid;
 pub mod invoice_payment_applied;
+pub mod security_deposit_released;
 
 pub use invoice_created::InvoiceCreated;
 pub use invoice_paid::InvoicePaid;
 pub use invoice_payment_applied::InvoicePaymentApplied;
+pub use security_deposit_released::SecurityDepositReleased;
 
 use core::str::FromStr;
 
@@ -25,6 +27,7 @@ pub static CES_SCHEMAS: &[EventSchema] = &[
     <InvoiceCreated as CesEvent>::SCHEMA,
     <InvoicePaymentApplied as CesEvent>::SCHEMA,
     <InvoicePaid as CesEvent>::SCHEMA,
+    <SecurityDepositReleased as CesEvent>::SCHEMA,
 ];
 
 /// All indexed `Escrow` contract events.
@@ -36,6 +39,8 @@ pub enum EscrowEventType {
     InvoicePaymentApplied,
     /// Emitted when an invoice's balance is fully cleared via `pay_invoice`.
     InvoicePaid,
+    /// Emitted when a held security deposit is released via `release_security_deposit`.
+    SecurityDepositReleased,
 }
 
 impl EscrowEventType {
@@ -47,6 +52,7 @@ impl EscrowEventType {
             Self::InvoiceCreated => "InvoiceCreated",
             Self::InvoicePaymentApplied => "InvoicePaymentApplied",
             Self::InvoicePaid => "InvoicePaid",
+            Self::SecurityDepositReleased => "SecurityDepositReleased",
         }
     }
 }
@@ -60,6 +66,7 @@ impl FromStr for EscrowEventType {
             "InvoiceCreated" => Ok(Self::InvoiceCreated),
             "InvoicePaymentApplied" => Ok(Self::InvoicePaymentApplied),
             "InvoicePaid" => Ok(Self::InvoicePaid),
+            "SecurityDepositReleased" => Ok(Self::SecurityDepositReleased),
             _ => Err(IndexerError::InvalidEventName(s.to_owned())),
         }
     }

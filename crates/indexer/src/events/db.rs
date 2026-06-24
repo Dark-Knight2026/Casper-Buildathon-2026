@@ -1398,6 +1398,50 @@ pub async fn mark_invoice_paid_by_onchain_id(
     Ok(result.rows_affected() > 0)
 }
 
+/// Records the split of a released security deposit on the invoice bound to this
+/// on-chain id, the `SecurityDepositReleased` reconciliation step.
+///
+/// Writes the on-chain `landlord_charge`/`tenant_refund` split and moves the
+/// deposit to its terminal state: `refunded` when the landlord kept nothing
+/// (full tenant refund), otherwise `released`. The `kind = 'security_deposit'
+/// AND status = 'paid'` guard scopes the update to a held deposit and keeps it
+/// idempotent - a deposit already released/refunded, or never held, is untouched.
+///
+/// Returns `true` when a deposit was released, `false` when none matched.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn release_security_deposit_by_onchain_id(
+    tx: &mut PgTransaction<'_>,
+    onchain_invoice_id: &str,
+    landlord_charge: &str,
+    tenant_refund: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE invoices
+            SET landlord_charge = $2::TEXT::NUMERIC,
+                tenant_refund = $3::TEXT::NUMERIC,
+                status = CASE
+                    WHEN $2::TEXT::NUMERIC = 0 THEN 'refunded'
+                    ELSE 'released'
+                END
+            WHERE onchain_invoice_id = $1::TEXT::NUMERIC
+              AND kind = 'security_deposit'
+              AND status = 'paid'
+        ",
+        onchain_invoice_id,
+        landlord_charge,
+        tenant_refund,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
 /// Marks the backend property matching `metadata_uri` as tokenized on-chain,
 /// stamping the contract-assigned id.
 ///

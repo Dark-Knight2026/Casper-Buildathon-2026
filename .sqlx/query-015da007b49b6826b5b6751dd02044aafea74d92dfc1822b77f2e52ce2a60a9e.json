@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE invoices\n            SET landlord_charge = $2::TEXT::NUMERIC,\n                tenant_refund = $3::TEXT::NUMERIC,\n                status = CASE\n                    WHEN $2::TEXT::NUMERIC = 0 THEN 'refunded'\n                    ELSE 'released'\n                END\n            WHERE onchain_invoice_id = $1::TEXT::NUMERIC\n              AND kind = 'security_deposit'\n              AND status = 'paid'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "015da007b49b6826b5b6751dd02044aafea74d92dfc1822b77f2e52ce2a60a9e"
+}

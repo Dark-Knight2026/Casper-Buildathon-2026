@@ -199,6 +199,7 @@ impl EventRegistry {
             EventType::Escrow(EscrowEventType::InvoiceCreated) => escrow::InvoiceCreated,
             EventType::Escrow(EscrowEventType::InvoicePaymentApplied) => escrow::InvoicePaymentApplied,
             EventType::Escrow(EscrowEventType::InvoicePaid) => escrow::InvoicePaid,
+            EventType::Escrow(EscrowEventType::SecurityDepositReleased) => escrow::SecurityDepositReleased,
         )
     }
 }
