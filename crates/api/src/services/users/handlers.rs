@@ -20,7 +20,7 @@ use crate::{
     },
     providers::EmailMessage,
     services::{
-        auth::{self, AuthUser, cookies, jwt, refresh},
+        auth::{self, AuthUser, LinkWalletOutcome, cookies, jwt, refresh},
         users::{
             db::{self, SoftDeleteOutcome},
             models::{
@@ -390,12 +390,11 @@ pub async fn delete_me(
     let user_id = auth_user.0.sub;
     payload.into_validated()?;
 
-    // Recent-auth gate. Same `i64::try_from` saturation pattern as the
-    // role-change handler: a corrupt token with `iat` past i64::MAX
-    // clamps to MAX so the subtraction underflows safely, and the gate
-    // still admits the request only when `iat` is within the window.
+    // Recent-auth gate. An `iat` that does not fit in i64 falls back to 0
+    // (epoch 1970), which is always older than the window, so a corrupt token
+    // fails closed (403) instead of being treated as freshly issued.
     let now_secs = Utc::now().timestamp();
-    let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(i64::MAX);
+    let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(0);
     if now_secs.saturating_sub(iat_secs) > DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS {
         return Err(ApiError::Forbidden("reauthentication_required".to_owned()));
     }
@@ -932,12 +931,11 @@ pub async fn patch_me_role(
     let user_id = auth_user.0.sub;
     let new_role = payload.into_validated()?;
 
-    // Recent-auth gate. Cast `iat` to i64 saturating-up so a corrupt token
-    // with `iat` past i64::MAX does not pass: such a token would yield a
-    // negative `now - iat` and skip the window check, but `i64::MAX` makes
-    // the subtraction underflow safely (clamped via `saturating_sub`).
+    // Recent-auth gate. An `iat` that does not fit in i64 falls back to 0
+    // (epoch 1970), which is always older than the window, so a corrupt token
+    // fails closed (403) instead of being treated as freshly issued.
     let now_secs = Utc::now().timestamp();
-    let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(i64::MAX);
+    let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(0);
     if now_secs.saturating_sub(iat_secs) > ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS {
         return Err(ApiError::Forbidden("reauthentication_required".to_owned()));
     }
@@ -1081,9 +1079,11 @@ pub async fn change_password(
         }
     } else {
         // Set path (wallet-only / OAuth-only first password): no current
-        // password to verify, so demand a freshly-authenticated session.
+        // password to verify, so demand a freshly-authenticated session. An
+        // `iat` that does not fit in i64 falls back to 0 (epoch 1970), so a
+        // corrupt token fails closed (403) rather than passing the freshness check.
         let now_secs = Utc::now().timestamp();
-        let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(i64::MAX);
+        let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(0);
         if now_secs.saturating_sub(iat_secs) > PASSWORD_SET_RECENT_AUTH_WINDOW_SECS {
             return Err(ApiError::Forbidden("reauthentication_required".to_owned()));
         }
@@ -1231,8 +1231,8 @@ pub async fn link_wallet(
     })?;
 
     match auth::db::link_wallet_to_user(&state.db, user_id, &wallet_address).await? {
-        auth::LinkWalletOutcome::Linked => {}
-        auth::LinkWalletOutcome::WalletTaken => {
+        LinkWalletOutcome::Linked => {}
+        LinkWalletOutcome::WalletTaken => {
             tracing::warn!(
                 event = "wallet_link_failed",
                 reason = "already_linked",
@@ -1304,6 +1304,7 @@ fn derive_identity_hash(user_id: Uuid) -> String {
 ///
 /// - 401 (`Unauthorized`) when the access cookie is missing/invalid (upstream).
 /// - 409 (`Conflict`) when no wallet is linked to the account yet.
+/// - 422 (`UnprocessableEntity`) when the role maps to no on-chain flag.
 /// - 500 for DB failures.
 #[utoipa::path(
     get,
@@ -1313,6 +1314,7 @@ fn derive_identity_hash(user_id: Uuid) -> String {
         (status = 200, description = "On-chain registration arguments", body = OnchainRegistrationResponse),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 409, description = "Wallet not linked yet", body = ErrorResponse),
+        (status = 422, description = "Role is not eligible for on-chain registration", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
@@ -1336,9 +1338,19 @@ pub async fn get_onchain_registration(
     // Role is read from the freshly-loaded profile (not the JWT) so the flags
     // reflect the current DB role rather than a possibly-stale token claim.
     let role = UserRole::from_str(&profile.role).unwrap_or(UserRole::Unknown);
+    let role_flags = role.to_onchain_role_flags();
+
+    // A role with no on-chain flag (admin / unrecognized) maps to 0, which the
+    // contract would register as a user with zero permissions. Reject before
+    // handing the frontend a meaningless payload.
+    if role_flags == 0 {
+        return Err(ApiError::UnprocessableEntity(
+            "Role is not eligible for on-chain registration".to_owned(),
+        ));
+    }
 
     Ok(Json(OnchainRegistrationResponse {
         identity_hash: derive_identity_hash(user_id),
-        role_flags: role.to_onchain_role_flags(),
+        role_flags,
     }))
 }

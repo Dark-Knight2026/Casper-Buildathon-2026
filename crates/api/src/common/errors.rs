@@ -7,7 +7,10 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use redis::RedisError;
 use serde::{Deserialize, Serialize};
+use sqlx::{Error, migrate::MigrateError};
+use thiserror::Error;
 use utoipa::ToSchema;
 
 use crate::{
@@ -18,17 +21,17 @@ use crate::{
 /// Represents errors that can occur at the application level (e.g., startup).
 /// These are not intended to be converted into API responses but are for logging
 /// and terminating the application gracefully.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ServerError {
     /// An I/O error occurred (e.g., binding to a socket).
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     /// A database connection or query error occurred during startup.
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] Error),
     /// A database migration error.
     #[error("Migration failed: {0}")]
-    Migration(#[from] sqlx::migrate::MigrateError),
+    Migration(#[from] MigrateError),
     /// An authentication-related error occurred, typically during setup.
     #[error("Authentication setup error: {0}")]
     Auth(#[from] AuthError),
@@ -73,7 +76,7 @@ pub enum ApiError {
     TooManyRequests(String),
     /// Wraps a `sqlx::Error`. These errors are not exposed to the client
     /// for security reasons, and will result in a generic 500 error.
-    Database(sqlx::Error),
+    Database(Error),
     /// Queue/Redis related error.
     Queue(String),
     /// 413 (not 400) so clients can route oversize bodies to a distinct UX path.
@@ -87,6 +90,12 @@ pub enum ApiError {
     /// Used when the request MIME is not on the per-endpoint whitelist,
     /// or when the bytes do not match the declared type.
     UnsupportedMediaType(String),
+    /// Returned when the body parsed fine but a semantic precondition is unmet (422).
+    ///
+    /// Distinct from 400 (malformed input) and 409 (conflict with existing
+    /// state): the request is well-formed, but the operation cannot proceed -
+    /// e.g. a role that maps to no on-chain flag attempting registration.
+    UnprocessableEntity(String),
     /// Generic internal server error.
     Internal(String),
 }
@@ -131,6 +140,7 @@ impl IntoResponse for ApiError {
             ApiError::UnsupportedMediaType(msg) => {
                 (StatusCode::UNSUPPORTED_MEDIA_TYPE, msg.clone())
             }
+            ApiError::UnprocessableEntity(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
             ApiError::Internal(msg) => {
                 tracing::error!("Internal error: {}", msg);
                 (
@@ -157,12 +167,12 @@ impl From<AuthError> for ApiError {
     }
 }
 
-impl From<sqlx::Error> for ApiError {
+impl From<Error> for ApiError {
     #[inline]
-    fn from(err: sqlx::Error) -> Self {
+    fn from(err: Error) -> Self {
         match err {
-            sqlx::Error::RowNotFound => ApiError::NotFound("Resource not found".to_owned()),
-            sqlx::Error::Database(ref db_err) if db_err.is_unique_violation() => {
+            Error::RowNotFound => ApiError::NotFound("Resource not found".to_owned()),
+            Error::Database(ref db_err) if db_err.is_unique_violation() => {
                 ApiError::Conflict("A resource with this value already exists".to_owned())
             }
             _ => ApiError::Database(err),
@@ -184,7 +194,7 @@ impl From<EmailError> for ApiError {
     }
 }
 
-impl From<redis::RedisError> for ApiError {
+impl From<RedisError> for ApiError {
     /// Fail-stop default for `?`-cascade callers that cannot recover inline.
     ///
     /// Sites with recovery semantics (auth fail-open, wallet
@@ -193,7 +203,7 @@ impl From<redis::RedisError> for ApiError {
     /// `Queue` already logs server-side and emits a flat body, so no
     /// transport details leak.
     #[inline]
-    fn from(err: redis::RedisError) -> Self {
+    fn from(err: RedisError) -> Self {
         Self::Queue(err.to_string())
     }
 }

@@ -52,8 +52,8 @@ fn invalid_credentials() -> ApiError {
 /// extra limit" - the global `GovernorLayer` still applies - rather than taking
 /// registration down. A missing peer IP (no `ConnectInfo`, only off the real
 /// HTTP transport) skips the per-IP counter since there is nothing to key on.
-/// On a pass the attempt is recorded before any work, so a flood of bodies the
-/// validator would reject still counts toward the cap.
+/// Invoked only after the payload validates, so malformed bodies the validator
+/// rejects never reach this gate and cannot burn an IP's registration budget.
 async fn enforce_register_rate_limit(state: &AppState, ip: Option<&str>) -> ApiResult<()> {
     let Some(ip) = ip else {
         return Ok(());
@@ -143,9 +143,12 @@ pub async fn register(
     audit: RequestAudit,
     Json(payload): Json<RegisterRequest>,
 ) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
+    // Validate first so a flood of malformed bodies cannot consume the per-IP
+    // registration budget; only well-formed requests reach the rate-limit gate.
+    let validated = payload.into_validated()?;
+
     enforce_register_rate_limit(&state, audit.ip.as_deref()).await?;
 
-    let validated = payload.into_validated()?;
     let password_hash = password::hash_password(validated.password.expose_secret())?;
 
     let user_record = match db::create_password_user(

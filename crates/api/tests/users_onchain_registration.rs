@@ -131,10 +131,10 @@ async fn onchain_registration_identity_hash_is_deterministic(pool: PgPool) {
 }
 
 /// A role whose on-chain mapping is zero (admin) must not receive a
-/// role_flags=0 registration payload: the endpoint returns 422. The wallet
+/// `role_flags=0` registration payload: the endpoint returns 422. The wallet
 /// precondition is satisfied (wallet login links one), but the promoted role
 /// carries no on-chain flag. On the pre-fix code the endpoint returns 200 with
-/// role_flags=0.
+/// `role_flags=0`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn onchain_registration_rejects_zero_role_flags(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
