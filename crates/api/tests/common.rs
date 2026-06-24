@@ -24,6 +24,7 @@ use chrono::{Duration, Utc};
 use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rand::Rng;
+use redis::Client as RedisClient;
 use s3::{Bucket, BucketConfiguration, Region, creds::Credentials};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
@@ -37,7 +38,8 @@ use testcontainers::{
 use uuid::Uuid;
 
 use api::{
-    AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId, UserRole,
+    AppEnv, AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId,
+    UserRole,
     common::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
         VerificationLevel, tokens,
@@ -63,7 +65,7 @@ pub const TEST_CORS_ORIGIN: &str = "http://localhost:8080";
 /// Container stays alive as long as this struct exists.
 pub struct RedisTestEnv {
     /// Redis client for test connections.
-    pub client: redis::Client,
+    pub client: RedisClient,
     /// Redis connection URL.
     pub url: String,
     /// Keeps the container alive for the duration of the test.
@@ -74,7 +76,7 @@ impl Debug for RedisTestEnv {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("RedisTestEnv")
-            .field("client", &"redis::Client")
+            .field("client", &"RedisClient")
             .field("url", &self.url)
             .finish_non_exhaustive()
     }
@@ -95,7 +97,7 @@ impl RedisTestEnv {
             .expect("Failed to get Redis port");
 
         let url = format!("redis://127.0.0.1:{port}");
-        let client = redis::Client::open(url.clone()).expect("Invalid Redis URL");
+        let client = RedisClient::open(url.clone()).expect("Invalid Redis URL");
 
         Self {
             client,
@@ -205,7 +207,7 @@ pub async fn setup_test_server_with(
     } else {
         // Fake Redis URL - will fail if actually used
         let url = "redis://127.0.0.1:6379";
-        let client = redis::Client::open(url).expect("Invalid Redis URL");
+        let client = RedisClient::open(url).expect("Invalid Redis URL");
         (SecretString::from(url), client, None)
     };
 
@@ -219,6 +221,7 @@ pub async fn setup_test_server_with(
         frontend_url: "http://localhost:3000".to_owned(),
         request_body_limit_mb: overrides.request_body_limit_mb.unwrap_or(8),
         cookie_secure: false,
+        app_env: AppEnv::Development,
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,

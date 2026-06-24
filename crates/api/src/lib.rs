@@ -39,8 +39,8 @@ pub mod workers;
 // Re-exports
 #[cfg(feature = "enabled")]
 pub use common::{
-    AppState, Claims, IcoFallback, Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore,
-    S3Config, ServerConfig, ServerError, UserId, UserRole,
+    AppEnv, AppState, Claims, IcoFallback, Pageable, PaginatedResponse, Pagination, PropertyId,
+    RedisStore, S3Config, ServerConfig, ServerError, UserId, UserRole,
 };
 #[cfg(feature = "enabled")]
 pub use openapi::ApiDoc;

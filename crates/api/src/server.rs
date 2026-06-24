@@ -29,10 +29,11 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, BackgroundCheckProvider, ContentPinner, EmailSender, FairHousingScreen,
-    FakeBackgroundCheckProvider, FakeKycProvider, FakePinner, KycProvider, LoggingEmailSender,
-    MetadataStripper, NoopMetadataStripper, PostmarkSender, RedisStore, S3MediaStorage,
-    ServerConfig, ServerError, SharedMediaStorage, StubFairHousingScreen, StubMediaStorage,
+    ApiDoc, AppEnv, AppState, BackgroundCheckProvider, ContentPinner, EmailSender,
+    FairHousingScreen, FakeBackgroundCheckProvider, FakeKycProvider, FakePinner, KycProvider,
+    LoggingEmailSender, MetadataStripper, NoopMetadataStripper, PostmarkSender, RedisStore,
+    S3MediaStorage, ServerConfig, ServerError, SharedMediaStorage, StubFairHousingScreen,
+    StubMediaStorage,
     common::password,
     onchain,
     services::{self, health::handlers},
@@ -108,6 +109,34 @@ pub fn create_app(state: Arc<AppState>) -> Result<Router, ServerError> {
         .layer(RequestBodyLimitLayer::new(body_limit_bytes)))
 }
 
+/// Refuses to boot in production with any stub provider still wired.
+///
+/// Stub providers fake their integration - auto-passing KYC, returning synthetic
+/// IPFS CIDs, skipping EXIF/GPS stripping, auto-clearing background checks - so a
+/// production deploy running on them looks healthy while silently bypassing every
+/// gate they stand in for, indistinguishable from a correctly configured one. In
+/// development and staging the stubs are expected; only `APP_ENV=production` makes
+/// them fatal, turning a silent-fake deploy into a loud startup failure.
+///
+/// # Errors
+///
+/// Returns [`ServerError::EnvVar`] listing every active stub when `app_env` is
+/// production and at least one stub is wired.
+#[inline]
+pub fn reject_stub_providers_in_production(
+    app_env: AppEnv,
+    active_stubs: &[&str],
+) -> Result<(), ServerError> {
+    if app_env.is_production() && !active_stubs.is_empty() {
+        return Err(ServerError::EnvVar(format!(
+            "refusing to start in production (APP_ENV=production) with stub providers active: {}. \
+             Wire the real provider for each, or set APP_ENV to development/staging.",
+            active_stubs.join(", ")
+        )));
+    }
+    Ok(())
+}
+
 /// Starts the application server.
 ///
 /// Initializes logging, loads configuration, connects to databases,
@@ -164,6 +193,11 @@ pub async fn main() -> Result<(), ServerError> {
             ServerError::EnvVar("Redis connection failed".to_owned())
         })?;
 
+    // Names of any stub providers wired below. A non-empty list aborts startup
+    // in production (see `reject_stub_providers_in_production`); in dev/staging
+    // it is informational only.
+    let mut active_stubs = Vec::new();
+
     // Select the mailer based on env config: `POSTMARK_SERVER_TOKEN` set ->
     // Postmark backend, unset -> `LoggingEmailSender` with a warning log.
     // AppState holds the mailer behind the `EmailSender` trait object, so
@@ -180,6 +214,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "mailer_logging_stub",
             "POSTMARK_SERVER_TOKEN unset - using LoggingEmailSender (no real delivery). Production MUST configure POSTMARK_SERVER_TOKEN + POSTMARK_FROM_EMAIL."
         );
+        active_stubs.push("email (LoggingEmailSender)");
         Arc::new(LoggingEmailSender)
     };
 
@@ -201,6 +236,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "media_storage_stub",
             "S3_BUCKET unset - using StubMediaStorage. Production MUST configure S3_BUCKET + S3_REGION + S3_ENDPOINT + S3_ACCESS_KEY + S3_SECRET_KEY."
         );
+        active_stubs.push("media storage (StubMediaStorage)");
         Arc::new(StubMediaStorage::new())
     };
 
@@ -213,6 +249,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "kyc_provider_stub",
             "No real KYC provider configured - using FakeKycProvider (auto-verifies every identity). Production MUST wire a real provider before the authority gate can be trusted."
         );
+        active_stubs.push("KYC (FakeKycProvider)");
         Arc::new(FakeKycProvider::new())
     };
 
@@ -224,6 +261,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "fair_housing_screen_stub",
             "No real Fair Housing ruleset configured - using StubFairHousingScreen (coarse substring blocklist, not a compliance control). Production MUST wire the official CO/GC ruleset before the gate can be trusted."
         );
+        active_stubs.push("Fair Housing (StubFairHousingScreen)");
         Arc::new(StubFairHousingScreen::new())
     };
 
@@ -235,6 +273,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "content_pinner_stub",
             "No real IPFS provider configured - using FakePinner (synthetic CID, content is NOT retrievable). Production MUST wire a real IPFS node/provider."
         );
+        active_stubs.push("IPFS pinning (FakePinner)");
         Arc::new(FakePinner::new())
     };
 
@@ -245,6 +284,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "metadata_stripper_noop",
             "No real metadata stripper configured - using NoopMetadataStripper (EXIF/GPS is NOT stripped from uploads). Production MUST wire a real stripper before media upload can be trusted."
         );
+        active_stubs.push("metadata stripper (NoopMetadataStripper)");
         Arc::new(NoopMetadataStripper::new())
     };
 
@@ -256,8 +296,12 @@ pub async fn main() -> Result<(), ServerError> {
             event = "background_check_stub",
             "No real background-check provider configured - using FakeBackgroundCheckProvider (auto-clears every check). Production MUST wire a real bureau before screening can be trusted."
         );
+        active_stubs.push("background check (FakeBackgroundCheckProvider)");
         Arc::new(FakeBackgroundCheckProvider::new())
     };
+
+    // Abort before serving if a production deploy is still running on any stub.
+    reject_stub_providers_in_production(config.app_env, &active_stubs)?;
 
     // 3. Build application state
     let state = Arc::new(AppState {

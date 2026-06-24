@@ -19,6 +19,34 @@ use crate::{
 /// Total BIG token supply (human-readable).
 pub const TOTAL_SUPPLY: f64 = 5_000_000_000.0;
 
+/// Deployment environment, read from `APP_ENV`.
+///
+/// Gates startup-time safety checks: in `Production` any active stub provider
+/// aborts the boot (see [`crate::server::reject_stub_providers_in_production`]),
+/// so a fake-backed build can never be mistaken for a real deployment. Defaults
+/// to `Development` so local runs, tests, and CI need no extra env var; the
+/// deploy config sets `APP_ENV=production` explicitly, alongside `COOKIE_SECURE`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AppEnv {
+    /// Local development and tests; stub providers are permitted.
+    #[default]
+    Development,
+    /// Pre-production; stub providers are permitted (logged as a warning).
+    Staging,
+    /// Production; any active stub provider aborts startup.
+    Production,
+}
+
+impl AppEnv {
+    /// Whether this is the production environment.
+    #[must_use]
+    #[inline]
+    pub const fn is_production(self) -> bool {
+        matches!(self, Self::Production)
+    }
+}
+
 /// Flat intermediate struct whose field names match lowercase env var names.
 #[derive(Debug, Deserialize)]
 struct RawEnvConfig {
@@ -45,6 +73,11 @@ struct RawEnvConfig {
     /// set `COOKIE_SECURE=true` so HTTPS-only delivery is enforced.
     #[serde(default)]
     cookie_secure: bool,
+    /// Deployment environment (`APP_ENV`): `development` (default), `staging`,
+    /// or `production`. Production refuses to start with any stub provider
+    /// active, so a fake-backed build cannot be mistaken for a real one.
+    #[serde(default)]
+    app_env: AppEnv,
     /// BIG token contract package hash (hex, no prefix). Shared with `indexer`.
     #[serde(default)]
     contract_big: Option<String>,
@@ -202,6 +235,9 @@ pub struct ServerConfig {
     /// browser silently drops `Secure` cookies on `http://`, which would break
     /// login). Wired through to `Cookie::build(...).secure(...)` at issuance.
     pub cookie_secure: bool,
+    /// Deployment environment. `Production` makes any active stub provider a
+    /// fatal startup error (see [`crate::server::reject_stub_providers_in_production`]).
+    pub app_env: AppEnv,
     /// BIG token contract package hash (hex, no prefix). `None` when not configured.
     pub contract_big: Option<String>,
     /// Fallback ICO config from env vars. Used when `ico_schedules` table is empty
@@ -323,6 +359,7 @@ impl ServerConfig {
             frontend_url: raw.frontend_url,
             request_body_limit_mb: raw.request_body_limit_mb,
             cookie_secure: raw.cookie_secure,
+            app_env: raw.app_env,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
