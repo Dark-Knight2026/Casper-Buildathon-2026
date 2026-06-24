@@ -65,9 +65,13 @@ async fn enforce_register_rate_limit(state: &AppState, ip: Option<&str>) -> ApiR
         );
         "unknown"
     });
+    // One atomic INCR-then-check: counts this attempt and reports whether the IP
+    // is now over the cap, with no check-then-act gap between concurrent
+    // requests. Fails open on a Redis error (the global GovernorLayer still
+    // applies) so an outage cannot take registration down.
     if state
         .redis
-        .is_register_rate_limited(ip)
+        .record_and_check_register_rate_limit(ip)
         .await
         .unwrap_or(false)
     {
@@ -77,9 +81,6 @@ async fn enforce_register_rate_limit(state: &AppState, ip: Option<&str>) -> ApiR
             "Too many registration attempts from this client"
         );
         return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
-    }
-    if let Err(err) = state.redis.record_register_attempt(ip).await {
-        tracing::warn!(error = %err, %ip, "failed to record registration attempt");
     }
     Ok(())
 }

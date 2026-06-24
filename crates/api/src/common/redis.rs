@@ -387,41 +387,32 @@ impl RedisStore {
         Ok(())
     }
 
-    /// Returns `true` if the client IP has exceeded the registration limit.
+    /// Records one registration attempt for the client IP and returns `true` if
+    /// the IP has now exceeded the limit.
     ///
-    /// Fails open on a Redis error at the call site, same as the login gates.
-    ///
-    /// # Errors
-    ///
-    /// Returns `RedisError` if the connection fails.
-    #[inline]
-    pub async fn is_register_rate_limited(&self, ip: &str) -> RedisResult<bool> {
-        let mut conn = self.conn.clone();
-        let key = Self::register_attempts_key(ip);
-        let count = conn.get::<_, Option<u64>>(&key).await?;
-        Ok(count.is_some_and(|c| c >= REGISTER_PER_IP.max_attempts))
-    }
-
-    /// Records one registration attempt for the client IP.
-    ///
-    /// Counts every inbound attempt the gate lets through - including ones the
-    /// handler later rejects on validation - so a flood of malformed bodies
-    /// still trips the cap. `INCR` + conditional `EXPIRE` matches the other
-    /// counters: the TTL starts the window on the first attempt only.
+    /// `INCR` first, then compare the returned count, so two concurrent
+    /// registrations cannot both observe a sub-limit count before either
+    /// increments - the check-then-act window a separate `GET` + `INCR` would
+    /// open. The TTL is set only when the counter transitions from 0 to 1, so
+    /// the window starts on the first attempt and a flood of later
+    /// (already-rejected) attempts cannot extend it. Counts every attempt that
+    /// reaches the gate; validation runs first, so malformed bodies never get
+    /// here.
     ///
     /// # Errors
     ///
     /// Returns `RedisError` if the connection fails.
     #[inline]
-    pub async fn record_register_attempt(&self, ip: &str) -> RedisResult<()> {
+    pub async fn record_and_check_register_rate_limit(&self, ip: &str) -> RedisResult<bool> {
         let mut conn = self.conn.clone();
         let key = Self::register_attempts_key(ip);
         let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
+        // Set TTL only on the first attempt to start the window.
         if count == 1 {
             conn.expire::<_, ()>(&key, REGISTER_PER_IP.window_secs.cast_signed())
                 .await?;
         }
-        Ok(())
+        Ok(count > REGISTER_PER_IP.max_attempts)
     }
 
     /// Adds a JWT `jti` to the access-token blocklist for `ttl_seconds`.
