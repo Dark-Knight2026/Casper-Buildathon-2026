@@ -35,7 +35,7 @@ async fn register_password_user(env: &TestEnv, email: &str) -> String {
         .await;
     assert_eq!(
         response.status_code(),
-        StatusCode::OK,
+        StatusCode::CREATED,
         "registration must succeed"
     );
     response.cookie("access_token").value().to_owned()
@@ -91,6 +91,45 @@ async fn onchain_registration_returns_hash_and_flags(pool: PgPool) {
     assert_eq!(body["role_flags"].as_u64(), Some(1));
 }
 
+/// `role_flags` is asserted per remaining role so a transposed constant would be
+/// caught: a Landlord maps to 2 and an Agent to 4 (Tenant=1 is covered above).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn onchain_registration_role_flags_per_role(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+
+    for (role, expected) in [("landlord", 2_u64), ("agent", 4_u64)] {
+        // Each wallet login creates a fresh user (and links the wallet); promote
+        // it to the role under test so the endpoint reports that role's flag.
+        let session = common::login_and_extract(&env).await;
+        sqlx::query("UPDATE users SET role = $1 WHERE id = $2")
+            .bind(role)
+            .bind(session.user_id)
+            .execute(&pool)
+            .await
+            .expect("set role under test");
+
+        let (status, body) = common::authed_request::<Value>(
+            &env.server,
+            &Method::GET,
+            "/api/v1/users/me/onchain-registration",
+            &session.access_token,
+            &json!({}),
+        )
+        .await;
+
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "{role} is eligible for on-chain registration"
+        );
+        assert_eq!(
+            body.expect("200 returns a JSON body")["role_flags"].as_u64(),
+            Some(expected),
+            "{role} must map to role_flags {expected}"
+        );
+    }
+}
+
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn onchain_registration_identity_hash_is_deterministic(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
@@ -130,8 +169,37 @@ async fn onchain_registration_identity_hash_is_deterministic(pool: PgPool) {
     );
 }
 
+/// A role whose on-chain mapping is zero (admin) must not receive a
+/// `role_flags=0` registration payload: the endpoint returns 422. The wallet
+/// precondition is satisfied (wallet login links one), but the promoted role
+/// carries no on-chain flag. On the pre-fix code the endpoint returns 200 with
+/// `role_flags=0`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn onchain_registration_conflicts_without_wallet(pool: PgPool) {
+async fn onchain_registration_rejects_zero_role_flags(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+    // Wallet login creates the user and links the wallet, defaulting to Tenant;
+    // promote to admin so `to_onchain_role_flags()` maps to 0.
+    let session = common::login_and_extract(&env).await;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1")
+        .bind(session.user_id)
+        .execute(&pool)
+        .await
+        .expect("promote user to admin");
+
+    let (status, _body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/users/me/onchain-registration",
+        &session.access_token,
+        &json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn onchain_registration_requires_wallet(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
     let access_token = register_password_user(&env, "nowallet@example.com").await;
 
@@ -144,8 +212,8 @@ async fn onchain_registration_conflicts_without_wallet(pool: PgPool) {
     )
     .await;
 
-    // No wallet linked yet -> the onboarding-order gate returns 409.
-    assert_eq!(status, StatusCode::CONFLICT);
+    // No wallet linked yet is an unmet precondition, not a conflict -> 422.
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]

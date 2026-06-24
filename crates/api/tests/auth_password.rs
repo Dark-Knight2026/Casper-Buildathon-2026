@@ -6,11 +6,11 @@ use axum::http::StatusCode;
 use axum_test::{TestResponse, http::header::COOKIE};
 use secrecy::SecretString;
 use serde_json::{Value, json};
-use sqlx::PgPool;
+use sqlx::{FromRow, PgPool};
 
 use api::{
     UserRole,
-    common::{RedisStore, VerificationLevel},
+    common::{RedisStore, VerificationLevel, tokens},
     services::auth,
 };
 use common::{CapturingMailer, TestEnv};
@@ -27,7 +27,7 @@ const NEW_PASSWORD: &str = "N3wPassword";
 
 /// Auth-relevant columns of a `users` row, read back via a runtime
 /// `query_as`. Nullable columns map to `Option`.
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct UserAuthRow {
     /// `users.primary_auth_method` (NOT NULL): `'wallet' | 'password' | 'oauth'`.
     primary_auth_method: String,
@@ -59,7 +59,7 @@ async fn register_creates_user_and_logs_in(pool: PgPool) {
         }))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.status_code(), StatusCode::CREATED);
 
     // Auto-login: both auth cookies must be set.
     let access_token = response.cookie("access_token").value().to_owned();
@@ -118,7 +118,7 @@ async fn register_duplicate_email_returns_409(pool: PgPool) {
         .post("/api/v1/auth/register")
         .json(&payload)
         .await;
-    assert_eq!(first.status_code(), StatusCode::OK);
+    assert_eq!(first.status_code(), StatusCode::CREATED);
 
     let second = env
         .server
@@ -144,7 +144,7 @@ async fn register_normalizes_email_case(pool: PgPool) {
             "last_name": "A",
         }))
         .await;
-    assert_eq!(first.status_code(), StatusCode::OK);
+    assert_eq!(first.status_code(), StatusCode::CREATED);
 
     let second = env
         .server
@@ -252,7 +252,7 @@ async fn password_login_succeeds_with_valid_credentials(pool: PgPool) {
             "last_name": "In",
         }))
         .await;
-    assert_eq!(register.status_code(), StatusCode::OK);
+    assert_eq!(register.status_code(), StatusCode::CREATED);
 
     // Mixed case on login proves the handler normalizes before lookup.
     let response = env
@@ -300,7 +300,7 @@ async fn password_login_rejects_wrong_password(pool: PgPool) {
             "last_name": "Pass",
         }))
         .await;
-    assert_eq!(register.status_code(), StatusCode::OK);
+    assert_eq!(register.status_code(), StatusCode::CREATED);
 
     let response = env
         .server
@@ -378,7 +378,7 @@ async fn password_login_rejects_suspended_account(pool: PgPool) {
             "last_name": "Pended",
         }))
         .await;
-    assert_eq!(register.status_code(), StatusCode::OK);
+    assert_eq!(register.status_code(), StatusCode::CREATED);
 
     sqlx::query("UPDATE users SET status = 'suspended' WHERE email = $1")
         .bind("suspended@example.com")
@@ -414,7 +414,7 @@ async fn register_account(env: &TestEnv, email: &str) -> TestResponse {
             "last_name": "Got",
         }))
         .await;
-    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.status_code(), StatusCode::CREATED);
     response
 }
 
@@ -654,6 +654,83 @@ async fn reset_password_token_is_single_use(pool: PgPool) {
     assert_eq!(second.status_code(), StatusCode::BAD_REQUEST);
 }
 
+/// The reset slot carries a positive TTL (it was stored with `EX`), and once
+/// that TTL elapses the token is rejected with the generic 400 - TTL
+/// enforcement is the only thing stopping an intercepted link from being
+/// redeemable forever. A slot stored without expiry would read `TTL = -1` and
+/// fail the first assertion.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_rejects_expired_token(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "expired@example.com").await;
+    let token = forgot_and_take_token(&env, &mailer, "expired@example.com").await;
+
+    let hash = tokens::hash_presented(&token);
+    let key = RedisStore::password_reset_key(&hash);
+    let redis_env = env.redis.as_ref().expect("redis env");
+    let mut conn = redis_env
+        .client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("redis connection");
+
+    // The freshly-issued slot must have a positive, bounded TTL: proof it was
+    // stored with `EX` and is not a permanent (TTL = -1) entry.
+    let ttl = redis::cmd("TTL")
+        .arg(&key)
+        .query_async::<i64>(&mut conn)
+        .await
+        .expect("TTL on reset slot");
+    assert!(
+        ttl > 0 && ttl <= 30 * 60,
+        "reset slot must carry a positive bounded TTL, got {ttl}"
+    );
+
+    // Force the slot to expire (EXPIRE 0 evicts it immediately, the same effect
+    // the TTL has) and confirm the redeem path now rejects the token with 400.
+    redis::cmd("EXPIRE")
+        .arg(&key)
+        .arg(0)
+        .query_async::<i64>(&mut conn)
+        .await
+        .expect("EXPIRE the reset slot");
+
+    let response = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token, "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+/// A weak new password on reset is rejected (400) WITHOUT burning the one-shot
+/// token: the policy check runs before the Redis `GETDEL`, so the same token
+/// then completes the reset with a valid password. Pins the documented
+/// "fat-finger keeps the token live" UX invariant.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_weak_password_preserves_token(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "fatfinger@example.com").await;
+    let token = forgot_and_take_token(&env, &mailer, "fatfinger@example.com").await;
+
+    // A weak password fails the policy with 400 before the token is consumed.
+    let weak = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token.clone(), "new_password": "weak" }))
+        .await;
+    assert_eq!(weak.status_code(), StatusCode::BAD_REQUEST);
+
+    // The token survived: the same one now completes the reset with a valid
+    // password and re-logs the user in.
+    let strong = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token, "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(strong.status_code(), StatusCode::OK);
+}
+
 // Rate limiting ---------------------------------------------------------------
 
 /// Posts a registration with a distinct email, returning the raw response so a
@@ -708,7 +785,7 @@ async fn register_rate_limited_after_five_attempts_per_ip(pool: PgPool) {
         let response = post_register(&env, &format!("burst{index}@example.com")).await;
         assert_eq!(
             response.status_code(),
-            StatusCode::OK,
+            StatusCode::CREATED,
             "registration {index} is within the per-IP cap"
         );
     }
@@ -718,6 +795,40 @@ async fn register_rate_limited_after_five_attempts_per_ip(pool: PgPool) {
     assert_eq!(
         blocked.json::<Value>()["error"].as_str(),
         Some("rate_limited")
+    );
+}
+
+/// Malformed registration bodies must not consume the per-IP rate-limit
+/// window: the counter is bumped only for well-formed requests. On the pre-fix
+/// code the limiter ran (and recorded the attempt) before validation, so five
+/// invalid bodies burned the window and the following valid registration was
+/// rejected with 429.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn register_invalid_bodies_do_not_consume_rate_limit(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    // Five malformed registrations (invalid email) from the same client IP.
+    for _ in 0..5 {
+        let response = env
+            .server
+            .post("/api/v1/auth/register")
+            .json(&json!({
+                "email": "not-an-email",
+                "password": VALID_PASSWORD,
+                "first_name": "Bad",
+                "last_name": "Body",
+            }))
+            .await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    }
+
+    // A well-formed registration must still succeed: the malformed bodies
+    // above must not have counted toward the per-IP cap.
+    let valid = post_register(&env, "valid@example.com").await;
+    assert_eq!(
+        valid.status_code(),
+        StatusCode::CREATED,
+        "invalid bodies must not consume the registration rate-limit window"
     );
 }
 
