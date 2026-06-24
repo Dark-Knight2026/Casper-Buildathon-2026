@@ -58,11 +58,11 @@ const GAS_CREATE_LEASE_PER_MONTH = BigInt(
   import.meta.env.VITE_LEASE_AGREEMENT_CREATE_GAS_PER_MONTH ?? '4000000000' // 4 CSPR
 );
 
-/** Whole 30-day months in the lease term, from the on-chain start/end seconds. */
+/** Whole 30-day months in the lease term, from the on-chain start/end millis. */
 function leaseTermMonths(params: CreateLeaseAgreementParamsInput): bigint {
-  const start = BigInt(params.startUnixSeconds);
-  const end = BigInt(params.endUnixSeconds);
-  return end > start ? (end - start) / 2_592_000n : 0n;
+  const start = BigInt(params.startUnixMillis);
+  const end = BigInt(params.endUnixMillis);
+  return end > start ? (end - start) / 2_592_000_000n : 0n;
 }
 
 /** Payment ceiling for a `create_lease_agreement` call, scaled by its term. */
@@ -108,11 +108,18 @@ export interface CreateLeaseAgreementParamsInput {
   equityPropertyId?: U256Input | null;
   monthlyRent: CurrencyAmountInput;
   securityDeposit: CurrencyAmountInput;
-  /** Lease start, unix seconds. */
-  startUnixSeconds: U256Input;
-  /** Lease end, unix seconds. `(end - start)` must be a whole 30-day multiple. */
-  endUnixSeconds: U256Input;
-  /** Seconds added to invoice creation time to compute invoice deadlines. */
+  /**
+   * Lease start, unix milliseconds — the contract compares this against the
+   * block time, which Casper reports in milliseconds.
+   */
+  startUnixMillis: U256Input;
+  /**
+   * Lease end, unix milliseconds. `(end - start)` must be a whole multiple of
+   * 30 days **in milliseconds** (`ONE_MONTH_IN_MILLISECONDS`), else the
+   * contract reverts with `InvalidTimeframes` (403).
+   */
+  endUnixMillis: U256Input;
+  /** Milliseconds added to invoice creation time to compute invoice deadlines. */
   invoiceValidityDuration: U256Input;
 }
 
@@ -240,8 +247,8 @@ export function encodeCreateLeaseAgreementParams(
     optionToBytes(equityOption),
     encodeCurrencyAmount(params.monthlyRent),
     encodeCurrencyAmount(params.securityDeposit),
-    u64ToBytes(params.startUnixSeconds),
-    u64ToBytes(params.endUnixSeconds),
+    u64ToBytes(params.startUnixMillis),
+    u64ToBytes(params.endUnixMillis),
     u64ToBytes(params.invoiceValidityDuration)
   );
 }

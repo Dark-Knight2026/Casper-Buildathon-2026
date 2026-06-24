@@ -128,8 +128,8 @@ describe('encodeCreateLeaseAgreementParams', () => {
       equityPropertyId: null,
       monthlyRent: { amount: 250n },
       securityDeposit: { amount: 250n },
-      startUnixSeconds: 0n,
-      endUnixSeconds: 2_592_000n,
+      startUnixMillis: 0n,
+      endUnixMillis: 2_592_000n,
       invoiceValidityDuration: 0n,
     });
 
@@ -158,8 +158,8 @@ describe('encodeCreateLeaseAgreementParams', () => {
       equityPropertyId: 9n,
       monthlyRent: { amount: 1n },
       securityDeposit: { amount: 1n },
-      startUnixSeconds: 0n,
-      endUnixSeconds: 2_592_000n,
+      startUnixMillis: 0n,
+      endUnixMillis: 2_592_000n,
       invoiceValidityDuration: 0n,
     });
 
@@ -183,7 +183,7 @@ describe('encodeCreateLeaseAgreementParams', () => {
 });
 
 describe('estimateCreateLeaseGas', () => {
-  const ONE_MONTH = 2_592_000n;
+  const ONE_MONTH = 2_592_000_000n;
   // Defaults (no env): 8 CSPR base + 4 CSPR per month, in motes.
   const BASE = 8_000_000_000n;
   const PER_MONTH = 4_000_000_000n;
@@ -195,8 +195,8 @@ describe('estimateCreateLeaseGas', () => {
         equityPropertyId: null,
         monthlyRent: { amount: 1n },
         securityDeposit: { amount: 1n },
-        startUnixSeconds: 0n,
-        endUnixSeconds: months * ONE_MONTH,
+        startUnixMillis: 0n,
+        endUnixMillis: months * ONE_MONTH,
         invoiceValidityDuration: 0n,
       });
 
@@ -210,8 +210,8 @@ describe('estimateCreateLeaseGas', () => {
       equityPropertyId: null,
       monthlyRent: { amount: 1n },
       securityDeposit: { amount: 1n },
-      startUnixSeconds: 100n,
-      endUnixSeconds: 50n,
+      startUnixMillis: 100n,
+      endUnixMillis: 50n,
       invoiceValidityDuration: 0n,
     });
     expect(gas).toBe(BASE);

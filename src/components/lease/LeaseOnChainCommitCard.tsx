@@ -188,12 +188,16 @@ function CommitFlow({ lease }: { lease: Lease }) {
   // equity property the on-chain id is required (the off-chain row holds only a
   // UUID, so the landlord supplies it). Rent + deposit are both in tUSDC; we
   // scale the human amounts to its smallest unit and the local date-times to
-  // unix seconds here, just before signing.
+  // unix milliseconds here, just before signing.
   const submit = () => {
-    // The same value goes to the deploy (as the contract-encoded string) and,
-    // as a number, to `/commit` — so the two agree on what was recorded.
-    const invoiceValidityDuration = invoiceValiditySeconds();
-    invoiceValidityDurationRef.current = Number(invoiceValidityDuration);
+    // The contract works in milliseconds (it compares the term against the
+    // Casper block time and requires `(end - start)` to be a whole multiple of
+    // 30 days in ms). The backend `/commit`, however, wants the invoice
+    // validity in seconds — it builds off-chain deadlines as `NOW() + N s`.
+    // So keep the seconds value for `/commit` and send milliseconds to the
+    // deploy (×1000), the same factor applied to the start/end timestamps.
+    const invoiceValiditySecs = Number(invoiceValiditySeconds());
+    invoiceValidityDurationRef.current = invoiceValiditySecs;
     create({
       tenantUserId: form.tenantUserId.trim(),
       equityPropertyId: form.equityPropertyId.trim() || null,
@@ -211,9 +215,13 @@ function CommitFlow({ lease }: { lease: Lease }) {
           LEASE_CURRENCY.decimals
         ),
       },
-      startUnixSeconds: String(dateTimeLocalToUnixSeconds(form.startDateTime)),
-      endUnixSeconds: String(dateTimeLocalToUnixSeconds(form.endDateTime)),
-      invoiceValidityDuration,
+      startUnixMillis: String(
+        dateTimeLocalToUnixSeconds(form.startDateTime) * 1000
+      ),
+      endUnixMillis: String(
+        dateTimeLocalToUnixSeconds(form.endDateTime) * 1000
+      ),
+      invoiceValidityDuration: String(invoiceValiditySecs * 1000),
     });
   };
 

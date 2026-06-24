@@ -34,7 +34,11 @@ export interface LeaseOnChainFormState {
   invoiceValidityDays: string;
 }
 
-/** Whole days as seconds — the unit the contract expects. */
+/**
+ * Whole days as seconds — the unit the backend `/commit` expects (it builds
+ * invoice deadlines as `NOW() + N s`). The on-chain contract works in
+ * milliseconds, so the deploy multiplies this by 1000 before signing.
+ */
 export const daysToSeconds = (days: string) =>
   String(Number(days.trim()) * DAY_IN_SECONDS);
 
