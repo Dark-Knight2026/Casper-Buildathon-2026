@@ -721,6 +721,40 @@ async fn register_rate_limited_after_five_attempts_per_ip(pool: PgPool) {
     );
 }
 
+/// Malformed registration bodies must not consume the per-IP rate-limit
+/// window: the counter is bumped only for well-formed requests. On the pre-fix
+/// code the limiter ran (and recorded the attempt) before validation, so five
+/// invalid bodies burned the window and the following valid registration was
+/// rejected with 429.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn register_invalid_bodies_do_not_consume_rate_limit(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    // Five malformed registrations (invalid email) from the same client IP.
+    for _ in 0..5 {
+        let response = env
+            .server
+            .post("/api/v1/auth/register")
+            .json(&json!({
+                "email": "not-an-email",
+                "password": VALID_PASSWORD,
+                "first_name": "Bad",
+                "last_name": "Body",
+            }))
+            .await;
+        assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    }
+
+    // A well-formed registration must still succeed: the malformed bodies
+    // above must not have counted toward the per-IP cap.
+    let valid = post_register(&env, "valid@example.com").await;
+    assert_eq!(
+        valid.status_code(),
+        StatusCode::OK,
+        "invalid bodies must not consume the registration rate-limit window"
+    );
+}
+
 /// Five failed logins for one email exhaust the per-email failure cap; the
 /// sixth is rejected by the limiter (429) rather than the credential check
 /// (401). The email never existed, so the 429 also doubles as proof the limiter

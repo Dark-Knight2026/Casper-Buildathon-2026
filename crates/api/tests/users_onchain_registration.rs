@@ -130,6 +130,35 @@ async fn onchain_registration_identity_hash_is_deterministic(pool: PgPool) {
     );
 }
 
+/// A role whose on-chain mapping is zero (admin) must not receive a
+/// role_flags=0 registration payload: the endpoint returns 422. The wallet
+/// precondition is satisfied (wallet login links one), but the promoted role
+/// carries no on-chain flag. On the pre-fix code the endpoint returns 200 with
+/// role_flags=0.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn onchain_registration_rejects_zero_role_flags(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+    // Wallet login creates the user and links the wallet, defaulting to Tenant;
+    // promote to admin so `to_onchain_role_flags()` maps to 0.
+    let session = common::login_and_extract(&env).await;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1")
+        .bind(session.user_id)
+        .execute(&pool)
+        .await
+        .expect("promote user to admin");
+
+    let (status, _body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/users/me/onchain-registration",
+        &session.access_token,
+        &json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn onchain_registration_conflicts_without_wallet(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
