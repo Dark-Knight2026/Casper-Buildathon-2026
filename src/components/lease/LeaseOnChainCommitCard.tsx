@@ -3,9 +3,10 @@
  * The landlord signs `create_lease_agreement` from their own wallet via
  * CSPR.click; once the deploy confirms we read the assigned ids from its CES
  * events (`extractLeaseCommitIds`) and report them with the hash to the backend
- * (`POST /commit`), which records them and activates the lease. The id read is
- * best-effort — if it fails we still commit the hash and the backend indexer
- * derives the lease id from the same event (the NFT token id has no fallback).
+ * (`POST /commit`), which validates the lease id, reconciles it against the
+ * chain, records the bindings, and activates the lease. The backend requires
+ * both ids, so if the read comes back empty we surface a retry (the deploy is
+ * already on-chain, so re-reading succeeds) rather than sending an invalid commit.
  *
  * Targets the contract deployed from `2025_anthony_leasefi` user-registry:
  * `tenant` is the tenant's on-chain UserRegistry user id (`U256`), prefilled
@@ -68,28 +69,40 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const [form, setForm] = useState<LeaseOnChainFormState>(() =>
     initialLeaseOnChainForm(lease)
   );
-  // The `/commit` push can fail after the deploy already succeeded on-chain; that
-  // must be retryable WITHOUT re-signing (a second deploy = duplicate lease/NFT).
+  // Recording can fail after the deploy already succeeded on-chain — either the
+  // id read or the `/commit` push — and must be retryable WITHOUT re-signing (a
+  // second deploy = duplicate lease/NFT).
   const [pushFailed, setPushFailed] = useState(false);
+  // True while a re-record (read CES + push) is in flight, to drive the button.
+  const [recording, setRecording] = useState(false);
   // On-chain ids read from the confirmed deploy's CES events, cached so a retry
-  // re-sends them without re-reading the deploy. Starts as nulls (= "send the
-  // hash only") so a retry before/without a successful read still works.
+  // after a failed push doesn't re-read the deploy.
   const commitIdsRef = useRef<LeaseCommitIds>({
     onchainLeaseId: null,
     nftTokenId: null,
   });
+  // `invoice_validity_duration` (seconds, as a number — the backend wants a
+  // u64) actually used for the deploy. The backend requires it on `/commit`;
+  // it must equal the value sent to `create_lease_agreement`. Captured at sign
+  // time (and refreshed from the form before a recovery retry); the CES events
+  // don't carry it, so the form is the only source. Initialised from the form's
+  // starting value so a retry-after-reload still sends something sensible.
+  const invoiceValidityDurationRef = useRef(
+    Number(daysToSeconds(form.invoiceValidityDays))
+  );
 
-  // Hand the deploy hash + parsed ids to the backend, which records them and
-  // activates the lease. Reusable so a failed push can be retried in place with
-  // the same hash + ids. The duplicate guard lives on the backend, keyed on the
-  // deploy/commit hash; null ids are omitted (the indexer fills the lease id).
+  // Send the parsed ids + hash to the backend, which validates the lease id,
+  // reconciles it against the chain, and activates the lease. The duplicate
+  // guard lives on the backend, keyed on the deploy/commit hash. Returns the
+  // promise so callers can await the push (e.g. to drive a busy indicator).
   const pushCommit = useCallback(
-    (hash: string, ids: LeaseCommitIds) => {
+    (hash: string, onchainLeaseId: string, nftTokenId: string) => {
       setPushFailed(false);
-      commitLease(lease.id, {
+      return commitLease(lease.id, {
         commitTxHash: hash,
-        ...(ids.onchainLeaseId ? { onchainLeaseId: ids.onchainLeaseId } : {}),
-        ...(ids.nftTokenId ? { nftTokenId: ids.nftTokenId } : {}),
+        onchainLeaseId,
+        nftTokenId,
+        invoiceValidityDuration: invoiceValidityDurationRef.current,
       })
         .then(() =>
           queryClient.invalidateQueries({ queryKey: ['lease', lease.id] })
@@ -99,13 +112,28 @@ function CommitFlow({ lease }: { lease: Lease }) {
     [lease.id, queryClient]
   );
 
-  // Read the lease + NFT ids from the confirmed deploy, then push. Best-effort:
-  // if the read fails it caches nulls and the push proceeds with just the hash.
+  // Read the lease + NFT ids from the confirmed deploy (cached across retries),
+  // then push. The backend requires both ids, so if the read comes back empty we
+  // surface the failure for retry rather than sending an invalid commit — the
+  // deploy is already on-chain, so re-reading should succeed.
   const recordCommit = useCallback(
     async (hash: string) => {
-      const ids = await extractLeaseCommitIds(hash);
-      commitIdsRef.current = ids;
-      pushCommit(hash, ids);
+      setPushFailed(false);
+      setRecording(true);
+      try {
+        let ids = commitIdsRef.current;
+        if (!ids.onchainLeaseId || !ids.nftTokenId) {
+          ids = await extractLeaseCommitIds(hash);
+          commitIdsRef.current = ids;
+        }
+        if (!ids.onchainLeaseId || !ids.nftTokenId) {
+          setPushFailed(true);
+          return;
+        }
+        await pushCommit(hash, ids.onchainLeaseId, ids.nftTokenId);
+      } finally {
+        setRecording(false);
+      }
     },
     [pushCommit]
   );
@@ -150,13 +178,20 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const busy = step === 'signing' || step === 'pending';
   const hasWalletSession = Boolean(account?.publicKey && clickRef);
   const hasEquity = Boolean(lease.equityPropertyId);
+  // The deploy hash already recorded on the lease (set before the indexer
+  // finalizes). Present => we're recovering a stalled "finalizing" lease.
+  const committedHash = lease.commitTxHash;
 
   // Equity only applies to a lease-to-own lease; when the lease carries an
   // equity property the on-chain id is required (the off-chain row holds only a
   // UUID, so the landlord supplies it). Rent + deposit are both in tUSDC; we
   // scale the human amounts to its smallest unit and the local date-times to
   // unix seconds here, just before signing.
-  const submit = () =>
+  const submit = () => {
+    // The same value goes to the deploy (as the contract-encoded string) and,
+    // as a number, to `/commit` — so the two agree on what was recorded.
+    const invoiceValidityDuration = daysToSeconds(form.invoiceValidityDays);
+    invoiceValidityDurationRef.current = Number(invoiceValidityDuration);
     create({
       tenantUserId: form.tenantUserId.trim(),
       equityPropertyId: form.equityPropertyId.trim() || null,
@@ -176,8 +211,9 @@ function CommitFlow({ lease }: { lease: Lease }) {
       },
       startUnixSeconds: String(dateTimeLocalToUnixSeconds(form.startDateTime)),
       endUnixSeconds: String(dateTimeLocalToUnixSeconds(form.endDateTime)),
-      invoiceValidityDuration: daysToSeconds(form.invoiceValidityDays),
+      invoiceValidityDuration,
     });
+  };
 
   if (!hasWalletSession) {
     return (
@@ -189,6 +225,61 @@ function CommitFlow({ lease }: { lease: Lease }) {
 
   return (
     <div className="space-y-4">
+      {/* Recovery: the lease already carries a recorded deploy that never
+          finalized. The SAFE action re-reads that same deploy and re-pushes
+          `/commit` (no signature, no duplicate). The signing form stays
+          available below so the landlord can also record a fresh deploy — with
+          a clear warning that doing so mints a second lease + NFT. We hide this
+          banner right after an in-session sign (`step === 'confirmed'`), where
+          the dedicated status/retry UI below takes over. */}
+      {committedHash && step !== 'confirmed' && (
+        <div className="space-y-2 rounded-lg border p-3">
+          <p className="text-sm text-muted-foreground">
+            This lease already has a recorded deploy, but the platform hasn’t
+            finalized it yet.{' '}
+            <a
+              href={explorerDeployUrl(committedHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline"
+            >
+              View the deploy on cspr.live
+            </a>
+          </p>
+          {pushFailed && (
+            <p className="text-sm text-destructive">
+              Couldn’t finalize from the existing deploy. Retry, or record a new
+              deploy below if the recorded one genuinely failed.
+            </p>
+          )}
+          <Button
+            variant="outline"
+            disabled={recording}
+            onClick={() => {
+              // No fresh sign here, so take the duration from the visible form
+              // (sent as a number — the backend wants a u64).
+              invoiceValidityDurationRef.current = Number(
+                daysToSeconds(form.invoiceValidityDays)
+              );
+              void recordCommit(committedHash);
+            }}
+          >
+            {recording ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Recording…
+              </>
+            ) : (
+              'Retry recording (no new deploy)'
+            )}
+          </Button>
+          <p className="text-xs text-destructive">
+            Or record a fresh deploy below — note this mints a second lease +
+            NFT on-chain, so only do it if the recorded deploy failed.
+          </p>
+        </div>
+      )}
+
       <LeaseOnChainForm
         form={form}
         hasEquity={hasEquity}
@@ -220,12 +311,9 @@ function CommitFlow({ lease }: { lease: Lease }) {
         <div className="space-y-2">
           <p className="text-sm text-destructive">
             The deploy succeeded on-chain, but the platform wasn’t notified.
-            Retry — this re-sends the same deploy, it does not sign again.
+            Retry — this re-reads the same deploy, it does not sign again.
           </p>
-          <Button
-            variant="outline"
-            onClick={() => pushCommit(txHash, commitIdsRef.current)}
-          >
+          <Button variant="outline" onClick={() => void recordCommit(txHash)}>
             Retry recording
           </Button>
         </div>
@@ -271,30 +359,35 @@ export function LeaseOnChainCommitCard({ lease }: { lease: Lease }) {
     Boolean(lease.signatureProgress?.tenant?.signed);
 
   // Stay dark unless this is the landlord on a both-signed, awaiting-commit
-  // lease and the contract is configured. Also hide once recorded — either the
-  // indexer has set `onchainLeaseId`, or the deploy hash is already committed
-  // and we're just waiting on the indexer to activate.
+  // lease and the contract is configured. Hide only once the indexer has set
+  // `onchainLeaseId` (truly recorded). We deliberately KEEP showing the card
+  // when a `commitTxHash` exists but no `onchainLeaseId` — that "finalizing"
+  // state can stall (indexer down / commit never reconciled), and the landlord
+  // needs a way to finish it (re-record) or, as a last resort, re-sign.
   if (
     !isLeaseAgreementEnabled ||
     !isLandlord ||
     lease.status !== 'pending-signatures' ||
     !bothSigned ||
-    lease.onchainLeaseId ||
-    lease.commitTxHash
+    lease.onchainLeaseId
   ) {
     return null;
   }
+
+  // A recorded-but-unfinalized lease is being recovered, not freshly recorded.
+  const isFinalizing = Boolean(lease.commitTxHash);
 
   return (
     <Card className="mt-4">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5" />
-          Record on-chain
+          {isFinalizing ? 'Finalize on-chain' : 'Record on-chain'}
         </CardTitle>
         <CardDescription>
-          Both parties have signed. Record the lease on Casper by signing the
-          deploy from your wallet.
+          {isFinalizing
+            ? 'The lease has a recorded deploy that hasn’t finalized on the platform yet. Finish recording it below.'
+            : 'Both parties have signed. Record the lease on Casper by signing the deploy from your wallet.'}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -305,7 +398,9 @@ export function LeaseOnChainCommitCard({ lease }: { lease: Lease }) {
         ) : (
           <Button onClick={() => setStarted(true)}>
             <ShieldCheck className="mr-2 h-4 w-4" />
-            Record lease on-chain
+            {isFinalizing
+              ? 'Finalize on-chain recording'
+              : 'Record lease on-chain'}
           </Button>
         )}
       </CardContent>

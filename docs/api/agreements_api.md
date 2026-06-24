@@ -184,6 +184,7 @@ reconcile against the contract (`get_lease_agreement_by_id`) before setting `act
   "onchainLeaseId": "0",
   "nftTokenId": "0",
   "commitTxHash": "string",
+  "invoiceValidityDuration": 0, // U64 seconds (JSON number, not a string)
 }
 ```
 

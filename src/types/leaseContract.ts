@@ -172,18 +172,24 @@ export interface SignLeaseBody {
 }
 
 export interface CommitLeaseBody {
+  /**
+   * On-chain ids the frontend reads from the deploy's CES events and reports
+   * with the hash. Both are U256 decimal strings and both are required: the
+   * backend validates `onchainLeaseId` and reconciles it against the chain
+   * (`get_lease_agreement_by_id`) before persisting, so the commit can't be
+   * sent until they're read from the confirmed deploy.
+   */
+  onchainLeaseId: string;
+  nftTokenId: string;
   /** Deploy/tx hash of the `create_lease_agreement` call. */
   commitTxHash: string;
   /**
-   * On-chain ids the frontend reads from the deploy's CES events
-   * (`LeaseAgreementCreated.lease_agreement_id` / lease-NFT `Mint.token_id`) and
-   * reports alongside the hash. Both are U256 decimal strings. Optional: when
-   * the frontend can't read them, it omits them and the backend indexer derives
-   * the lease id from the same event (the NFT token id has no indexer fallback,
-   * so reporting it here is the only way it gets recorded).
+   * `invoice_validity_duration` — seconds the landlord passed into
+   * `create_lease_agreement`, used to compute off-chain invoice deadlines. The
+   * backend deserializes it as a `u64`, so it must be a JSON number (NOT a
+   * decimal string like the U256 ids above).
    */
-  onchainLeaseId?: string;
-  nftTokenId?: string;
+  invoiceValidityDuration: number;
 }
 
 /** Query filters for `GET /api/v1/leases`. */
