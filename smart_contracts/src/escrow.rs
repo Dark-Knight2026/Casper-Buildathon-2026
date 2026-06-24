@@ -4,7 +4,11 @@ use odra::{
     uints::ToU512,
     ContractRef,
 };
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use odra_modules::{
+    access::Ownable,
+    cep18_token::Cep18ContractRef,
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::{
     common::CurrencyAmount,
@@ -229,6 +233,8 @@ pub struct Escrow {
     invoices_count: Var<U256>,
     /// Minimum delay required between invoice creation and deadline.
     min_deadline: Var<u64>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -241,6 +247,14 @@ impl Escrow {
         self.ownable.init(owner);
         self.user_registry.set(user_registry);
         self.set_min_deadline(min_deadline);
+        self.metadata.init(
+            Some("BIG LeaseFi Escrow".into()),
+            Some(
+                "Conditional fund locking for rent, invoices, and security deposits.".into(),
+            ),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -486,6 +500,13 @@ impl Escrow {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
             fn get_owner(&self) -> Address;
+        }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
         }
     }
 }
