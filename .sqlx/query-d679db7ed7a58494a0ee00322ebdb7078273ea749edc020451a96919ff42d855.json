@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                COALESCE(SUM(amount_due) FILTER (\n                    WHERE kind = 'rent' AND status = 'paid'\n                      AND updated_at >= date_trunc('month', NOW())\n                ), 0)::text AS \"rent_received_mtd!\",\n                COALESCE(SUM(amount_due) FILTER (\n                    WHERE kind = 'rent' AND status IN ('pending', 'partial')\n                      AND deadline >= date_trunc('month', NOW())::date\n                      AND deadline < (date_trunc('month', NOW()) + INTERVAL '1 month')::date\n                ), 0)::text AS \"monthly_rent_due!\",\n                COUNT(*) FILTER (\n                    WHERE status IN ('pending', 'partial') AND deadline < CURRENT_DATE\n                ) AS \"overdue_count!\",\n                COALESCE(SUM(amount_due - rent_paid) FILTER (\n                    WHERE status IN ('pending', 'partial') AND deadline < CURRENT_DATE\n                ), 0)::text AS \"overdue_amount!\",\n                COALESCE(SUM(amount_due) FILTER (\n                    WHERE kind = 'security_deposit' AND status = 'paid'\n                ), 0)::text AS \"deposits_held!\"\n            FROM invoices\n            WHERE landlord_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rent_received_mtd!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "monthly_rent_due!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "overdue_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "overdue_amount!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "deposits_held!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d679db7ed7a58494a0ee00322ebdb7078273ea749edc020451a96919ff42d855"
+}

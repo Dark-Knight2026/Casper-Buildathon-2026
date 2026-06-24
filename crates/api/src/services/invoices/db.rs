@@ -1,12 +1,13 @@
 //! Database operations for invoices.
 //!
-//! Money columns (`amount_due`, `rent_paid`, `landlord_charge`, `tenant_refund`)
-//! and the U256 `onchain_invoice_id` are cast to `TEXT` at the SQL boundary so
-//! the row maps to decimal/​U256 strings without precision loss. The TEXT
-//! `kind`/`status` columns are read into the private [`InvoiceRowRaw`] and parsed
-//! into typed [`InvoiceKind`]/[`InvoiceStatus`] via `TryFrom`, so a stray CHECK
-//! value fails loudly with [`Error::ColumnDecode`] rather than degrading
-//! silently (mirrors the `users`/`auth`/`renewals` db layers).
+//! Money columns (`amount_due`, `rent_paid`, `landlord_charge`,
+//! `tenant_refund`) and the U256 `onchain_invoice_id` are cast to `TEXT` at the
+//! SQL boundary so the row maps to `decimal`/`U256` strings without precision
+//! loss. The TEXT `kind`/`status` columns are read into the private
+//! [`InvoiceRowRaw`] and parsed into typed [`InvoiceKind`]/[`InvoiceStatus`]
+//! via `TryFrom`, so a stray CHECK value fails loudly with
+//! [`Error::ColumnDecode`] rather than degrading silently (mirrors the
+//! `users`/`auth`/`renewals` db layers).
 //!
 //! The filter set is dynamic, so the list query is built with a runtime
 //! `QueryBuilder` via the shared [`AppendFilters`]/[`AppendOrder`] traits; the
@@ -21,7 +22,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{AppendFilters, AppendOrder, QueryBuilderExt},
-    services::invoices::models::{InvoiceKind, InvoiceSort, InvoiceStatus},
+    services::invoices::models::{InvoiceKind, InvoiceSort, InvoiceStatus, LandlordSummary},
 };
 
 /// An invoice row as stored, with typed `kind`/`status` and string money fields.
@@ -400,4 +401,133 @@ pub async fn settle_invoice(
     .await?;
 
     InvoiceRow::try_from(raw)
+}
+
+/// The tenant-summary money aggregates (the `nextDue` invoice is loaded
+/// separately by [`fetch_next_due`] and assembled in the handler).
+#[derive(Debug)]
+pub struct TenantMoneySummary {
+    /// Outstanding balance across unpaid invoices (decimal string).
+    pub balance_due: String,
+    /// Total paid so far this calendar year (decimal string).
+    pub paid_ytd: String,
+    /// Security deposit currently held in escrow (decimal string).
+    pub deposit_held: String,
+}
+
+/// Computes the landlord dashboard aggregates across the landlord's invoices.
+///
+/// All money figures are decimal strings; `overdue_count` is a plain count.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn landlord_summary(pool: &PgPool, landlord: Uuid) -> Result<LandlordSummary, Error> {
+    sqlx::query_as!(
+        LandlordSummary,
+        r#"
+            SELECT
+                COALESCE(SUM(amount_due) FILTER (
+                    WHERE kind = 'rent' AND status = 'paid'
+                      AND updated_at >= date_trunc('month', NOW())
+                ), 0)::text AS "rent_received_mtd!",
+                COALESCE(SUM(amount_due) FILTER (
+                    WHERE kind = 'rent' AND status IN ('pending', 'partial')
+                      AND deadline >= date_trunc('month', NOW())::date
+                      AND deadline < (date_trunc('month', NOW()) + INTERVAL '1 month')::date
+                ), 0)::text AS "monthly_rent_due!",
+                COUNT(*) FILTER (
+                    WHERE status IN ('pending', 'partial') AND deadline < CURRENT_DATE
+                ) AS "overdue_count!",
+                COALESCE(SUM(amount_due - rent_paid) FILTER (
+                    WHERE status IN ('pending', 'partial') AND deadline < CURRENT_DATE
+                ), 0)::text AS "overdue_amount!",
+                COALESCE(SUM(amount_due) FILTER (
+                    WHERE kind = 'security_deposit' AND status = 'paid'
+                ), 0)::text AS "deposits_held!"
+            FROM invoices
+            WHERE landlord_id = $1
+        "#,
+        landlord,
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Computes the tenant dashboard money aggregates across the tenant's invoices.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn tenant_money_summary(
+    pool: &PgPool,
+    tenant: Uuid,
+) -> Result<TenantMoneySummary, Error> {
+    sqlx::query_as!(
+        TenantMoneySummary,
+        r#"
+            SELECT
+                COALESCE(SUM(amount_due - rent_paid) FILTER (
+                    WHERE status IN ('pending', 'partial')
+                ), 0)::text AS "balance_due!",
+                COALESCE(SUM(amount_due) FILTER (
+                    WHERE status = 'paid' AND updated_at >= date_trunc('year', NOW())
+                ), 0)::text AS "paid_ytd!",
+                COALESCE(SUM(amount_due) FILTER (
+                    WHERE kind = 'security_deposit' AND status = 'paid'
+                ), 0)::text AS "deposit_held!"
+            FROM invoices
+            WHERE tenant_id = $1
+        "#,
+        tenant,
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Fetches the tenant's next payable invoice (soonest `pending`/`partial` by
+/// deadline), or `None` when nothing is due.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure, or [`Error::ColumnDecode`] if a
+/// stored `kind`/`status` is not a known enum value.
+#[inline]
+pub async fn fetch_next_due(pool: &PgPool, tenant: Uuid) -> Result<Option<InvoiceRow>, Error> {
+    let raw = sqlx::query_as!(
+        InvoiceRowRaw,
+        r#"
+            SELECT
+                id,
+                onchain_invoice_id::text AS onchain_invoice_id,
+                lease_id,
+                kind,
+                tenant_id,
+                landlord_id,
+                property_id,
+                amount_due::text AS "amount_due!",
+                rent_paid::text AS "rent_paid!",
+                property_manager_id,
+                property_manager_bps,
+                status,
+                deadline,
+                landlord_charge::text AS landlord_charge,
+                tenant_refund::text AS tenant_refund,
+                tx_hash,
+                receipt_url,
+                created_at,
+                updated_at
+            FROM invoices
+            WHERE tenant_id = $1 AND status IN ('pending', 'partial')
+            ORDER BY deadline ASC, id ASC
+            LIMIT 1
+        "#,
+        tenant,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    raw.map(InvoiceRow::try_from).transpose()
 }

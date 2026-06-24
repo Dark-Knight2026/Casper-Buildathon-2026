@@ -21,7 +21,17 @@ use crate::{
 /// Whether an invoice is a rent charge or a security deposit. Stored as TEXT
 /// (CHECK) in the DB (`snake_case`); the wire form is hyphenated.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display, AsRefStr,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    EnumString,
+    Display,
+    AsRefStr,
 )]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "snake_case")]
@@ -40,7 +50,17 @@ pub enum InvoiceKind {
 /// its deadline. The DB column always holds the authoritative on-chain status so
 /// the indexer can reconcile without working around a derived sentinel.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display, AsRefStr,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    EnumString,
+    Display,
+    AsRefStr,
 )]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "snake_case")]
@@ -137,6 +157,90 @@ impl From<InvoiceRow> for Invoice {
             receipt_url: row.receipt_url,
             created_at: row.created_at,
             updated_at: row.updated_at,
+        }
+    }
+}
+
+/// Landlord dashboard aggregates across the landlord's invoices. All money
+/// figures are USDC decimal strings.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LandlordSummary {
+    /// Rent received this calendar month.
+    pub rent_received_mtd: String,
+    /// Rent still due within the current month.
+    pub monthly_rent_due: String,
+    /// Number of unpaid invoices past their deadline.
+    pub overdue_count: i64,
+    /// Outstanding balance across overdue invoices.
+    pub overdue_amount: String,
+    /// Security deposits currently held in escrow.
+    pub deposits_held: String,
+}
+
+/// Tenant dashboard aggregates. Money figures are USDC decimal strings.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantSummary {
+    /// The next payable invoice (soonest unpaid by deadline), if any. Boxed so
+    /// the heavy `Invoice` does not unbalance the `InvoiceSummary` enum.
+    pub next_due: Option<Box<Invoice>>,
+    /// Outstanding balance across the tenant's unpaid invoices.
+    pub balance_due: String,
+    /// Total paid so far this calendar year.
+    pub paid_ytd: String,
+    /// Security deposit currently held in escrow.
+    pub deposit_held: String,
+}
+
+/// `GET /invoices/summary` response: the landlord or tenant shape, by scope.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum InvoiceSummary {
+    /// Landlord aggregates (`landlordId=me`).
+    Landlord(LandlordSummary),
+    /// Tenant aggregates (`tenantId=me`).
+    Tenant(TenantSummary),
+}
+
+/// Which party's summary `GET /invoices/summary` should return.
+#[derive(Debug, Clone, Copy)]
+pub enum SummaryScope {
+    /// The caller as landlord.
+    Landlord,
+    /// The caller as tenant.
+    Tenant,
+}
+
+/// Query for `GET /invoices/summary`: exactly one of `tenantId`/`landlordId`
+/// must be `me`.
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryParams {
+    /// `me` for the tenant dashboard summary.
+    pub tenant_id: Option<String>,
+    /// `me` for the landlord dashboard summary.
+    pub landlord_id: Option<String>,
+}
+
+impl SummaryParams {
+    /// Resolves the scope, requiring exactly one of `tenantId`/`landlordId=me`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when neither or both are set, or when
+    /// either is set to anything but `me`.
+    #[inline]
+    pub fn resolve(&self) -> ApiResult<SummaryScope> {
+        match (self.landlord_id.as_deref(), self.tenant_id.as_deref()) {
+            (Some("me"), None) => Ok(SummaryScope::Landlord),
+            (None, Some("me")) => Ok(SummaryScope::Tenant),
+            (Some(_), None) | (None, Some(_)) => Err(ApiError::BadRequest(
+                "tenantId/landlordId support only 'me'".to_owned(),
+            )),
+            _ => Err(ApiError::BadRequest(
+                "exactly one of tenantId=me or landlordId=me is required".to_owned(),
+            )),
         }
     }
 }

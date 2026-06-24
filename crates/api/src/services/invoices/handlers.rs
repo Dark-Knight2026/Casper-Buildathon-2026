@@ -17,8 +17,8 @@ use crate::{
         invoices::{
             db::{self, InvoiceFilter, InvoiceRow},
             models::{
-                Invoice, InvoiceKind, InvoiceListParams, InvoiceStatus, ReceiptResponse,
-                SettlementRequest,
+                Invoice, InvoiceKind, InvoiceListParams, InvoiceStatus, InvoiceSummary,
+                ReceiptResponse, SettlementRequest, SummaryParams, SummaryScope, TenantSummary,
             },
         },
     },
@@ -76,6 +76,60 @@ pub async fn list_invoices(
     let (rows, total) = db::list_invoices(&state.db, claims.sub, &filter).await?;
     let invoices = rows.into_iter().map(Invoice::from).collect();
     Ok(Json(PaginatedResponse::new(invoices, total, &pagination)))
+}
+
+// `GET /api/v1/invoices/summary`
+//
+/// Returns the landlord or tenant dashboard aggregates for the caller.
+///
+/// Exactly one of `tenantId=me` / `landlordId=me` selects the shape: the
+/// landlord summary (rent received MTD, rent due, overdue count/amount, deposits
+/// held) or the tenant summary (next-due invoice, balance due, paid YTD, deposit
+/// held). Computed only over the caller's own invoices.
+///
+/// # Errors
+///
+/// Returns `400` when neither or both of `tenantId`/`landlordId` are set, or
+/// either is not `me`.
+#[utoipa::path(
+    get,
+    path = "/invoices/summary",
+    tag = "Invoices",
+    params(SummaryParams),
+    responses(
+        (status = 200, description = "Dashboard summary", body = InvoiceSummary),
+        (status = 400, description = "Invalid query", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn invoice_summary(
+    State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
+    Query(params): Query<SummaryParams>,
+) -> ApiResult<Json<InvoiceSummary>> {
+    match params.resolve()? {
+        SummaryScope::Landlord => {
+            let summary = db::landlord_summary(&state.db, claims.sub).await?;
+            Ok(Json(InvoiceSummary::Landlord(summary)))
+        }
+        SummaryScope::Tenant => {
+            let money = db::tenant_money_summary(&state.db, claims.sub).await?;
+            let next_due = db::fetch_next_due(&state.db, claims.sub)
+                .await?
+                .map(|row| Box::new(Invoice::from(row)));
+            Ok(Json(InvoiceSummary::Tenant(TenantSummary {
+                next_due,
+                balance_due: money.balance_due,
+                paid_ytd: money.paid_ytd,
+                deposit_held: money.deposit_held,
+            })))
+        }
+    }
 }
 
 // `GET /api/v1/invoices/{id}`
@@ -173,9 +227,15 @@ pub async fn settle_invoice(
     match row.effective_status() {
         InvoiceStatus::Pending | InvoiceStatus::Partial => {}
         InvoiceStatus::Overdue => {
-            return Err(ApiError::Conflict("invoice is past its deadline".to_owned()));
+            return Err(ApiError::Conflict(
+                "invoice is past its deadline".to_owned(),
+            ));
         }
-        _ => return Err(ApiError::Conflict("invoice is not awaiting payment".to_owned())),
+        _ => {
+            return Err(ApiError::Conflict(
+                "invoice is not awaiting payment".to_owned(),
+            ));
+        }
     }
 
     let (new_rent_paid, new_status) = settle_amount(&row, &payload.amount)?;
