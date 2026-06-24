@@ -11,18 +11,16 @@
 
 import { Args, CLValue, Key, Transaction } from 'casper-js-sdk';
 
-import { createContractCallTransaction } from '@/services/ico/casperClient';
+import {
+  contractHashToEntityKey,
+  createContractCallTransaction,
+} from '@/services/ico/casperClient';
 import { getAllowance } from '@/services/ico/cep18Service';
 
 /** Default gas for an `approve` deploy (3 CSPR), env-overridable. */
 const GAS_APPROVE = BigInt(
   import.meta.env.VITE_CEP18_APPROVE_GAS ?? '3000000000'
 );
-
-/** A raw contract/package hash to a `hash-` prefixed string. */
-function withHashPrefix(hash: string): string {
-  return hash.startsWith('hash-') ? hash : `hash-${hash}`;
-}
 
 export interface ApproveParams {
   /** Token holder's public key (hex). */
@@ -49,7 +47,9 @@ export function buildApproveTransaction({
   gas = GAS_APPROVE,
 }: ApproveParams): Transaction {
   const args = Args.fromMap({
-    spender: CLValue.newCLKey(Key.newKey(withHashPrefix(spenderPackageHash))),
+    spender: CLValue.newCLKey(
+      Key.newKey(contractHashToEntityKey(spenderPackageHash))
+    ),
     amount: CLValue.newCLUInt256(amount),
   });
   return createContractCallTransaction(
@@ -87,7 +87,7 @@ export async function isApproveNeeded({
   const current = await getAllowance(
     tokenInstanceHash,
     ownerAccountHash,
-    withHashPrefix(spenderPackageHash)
+    contractHashToEntityKey(spenderPackageHash)
   );
   return current < requiredRaw;
 }

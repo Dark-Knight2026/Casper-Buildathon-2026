@@ -58,8 +58,10 @@ export function useLandlordInvoiceSummary() {
 
 /**
  * `POST /invoices/{id}/settlement` — record the tenant's `pay_invoice` result.
- * Invalidates the invoice list, the settled invoice, and the summaries so the
- * dashboard reflects the optimistic update while the indexer confirms.
+ * Writes the authoritative updated invoice straight into the detail cache, and
+ * invalidates only the lists + summaries (not detail — that would refetch and
+ * discard the optimistic write) so the dashboard reflects the change while the
+ * indexer confirms.
  */
 export function useSettleInvoice() {
   const queryClient = useQueryClient();
@@ -67,8 +69,11 @@ export function useSettleInvoice() {
     mutationFn: ({ id, body }: { id: string; body: SettlementRequest }) =>
       settleInvoice(id, body),
     onSuccess: (updated: Invoice) => {
-      void queryClient.invalidateQueries({ queryKey: [INVOICES_KEY] });
       queryClient.setQueryData([INVOICES_KEY, 'detail', updated.id], updated);
+      void queryClient.invalidateQueries({ queryKey: [INVOICES_KEY, 'list'] });
+      void queryClient.invalidateQueries({
+        queryKey: [INVOICES_KEY, 'summary'],
+      });
     },
   });
 }

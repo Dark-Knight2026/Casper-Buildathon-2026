@@ -84,3 +84,23 @@ export function scaleToSmallestUnit(
   const digits = `${intPart}${frac}`.replace(/^0+(?=\d)/, '');
   return BigInt(digits || '0').toString();
 }
+
+/**
+ * The inverse of {@link scaleToSmallestUnit}: a smallest-unit integer back to a
+ * human decimal string, with trailing fractional zeros trimmed. Pure BigInt — no
+ * float — so USDC amounts stay exact (e.g. `2500000000` @ 6 → `"2500"`).
+ */
+export function formatFromSmallestUnit(
+  units: bigint | string,
+  decimals: number
+): string {
+  const value = BigInt(units);
+  const negative = value < 0n;
+  const digits = (negative ? -value : value)
+    .toString()
+    .padStart(decimals + 1, '0');
+  const intPart = digits.slice(0, digits.length - decimals);
+  const fracPart = digits.slice(digits.length - decimals).replace(/0+$/, '');
+  const result = fracPart ? `${intPart}.${fracPart}` : intPart;
+  return negative ? `-${result}` : result;
+}
