@@ -11,7 +11,7 @@ mod common;
 use std::collections::HashSet;
 
 use serde_json::json;
-use sqlx::PgPool;
+use sqlx::{AssertSqlSafe, PgPool};
 
 use common::MIGRATOR;
 use indexer::{
@@ -71,7 +71,7 @@ async fn seed_legacy_user_with_wallet(pool: &PgPool, wallet: &str) {
 /// context, so RLS-enabled tables would otherwise reject the writes.
 async fn disable_all_rls(pool: &PgPool) {
     common::disable_rls(pool).await;
-    sqlx::query(sqlx::AssertSqlSafe(
+    sqlx::query(AssertSqlSafe(
         "ALTER TABLE users DISABLE ROW LEVEL SECURITY",
     ))
     .execute(pool)
@@ -131,6 +131,57 @@ async fn user_created_writes_onchain_id_to_matching_user(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(onchain_status.as_deref(), Some("active"));
+}
+
+/// Processing the same `UserCreated` event twice is idempotent: the
+/// `WHERE onchain_user_id IS NULL` guard makes the second pass a no-op - it must
+/// not error and must not overwrite the id assigned on the first pass.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn user_created_is_idempotent_on_duplicate_event(pool: PgPool) {
+    disable_all_rls(&pool).await;
+    seed_user_with_wallet(&pool, WALLET_PUBKEY).await;
+
+    let account_hash = normalize_casper_address(WALLET_PUBKEY).expect("valid public key");
+    let event = RawEvent {
+        contract_hash: "user_registry_hash".to_owned(),
+        deploy_hash: USER_REGISTRY_DEPLOY_HASH.to_owned(),
+        block_height: 100,
+        contract_type: ContractType::UserRegistry,
+        event_name: "UserCreated".to_owned(),
+        event_data: json!({
+            "user_id": "12345",
+            "active_wallet": account_hash,
+            "role_flags": 1_u32
+        }),
+        block_timestamp: None,
+        transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
+    };
+
+    let registry = EventRegistry::new();
+    // First pass assigns the contract id.
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
+        .await
+        .unwrap();
+    // Second pass must be a clean no-op - the IS NULL guard skips the already
+    // reconciled row rather than erroring or re-stamping it.
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
+        .await
+        .unwrap();
+
+    let onchain_user_id = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT onchain_user_id::text FROM users WHERE wallet_address = $1",
+    )
+    .bind(WALLET_PUBKEY)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        onchain_user_id.as_deref(),
+        Some("12345"),
+        "duplicate processing must preserve the first-assigned onchain_user_id"
+    );
 }
 
 /// A `UserCreated` event for an account hash no linked account derives to must

@@ -1,6 +1,6 @@
 //! Redis client wrapper with typed operations.
 
-use redis::{AsyncCommands, Client, RedisError, aio::ConnectionManager};
+use redis::{AsyncCommands, Client, RedisError, Script, aio::ConnectionManager};
 use uuid::Uuid;
 
 /// Outcome of an atomic "reserve a token-bearing send under a rate limit" step.
@@ -88,6 +88,17 @@ const PASSWORD_LOGIN_FAIL: RateLimit = RateLimit {
 /// account creation. It layers on top of the global per-IP `GovernorLayer` as a
 /// registration-specific tightening.
 const REGISTER_PER_IP: RateLimit = RateLimit {
+    max_attempts: 5,
+    window_secs: 60,
+};
+
+/// Failed change-password rate limit per user: 5 attempts per 60 seconds.
+///
+/// The change path verifies `current_password`; without a counter a stolen but
+/// still-valid access cookie could brute-force it. Mirrors [`PASSWORD_LOGIN_FAIL`]
+/// in shape and threshold but keys on `user_id`, since the caller is already
+/// authenticated and the target is one known account.
+const CHANGE_PASSWORD_FAIL: RateLimit = RateLimit {
     max_attempts: 5,
     window_secs: 60,
 };
@@ -333,41 +344,75 @@ impl RedisStore {
         Ok(())
     }
 
-    /// Returns `true` if the client IP has exceeded the registration limit.
+    /// Returns `true` if the user has exceeded the failed change-password limit.
     ///
-    /// Fails open on a Redis error at the call site, same as the login gates.
+    /// The authenticated analog of [`is_password_login_rate_limited`]; the
+    /// change-password handler reads this before verifying `current_password`
+    /// and fails open on a Redis error so an outage cannot block a legitimate
+    /// password change.
+    ///
+    /// [`is_password_login_rate_limited`]: Self::is_password_login_rate_limited
     ///
     /// # Errors
     ///
     /// Returns `RedisError` if the connection fails.
     #[inline]
-    pub async fn is_register_rate_limited(&self, ip: &str) -> RedisResult<bool> {
+    pub async fn is_change_password_rate_limited(&self, user_id: Uuid) -> RedisResult<bool> {
         let mut conn = self.conn.clone();
-        let key = Self::register_attempts_key(ip);
+        let key = Self::change_password_fail_key(user_id);
         let count = conn.get::<_, Option<u64>>(&key).await?;
-        Ok(count.is_some_and(|c| c >= REGISTER_PER_IP.max_attempts))
+        Ok(count.is_some_and(|c| c >= CHANGE_PASSWORD_FAIL.max_attempts))
     }
 
-    /// Records one registration attempt for the client IP.
+    /// Records one failed `current_password` verification for the user.
     ///
-    /// Counts every inbound attempt the gate lets through - including ones the
-    /// handler later rejects on validation - so a flood of malformed bodies
-    /// still trips the cap. `INCR` + conditional `EXPIRE` matches the other
-    /// counters: the TTL starts the window on the first attempt only.
+    /// `INCR` + conditional `EXPIRE` mirrors [`record_password_login_failure`]:
+    /// the TTL is set only on the first failure so the rolling window starts
+    /// when the run of failures begins, not on every retry.
+    ///
+    /// [`record_password_login_failure`]: Self::record_password_login_failure
     ///
     /// # Errors
     ///
     /// Returns `RedisError` if the connection fails.
     #[inline]
-    pub async fn record_register_attempt(&self, ip: &str) -> RedisResult<()> {
+    pub async fn record_change_password_failure(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::change_password_fail_key(user_id);
+        let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
+        if count == 1 {
+            conn.expire::<_, ()>(&key, CHANGE_PASSWORD_FAIL.window_secs.cast_signed())
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Records one registration attempt for the client IP and returns `true` if
+    /// the IP has now exceeded the limit.
+    ///
+    /// `INCR` first, then compare the returned count, so two concurrent
+    /// registrations cannot both observe a sub-limit count before either
+    /// increments - the check-then-act window a separate `GET` + `INCR` would
+    /// open. The TTL is set only when the counter transitions from 0 to 1, so
+    /// the window starts on the first attempt and a flood of later
+    /// (already-rejected) attempts cannot extend it. Counts every attempt that
+    /// reaches the gate; validation runs first, so malformed bodies never get
+    /// here.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn record_and_check_register_rate_limit(&self, ip: &str) -> RedisResult<bool> {
         let mut conn = self.conn.clone();
         let key = Self::register_attempts_key(ip);
         let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
+        // Set TTL only on the first attempt to start the window.
         if count == 1 {
             conn.expire::<_, ()>(&key, REGISTER_PER_IP.window_secs.cast_signed())
                 .await?;
         }
-        Ok(())
+        Ok(count > REGISTER_PER_IP.max_attempts)
     }
 
     /// Adds a JWT `jti` to the access-token blocklist for `ttl_seconds`.
@@ -635,7 +680,7 @@ impl RedisStore {
         // KEYS: token slot, minute counter, hour counter.
         // ARGV: token hash, token TTL, minute cap, minute window, hour cap,
         //       hour window.
-        let script = redis::Script::new(
+        let script = Script::new(
             r"
                 local minute = tonumber(redis.call('GET', KEYS[2]) or '0')
                 local hour = tonumber(redis.call('GET', KEYS[3]) or '0')
@@ -678,15 +723,16 @@ impl RedisStore {
     ///
     /// [`reserve_verify_email_send`]: Self::reserve_verify_email_send
     ///
-    /// `DECR` on both counters; a counter that drops to zero (or below,
-    /// defensively) is deleted so the next attempt starts a fresh window
-    /// rather than inheriting a shrunken TTL - mirrors
-    /// [`decrement_email_change_attempt`]. Only called on
+    /// Both counters are decremented atomically via [`decrement_send_counters`];
+    /// a counter that drops to zero (or below, defensively) is deleted so the
+    /// next attempt starts a fresh window rather than inheriting a shrunken TTL -
+    /// mirrors [`decrement_email_change_attempt`]. Only called on
     /// [`EmailError::Permanent`](crate::providers::EmailError::Permanent):
     /// a transient failure keeps the counters bumped because the queued
     /// retry will still deliver the mail.
     ///
     /// [`decrement_email_change_attempt`]: Self::decrement_email_change_attempt
+    /// [`decrement_send_counters`]: Self::decrement_send_counters
     ///
     /// # Errors
     ///
@@ -695,17 +741,50 @@ impl RedisStore {
     /// security one.
     #[inline]
     pub async fn decrement_verify_email_send_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+        self.decrement_send_counters(
+            &Self::verify_email_send_minute_key(user_id),
+            &Self::verify_email_send_hour_key(user_id),
+        )
+        .await
+    }
+
+    /// Atomically decrements the minute and hour send counters, deleting either
+    /// once it reaches zero so the next window starts fresh.
+    ///
+    /// A single Lua script fuses both `DECR`s and their conditional `DEL`s, so a
+    /// concurrent reserve cannot interleave between the two and leave the
+    /// minute and hour counters disagreeing - the divergence the previous
+    /// two-command form allowed. Shared by the verify-email and password-reset
+    /// rollback paths, mirroring how [`reserve_verify_email_send`] and
+    /// [`reserve_password_reset_send`] share their reserve script.
+    ///
+    /// [`reserve_verify_email_send`]: Self::reserve_verify_email_send
+    /// [`reserve_password_reset_send`]: Self::reserve_password_reset_send
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    async fn decrement_send_counters(&self, minute_key: &str, hour_key: &str) -> RedisResult<()> {
+        // KEYS: minute counter, hour counter. Each DECR that drops to zero (or
+        // below, defensively) deletes its key so a fresh window starts next time.
+        let script = Script::new(
+            r"
+                if redis.call('DECR', KEYS[1]) <= 0 then
+                    redis.call('DEL', KEYS[1])
+                end
+                if redis.call('DECR', KEYS[2]) <= 0 then
+                    redis.call('DEL', KEYS[2])
+                end
+                return 1
+            ",
+        );
         let mut conn = self.conn.clone();
-        let minute_key = Self::verify_email_send_minute_key(user_id);
-        let hour_key = Self::verify_email_send_hour_key(user_id);
-        let minute_count = conn.decr::<_, _, i64>(&minute_key, 1i64).await?;
-        if minute_count <= 0 {
-            conn.del::<_, ()>(&minute_key).await?;
-        }
-        let hour_count = conn.decr::<_, _, i64>(&hour_key, 1i64).await?;
-        if hour_count <= 0 {
-            conn.del::<_, ()>(&hour_key).await?;
-        }
+        script
+            .key(minute_key)
+            .key(hour_key)
+            .invoke_async::<i64>(&mut conn)
+            .await?;
         Ok(())
     }
 
@@ -742,7 +821,7 @@ impl RedisStore {
         // KEYS: token slot (keyed by hash), minute counter, hour counter.
         // ARGV: user id (the slot value), token TTL, minute cap, minute window,
         //       hour cap, hour window.
-        let script = redis::Script::new(
+        let script = Script::new(
             r"
                 local minute = tonumber(redis.call('GET', KEYS[2]) or '0')
                 local hour = tonumber(redis.call('GET', KEYS[3]) or '0')
@@ -830,12 +909,14 @@ impl RedisStore {
     ///
     /// [`reserve_password_reset_send`]: Self::reserve_password_reset_send
     ///
-    /// `DECR` on both counters, deleting a counter that drops to zero so the
-    /// next attempt starts a fresh window - mirrors
-    /// [`decrement_verify_email_send_attempt`]. Only called on
+    /// Both counters are decremented atomically via [`decrement_send_counters`],
+    /// deleting a counter that drops to zero so the next attempt starts a fresh
+    /// window - mirrors [`decrement_verify_email_send_attempt`]. Only called on
     /// [`EmailError::Permanent`](crate::providers::EmailError::Permanent): a
     /// transient failure keeps the counters bumped because the queued retry
     /// still delivers.
+    ///
+    /// [`decrement_send_counters`]: Self::decrement_send_counters
     ///
     /// [`decrement_verify_email_send_attempt`]: Self::decrement_verify_email_send_attempt
     ///
@@ -845,18 +926,11 @@ impl RedisStore {
     /// overcounting it cleans up is a UX issue, not a security one.
     #[inline]
     pub async fn decrement_password_reset_send_attempt(&self, user_id: Uuid) -> RedisResult<()> {
-        let mut conn = self.conn.clone();
-        let minute_key = Self::password_reset_send_minute_key(user_id);
-        let hour_key = Self::password_reset_send_hour_key(user_id);
-        let minute_count = conn.decr::<_, _, i64>(&minute_key, 1i64).await?;
-        if minute_count <= 0 {
-            conn.del::<_, ()>(&minute_key).await?;
-        }
-        let hour_count = conn.decr::<_, _, i64>(&hour_key, 1i64).await?;
-        if hour_count <= 0 {
-            conn.del::<_, ()>(&hour_key).await?;
-        }
-        Ok(())
+        self.decrement_send_counters(
+            &Self::password_reset_send_minute_key(user_id),
+            &Self::password_reset_send_hour_key(user_id),
+        )
+        .await
     }
 
     /// Returns `true` when the user has already exceeded the
@@ -928,6 +1002,16 @@ impl RedisStore {
     #[must_use]
     pub fn password_login_fail_key(email: &str) -> String {
         format!("password_login_fail:{email}")
+    }
+
+    /// Generates the Redis key for the per-user failed change-password counter.
+    ///
+    /// Exposed `pub` so rate-limit tests can DEL it to simulate the 60-second
+    /// window having elapsed without sleeping in CI.
+    #[inline]
+    #[must_use]
+    pub fn change_password_fail_key(user_id: Uuid) -> String {
+        format!("change_password_fail:{user_id}")
     }
 
     /// Generates the Redis key for the per-IP registration counter.

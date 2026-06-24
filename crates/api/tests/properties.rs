@@ -446,7 +446,43 @@ async fn property_listings_returns_empty_for_owner(pool: PgPool) {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body.unwrap(), json!([]));
+    let body = body.unwrap();
+    assert_eq!(body["data"], json!([]), "no listings yet");
+    assert_eq!(body["itemCount"], 0);
+    assert_eq!(body["pageCount"], 0);
+}
+
+/// The offer history is paged: `page_size` caps the returned slice while
+/// `itemCount` reports the full total.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn property_listings_paginates(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_status, created) = post_property(&env, &token, &valid_payload()).await;
+    let property_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    for _ in 0..3 {
+        seed_listing(&pool, property_id, landlord_id, "active").await;
+    }
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/properties/{property_id}/listings?page=1&page_size=2"),
+        &token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["itemCount"], 3, "total across all pages");
+    assert_eq!(body["pageCount"], 2, "3 items at page_size 2 spans 2 pages");
+    assert_eq!(
+        body["data"].as_array().map(Vec::len),
+        Some(2),
+        "the first page holds exactly page_size items",
+    );
 }
 
 /// A different landlord is not the property owner -> `403 not_property_owner`.
@@ -1080,4 +1116,67 @@ async fn update_property_refreshes_metadata_uri(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(stored.as_deref(), Some(uri_second));
+}
+
+/// Regression: a content-pin failure during create must not leave an orphaned
+/// property row behind. The upsert, the IPFS pin, and the metadata-URI write
+/// must be one atomic unit - if the pin fails, the insert rolls back, so the DB
+/// never holds a committed property with a NULL `metadata_uri`.
+///
+/// Expected to FAIL on the pre-fix code: `upsert_property` commits the row
+/// before the pin is attempted, so the failed create leaves one orphaned row.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_property_pin_failure_leaves_no_orphan_row(pool: PgPool) {
+    let env = common::setup_test_server_failing_pinner(pool.clone()).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) = post_property(&env, &token, &valid_payload()).await;
+    assert_eq!(
+        status,
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "a content-pin transport failure must surface as 500",
+    );
+
+    let count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM properties WHERE landlord_id = $1")
+            .bind(landlord_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        count, 0,
+        "a pin failure must roll back the insert, leaving no property row without a metadata URI",
+    );
+}
+
+/// Regression: a parking list whose non-blank entries are within the cap must be
+/// accepted even when padded with trailing blank strings. The count has to be
+/// taken AFTER blanks are dropped, not against the raw input length.
+///
+/// Expected to FAIL on the pre-fix code: the length check runs on the raw input
+/// (34 > 32) and rejects the request with `400` before the blanks are filtered.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn create_property_accepts_parking_list_padded_with_blanks(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    // 32 valid entries (the MAX_PARKING_FEATURES cap) plus 2 trailing blanks:
+    // 34 raw, 32 non-blank. Counting after the blank-filter keeps it within cap.
+    let mut parking = (0..32).map(|i| json!(format!("p{i}"))).collect::<Vec<_>>();
+    parking.push(json!(""));
+    parking.push(json!(""));
+    let mut payload = valid_payload();
+    payload["parkingFeatures"] = Value::Array(parking);
+
+    let (status, body) = post_property(&env, &token, &payload).await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "a parking list within the cap must not be rejected for trailing blanks; body: {body}",
+    );
+    assert_eq!(
+        body["parkingFeatures"].as_array().map(Vec::len),
+        Some(32),
+        "blank entries must be stripped, leaving the 32 valid features",
+    );
 }

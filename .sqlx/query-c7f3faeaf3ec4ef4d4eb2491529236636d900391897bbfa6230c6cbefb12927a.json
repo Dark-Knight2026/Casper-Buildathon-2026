@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO application_notes (application_id, author_id, body)\n            SELECT $1, $2, $3\n            FROM rental_applications\n            WHERE id = $1 AND landlord_id = $2\n            RETURNING id, application_id, author_id, body, created_at\n        ",
+  "query": "\n            INSERT INTO application_notes (application_id, author_id, body)\n            SELECT $1, $2, $3\n            FROM rental_applications\n            WHERE id = $1 AND landlord_id = $2 AND status <> 'draft'\n            RETURNING id, application_id, author_id, body, created_at\n        ",
   "describe": {
     "columns": [
       {
@@ -74,5 +74,5 @@
       false
     ]
   },
-  "hash": "13880d01a00830449073fba5f2060888fe9d5210247cbaa20fbdde78058aa708"
+  "hash": "c7f3faeaf3ec4ef4d4eb2491529236636d900391897bbfa6230c6cbefb12927a"
 }

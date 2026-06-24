@@ -433,11 +433,6 @@ fn validate_parking(value: Option<Vec<String>>) -> ApiResult<Option<Vec<String>>
     let Some(raw) = value else {
         return Ok(None);
     };
-    if raw.len() > MAX_PARKING_FEATURES {
-        return Err(ApiError::BadRequest(format!(
-            "parkingFeatures must have at most {MAX_PARKING_FEATURES} items"
-        )));
-    }
     let mut features = Vec::with_capacity(raw.len());
     for item in raw {
         let trimmed = item.trim();
@@ -450,6 +445,13 @@ fn validate_parking(value: Option<Vec<String>>) -> ApiResult<Option<Vec<String>>
             )));
         }
         features.push(trimmed.to_owned());
+    }
+    // Count after dropping blanks, so a list within the cap is not rejected for
+    // trailing empty entries.
+    if features.len() > MAX_PARKING_FEATURES {
+        return Err(ApiError::BadRequest(format!(
+            "parkingFeatures must have at most {MAX_PARKING_FEATURES} items"
+        )));
     }
     Ok(if features.is_empty() {
         None

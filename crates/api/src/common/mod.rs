@@ -24,7 +24,7 @@ pub mod tokens;
 pub mod validation;
 
 // Re-exports
-pub use config::{AppState, IcoFallback, S3Config, ServerConfig, TOTAL_SUPPLY};
+pub use config::{AppEnv, AppState, IcoFallback, S3Config, ServerConfig, TOTAL_SUPPLY};
 pub use crypto::{
     CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_MESSAGE_PREFIX, CASPER_SECP256K1_PUBKEY_HEX_LEN,
     CryptoError,

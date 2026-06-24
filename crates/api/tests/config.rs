@@ -8,7 +8,7 @@
 use secrecy::ExposeSecret;
 use serial_test::serial;
 
-use api::ServerConfig;
+use api::{AppEnv, ServerConfig};
 
 /// Env var keys used by `Config::from_env()`. Drives the clear-all phase
 /// of [`set_env_vars`] so individual tests do not need to enumerate which
@@ -18,7 +18,7 @@ use api::ServerConfig;
 /// the ones a test sets explicitly: any default-backed var left in the ambient
 /// CI environment (or set by a prior serial test) would otherwise leak into a
 /// test that assumes it is unset, making the suite order-dependent.
-const CONFIG_ENV_VARS: [&str; 18] = [
+const CONFIG_ENV_VARS: [&str; 19] = [
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
@@ -26,6 +26,7 @@ const CONFIG_ENV_VARS: [&str; 18] = [
     "CORS_ORIGIN",
     "REQUEST_BODY_LIMIT_MB",
     "COOKIE_SECURE",
+    "APP_ENV",
     "CONTRACT_BIG",
     "ICO_PRICE_USD",
     "ICO_TOTAL_ALLOCATION",
@@ -102,6 +103,29 @@ fn from_env_succeeds_with_all_required_vars() {
         config.cors_origin, "http://localhost:8080",
         "Default CORS origin"
     );
+}
+
+#[test]
+#[serial]
+fn from_env_defaults_app_env_to_development() {
+    set_env_vars(&[REQUIRED_ENV]);
+
+    let config = ServerConfig::from_env().expect("Should succeed with required vars");
+    assert_eq!(
+        config.app_env,
+        AppEnv::Development,
+        "APP_ENV must default to development when unset, so stubs stay permitted for local dev",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_parses_app_env_production() {
+    set_env_vars(&[REQUIRED_ENV, &[("APP_ENV", "production")]]);
+
+    let config = ServerConfig::from_env().expect("APP_ENV=production must parse");
+    assert_eq!(config.app_env, AppEnv::Production);
+    assert!(config.app_env.is_production());
 }
 
 #[test]

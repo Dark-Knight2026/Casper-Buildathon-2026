@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
 use casper_types::{AsymmetricType, PublicKey, SecretKey};
 use serde_json::{Value, json};
-use sqlx::PgPool;
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use common::{TestEnv, generate_random_ed25519, login_and_extract, sign_with_prefix};
@@ -33,7 +33,7 @@ async fn register_password_user(env: &TestEnv, email: &str) -> String {
             "last_name": "Holder",
         }))
         .await;
-    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.status_code(), StatusCode::CREATED);
     response.cookie("access_token").value().to_owned()
 }
 
@@ -59,7 +59,7 @@ async fn fetch_and_sign_nonce(
 
 /// `is_primary` + `provider` of a `wallet_connections` row, read back via a
 /// runtime `query_as` (no compile-time macro in tests).
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct WalletConnectionRow {
     is_primary: bool,
     provider: String,

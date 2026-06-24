@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                a.monthly_income::float8 AS \"monthly_income!\",\n                a.employment_length,\n                a.reference2_name,\n                (l.terms->>'rentMonthly')::float8 AS rent_monthly\n            FROM rental_applications a\n            LEFT JOIN listings l ON l.id = a.listing_id\n            WHERE a.id = $1 AND a.landlord_id = $2\n        ",
+  "query": "\n            SELECT\n                a.monthly_income::float8 AS \"monthly_income!\",\n                a.employment_length,\n                a.reference2_name,\n                (l.terms->>'rentMonthly')::float8 AS rent_monthly\n            FROM rental_applications a\n            LEFT JOIN listings l ON l.id = a.listing_id\n            WHERE a.id = $1 AND a.landlord_id = $2 AND a.status <> 'draft'\n        ",
   "describe": {
     "columns": [
       {
@@ -51,5 +51,5 @@
       null
     ]
   },
-  "hash": "e37e1c81a43577a848aebfe6d37299c2195938bbc8d215de897cd173b6ea8da8"
+  "hash": "b7be06bd203a62ce2f4b663eb6a686183efd088b5319886e20c07ebb9137767d"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO background_checks (\n                application_id, requested_by, check_type, status, result,\n                reference, completed_at\n            )\n            VALUES (\n                $1, $2, $3, $4, $5, $6,\n                CASE WHEN $4 IN ('completed', 'failed') THEN NOW() ELSE NULL END\n            )\n            RETURNING\n                id, application_id, requested_by, check_type, status,\n                result AS \"result?: Json<serde_json::Value>\", reference,\n                created_at, completed_at\n        ",
+  "query": "\n            INSERT INTO background_checks (\n                application_id, requested_by, check_type, status, result,\n                reference, completed_at\n            )\n            VALUES (\n                $1, $2, $3, $4, $5, $6,\n                CASE WHEN $4 IN ('completed', 'failed') THEN NOW() ELSE NULL END\n            )\n            RETURNING\n                id, application_id, requested_by, check_type, status,\n                result AS \"result?: Json<Value>\", reference,\n                created_at, completed_at\n        ",
   "describe": {
     "columns": [
       {
@@ -60,7 +60,7 @@
       },
       {
         "ordinal": 5,
-        "name": "result?: Json<serde_json::Value>",
+        "name": "result?: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -125,5 +125,5 @@
       true
     ]
   },
-  "hash": "725477ed6c542185cc6c2d05cf167ecfe003b7f04f3a0136c7df76d4d9bca298"
+  "hash": "b2f05f62d9ca54d8b08929ebc700f1987e2e722607b93d9701bc22a62aa0cde1"
 }
