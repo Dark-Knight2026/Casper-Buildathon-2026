@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE invoices\n            SET onchain_invoice_id = $2::TEXT::NUMERIC,\n                status = 'pending'\n            WHERE id = (\n                SELECT i.id\n                FROM invoices i\n                JOIN leases l ON l.id = i.lease_id\n                WHERE l.commit_tx_hash = $1\n                  AND i.onchain_invoice_id IS NULL\n                  AND i.status = 'scheduled'\n                ORDER BY (i.kind = 'security_deposit') DESC, i.deadline ASC\n                LIMIT 1\n            )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "566fee58f560a974301ceaa75f2be0bdc5e6f74d5bc107ef06334bd2badb08a7"
+}

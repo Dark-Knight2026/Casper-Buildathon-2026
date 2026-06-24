@@ -6,6 +6,7 @@
 
 pub mod cep18;
 pub mod db;
+pub mod escrow;
 pub mod ico;
 pub mod lease;
 pub mod property_registry;
@@ -20,7 +21,7 @@ use crate::{
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
     events::{
-        cep18::Cep18EventType, ico::IcoEventType, lease::LeaseEventType,
+        cep18::Cep18EventType, escrow::EscrowEventType, ico::IcoEventType, lease::LeaseEventType,
         property_registry::PropertyRegistryEventType, staking::StakingEventType,
         user_registry::UserRegistryEventType, vesting::VestingEventType,
     },
@@ -42,6 +43,8 @@ pub enum EventType {
     UserRegistry(UserRegistryEventType),
     /// An event emitted by the `Lease` contract.
     Lease(LeaseEventType),
+    /// An event emitted by the `Escrow` contract.
+    Escrow(EscrowEventType),
     /// An event emitted by the `PropertyRegistry` contract.
     PropertyRegistry(PropertyRegistryEventType),
 }
@@ -89,6 +92,10 @@ impl EventType {
             ContractType::Lease => event_name
                 .parse::<LeaseEventType>()
                 .map(Self::Lease)
+                .map_err(|_| unknown()),
+            ContractType::Escrow => event_name
+                .parse::<EscrowEventType>()
+                .map(Self::Escrow)
                 .map_err(|_| unknown()),
             ContractType::PropertyRegistry => event_name
                 .parse::<PropertyRegistryEventType>()
@@ -189,6 +196,7 @@ impl EventRegistry {
             EventType::Lease(LeaseEventType::LeaseAgreementProlonged) => lease::LeaseAgreementProlonged,
             EventType::Lease(LeaseEventType::EquityEligibilityGranted) => lease::EquityEligibilityGranted,
             EventType::Lease(LeaseEventType::EquityEligibilityRevoked) => lease::EquityEligibilityRevoked,
+            EventType::Escrow(EscrowEventType::InvoiceCreated) => escrow::InvoiceCreated,
         )
     }
 }
