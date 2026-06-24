@@ -81,23 +81,25 @@ function CommitFlow({ lease }: { lease: Lease }) {
     onchainLeaseId: null,
     nftTokenId: null,
   });
+  // Single source for the form's invoice-validity value, in seconds: the deploy
+  // encoder wants the decimal string, `/commit` wants it as a number.
+  const invoiceValiditySeconds = () => daysToSeconds(form.invoiceValidityDays);
+
   // `invoice_validity_duration` (seconds, as a number — the backend wants a
   // u64) actually used for the deploy. The backend requires it on `/commit`;
   // it must equal the value sent to `create_lease_agreement`. Captured at sign
   // time (and refreshed from the form before a recovery retry); the CES events
   // don't carry it, so the form is the only source. Initialised from the form's
   // starting value so a retry-after-reload still sends something sensible.
-  const invoiceValidityDurationRef = useRef(
-    Number(daysToSeconds(form.invoiceValidityDays))
-  );
+  const invoiceValidityDurationRef = useRef(Number(invoiceValiditySeconds()));
 
   // Send the parsed ids + hash to the backend, which validates the lease id,
   // reconciles it against the chain, and activates the lease. The duplicate
   // guard lives on the backend, keyed on the deploy/commit hash. Returns the
   // promise so callers can await the push (e.g. to drive a busy indicator).
+  // The `pushFailed` reset lives in the sole caller (`recordCommit`).
   const pushCommit = useCallback(
     (hash: string, onchainLeaseId: string, nftTokenId: string) => {
-      setPushFailed(false);
       return commitLease(lease.id, {
         commitTxHash: hash,
         onchainLeaseId,
@@ -190,7 +192,7 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const submit = () => {
     // The same value goes to the deploy (as the contract-encoded string) and,
     // as a number, to `/commit` — so the two agree on what was recorded.
-    const invoiceValidityDuration = daysToSeconds(form.invoiceValidityDays);
+    const invoiceValidityDuration = invoiceValiditySeconds();
     invoiceValidityDurationRef.current = Number(invoiceValidityDuration);
     create({
       tenantUserId: form.tenantUserId.trim(),
@@ -259,7 +261,7 @@ function CommitFlow({ lease }: { lease: Lease }) {
               // No fresh sign here, so take the duration from the visible form
               // (sent as a number — the backend wants a u64).
               invoiceValidityDurationRef.current = Number(
-                daysToSeconds(form.invoiceValidityDays)
+                invoiceValiditySeconds()
               );
               void recordCommit(committedHash);
             }}

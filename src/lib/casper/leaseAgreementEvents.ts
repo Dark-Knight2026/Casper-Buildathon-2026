@@ -161,7 +161,8 @@ export async function extractLeaseCommitIds(
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-    signal?.addEventListener('abort', () => controller.abort(), { once: true });
+    const onAbort = () => controller.abort();
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     let response: Response;
     try {
@@ -178,6 +179,8 @@ export async function extractLeaseCommitIds(
       });
     } finally {
       clearTimeout(timeoutId);
+      // Don't leave a listener on a long-lived external signal once we're done.
+      signal?.removeEventListener('abort', onAbort);
     }
 
     if (!response.ok) return empty;
