@@ -1659,3 +1659,57 @@ async fn list_applications_excludes_tenant_fields(pool: PgPool) {
         "list must not include tenantOnchainUserId"
     );
 }
+
+/// Regression: a landlord must not reach a tenant's in-progress DRAFT through
+/// any application sub-resource. The five landlord-scoped sub-resource queries
+/// (notes add/list, background-check request/list, score) must apply the same
+/// `status <> 'draft'` privacy gate as the primary detail read, so each answers
+/// `404` for a draft instead of leaking its contents.
+///
+/// Expected to FAIL on the pre-fix code: the sub-resource queries gate only on
+/// `landlord_id`, so the owning landlord reaches the draft instead of a `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn draft_sub_resources_hidden_from_landlord_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant_id, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let app_id = seed_draft(&env, &tenant_token, listing_id).await;
+
+    let (add_note_status, _) = add_note(&env, &landlord_token, app_id, "private note").await;
+    assert_eq!(
+        add_note_status,
+        StatusCode::NOT_FOUND,
+        "adding a note to a draft must 404",
+    );
+
+    let (list_notes_status, _) = list_notes(&env, &landlord_token, app_id).await;
+    assert_eq!(
+        list_notes_status,
+        StatusCode::NOT_FOUND,
+        "listing notes of a draft must 404",
+    );
+
+    let (request_check_status, _) = request_check(&env, &landlord_token, app_id, "credit").await;
+    assert_eq!(
+        request_check_status,
+        StatusCode::NOT_FOUND,
+        "requesting a background check on a draft must 404",
+    );
+
+    let (list_checks_status, _) = list_checks(&env, &landlord_token, app_id).await;
+    assert_eq!(
+        list_checks_status,
+        StatusCode::NOT_FOUND,
+        "listing background checks of a draft must 404",
+    );
+
+    let (score_status, _) = get_score(&env, &landlord_token, app_id).await;
+    assert_eq!(
+        score_status,
+        StatusCode::NOT_FOUND,
+        "scoring a draft must 404",
+    );
+}
