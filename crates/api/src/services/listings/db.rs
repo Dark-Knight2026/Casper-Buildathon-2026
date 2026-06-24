@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde_json::Value;
-use sqlx::{Error, FromRow, PgPool, Postgres, QueryBuilder, types::Json};
+use sqlx::{Error, FromRow, PgExecutor, PgPool, Postgres, QueryBuilder, types::Json};
 use uuid::Uuid;
 
 use crate::{
@@ -262,12 +262,30 @@ impl AppendOrder for ListingFilter {
 }
 
 /// Columns selected into a [`ListingRow`] for the search query (aliased to `l`).
-const LISTING_COLUMNS: &str = "l.id, l.property_id, l.listed_by, l.intent, \
-    l.state, l.days_on_market, l.expires_at, l.title, l.description, \
-    l.amenities, l.utilities_included, l.pet_policy, l.available_date, \
-    l.surrounding_area, l.terms, l.views, l.identity_verified, \
-    l.authority_tier, l.fair_housing_cleared, l.managed_by_pm, l.created_at, \
-    l.updated_at";
+const LISTING_COLUMNS: &str = r"
+    l.id,
+    l.property_id,
+    l.listed_by,
+    l.intent,
+    l.state,
+    l.days_on_market,
+    l.expires_at,
+    l.title,
+    l.description,
+    l.amenities,
+    l.utilities_included,
+    l.pet_policy,
+    l.available_date,
+    l.surrounding_area,
+    l.terms,
+    l.views,
+    l.identity_verified,
+    l.authority_tier,
+    l.fair_housing_cleared,
+    l.managed_by_pm,
+    l.created_at,
+    l.updated_at
+";
 
 /// Fetches a single listing by id (any non-deleted state).
 ///
@@ -284,8 +302,8 @@ pub async fn fetch_listing(pool: &PgPool, listing_id: Uuid) -> Result<ListingRow
                 id, property_id, listed_by, intent, state, days_on_market,
                 expires_at, title, description, amenities, utilities_included,
                 pet_policy, available_date,
-                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
-                terms AS "terms: Json<serde_json::Value>",
+                surrounding_area AS "surrounding_area: Json<Value>",
+                terms AS "terms: Json<Value>",
                 views, identity_verified, authority_tier, fair_housing_cleared,
                 managed_by_pm,
                 created_at AS "created_at!",
@@ -395,7 +413,7 @@ async fn fetch_properties_by_ids<'e, E>(
     ids: &[Uuid],
 ) -> Result<HashMap<Uuid, Property>, Error>
 where
-    E: sqlx::PgExecutor<'e>,
+    E: PgExecutor<'e>,
 {
     let rows = sqlx::query_as!(
         PropertyRow,
@@ -433,7 +451,7 @@ async fn fetch_media_by_listing_ids<'e, E>(
     approved_only: bool,
 ) -> Result<HashMap<Uuid, Vec<MediaRef>>, Error>
 where
-    E: sqlx::PgExecutor<'e>,
+    E: PgExecutor<'e>,
 {
     let rows = sqlx::query_as!(
         MediaRow,
@@ -483,8 +501,8 @@ pub async fn fetch_listings_by_ids(
                 id, property_id, listed_by, intent, state, days_on_market,
                 expires_at, title, description, amenities, utilities_included,
                 pet_policy, available_date,
-                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
-                terms AS "terms: Json<serde_json::Value>",
+                surrounding_area AS "surrounding_area: Json<Value>",
+                terms AS "terms: Json<Value>",
                 views, identity_verified, authority_tier, fair_housing_cleared,
                 managed_by_pm,
                 created_at AS "created_at!",
@@ -584,8 +602,8 @@ pub async fn create_listing(
                 id, property_id, listed_by, intent, state, days_on_market,
                 expires_at, title, description, amenities, utilities_included,
                 pet_policy, available_date,
-                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
-                terms AS "terms: Json<serde_json::Value>",
+                surrounding_area AS "surrounding_area: Json<Value>",
+                terms AS "terms: Json<Value>",
                 views, identity_verified, authority_tier, fair_housing_cleared,
                 managed_by_pm,
                 created_at AS "created_at!",
@@ -674,8 +692,8 @@ pub async fn update_listing(
                 id, property_id, listed_by, intent, state, days_on_market,
                 expires_at, title, description, amenities, utilities_included,
                 pet_policy, available_date,
-                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
-                terms AS "terms: Json<serde_json::Value>",
+                surrounding_area AS "surrounding_area: Json<Value>",
+                terms AS "terms: Json<Value>",
                 views, identity_verified, authority_tier, fair_housing_cleared,
                 managed_by_pm,
                 created_at AS "created_at!",
@@ -969,8 +987,8 @@ pub async fn transition_state(
                 id, property_id, listed_by, intent, state, days_on_market,
                 expires_at, title, description, amenities, utilities_included,
                 pet_policy, available_date,
-                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
-                terms AS "terms: Json<serde_json::Value>",
+                surrounding_area AS "surrounding_area: Json<Value>",
+                terms AS "terms: Json<Value>",
                 views, identity_verified, authority_tier, fair_housing_cleared,
                 managed_by_pm,
                 created_at AS "created_at!",

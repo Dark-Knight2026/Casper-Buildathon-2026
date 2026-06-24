@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE listings\n            SET\n                state = $2,\n                expires_at = COALESCE($3, expires_at),\n                identity_verified = CASE WHEN $2 = 'active' THEN true\n                                         ELSE identity_verified END\n            WHERE id = $1\n            RETURNING\n                id, property_id, listed_by, intent, state, days_on_market,\n                expires_at, title, description, amenities, utilities_included,\n                pet_policy, available_date,\n                surrounding_area AS \"surrounding_area: Json<serde_json::Value>\",\n                terms AS \"terms: Json<serde_json::Value>\",\n                views, identity_verified, authority_tier, fair_housing_cleared,\n                managed_by_pm,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            SELECT\n                id, property_id, listed_by, intent, state, days_on_market,\n                expires_at, title, description, amenities, utilities_included,\n                pet_policy, available_date,\n                surrounding_area AS \"surrounding_area: Json<Value>\",\n                terms AS \"terms: Json<Value>\",\n                views, identity_verified, authority_tier, fair_housing_cleared,\n                managed_by_pm,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM listings\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -148,7 +148,7 @@
       },
       {
         "ordinal": 13,
-        "name": "surrounding_area: Json<serde_json::Value>",
+        "name": "surrounding_area: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -159,7 +159,7 @@
       },
       {
         "ordinal": 14,
-        "name": "terms: Json<serde_json::Value>",
+        "name": "terms: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -248,9 +248,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Text",
-        "Timestamptz"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -278,5 +276,5 @@
       true
     ]
   },
-  "hash": "e1f0c829d4f8da9757639e29cbf2952a4a52e19ea9742010f2cba60b235d0ae4"
+  "hash": "3d9f73d793144f38ffd6a286b514100b4c08564ac97aabd5c34fd06645c242a6"
 }

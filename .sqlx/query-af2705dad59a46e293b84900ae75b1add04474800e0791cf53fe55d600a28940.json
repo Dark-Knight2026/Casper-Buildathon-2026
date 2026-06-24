@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, property_id, listed_by, intent, state, days_on_market,\n                expires_at, title, description, amenities, utilities_included,\n                pet_policy, available_date,\n                surrounding_area AS \"surrounding_area: Json<serde_json::Value>\",\n                terms AS \"terms: Json<serde_json::Value>\",\n                views, identity_verified, authority_tier, fair_housing_cleared,\n                managed_by_pm,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM listings\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
+  "query": "\n            SELECT\n                id, property_id, listed_by, intent, state, days_on_market,\n                expires_at, title, description, amenities, utilities_included,\n                pet_policy, available_date,\n                surrounding_area AS \"surrounding_area: Json<Value>\",\n                terms AS \"terms: Json<Value>\",\n                views, identity_verified, authority_tier, fair_housing_cleared,\n                managed_by_pm,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM listings\n            WHERE id = ANY($1) AND deleted_at IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -148,7 +148,7 @@
       },
       {
         "ordinal": 13,
-        "name": "surrounding_area: Json<serde_json::Value>",
+        "name": "surrounding_area: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -159,7 +159,7 @@
       },
       {
         "ordinal": 14,
-        "name": "terms: Json<serde_json::Value>",
+        "name": "terms: Json<Value>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -248,7 +248,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -276,5 +276,5 @@
       true
     ]
   },
-  "hash": "ca77cead8b3b92090dd29be6028bb20c5aa9ea1df8b89be6ea8a3ba287965b65"
+  "hash": "af2705dad59a46e293b84900ae75b1add04474800e0791cf53fe55d600a28940"
 }

@@ -13,8 +13,8 @@ use utoipa::{
 use crate::{
     onchain::{ico, staking, transactions, vesting},
     services::{
-        analytics, applications, auth, favorites, health, leases, listings, properties, renewals,
-        tax, users, viewings,
+        analytics, applications, auth, favorites, health, invoices, leases, listings, properties,
+        renewals, tax, users, viewings,
     },
 };
 
@@ -119,6 +119,11 @@ use crate::{
             renewals::models::Negotiation,
             renewals::models::NegotiationKind,
             renewals::models::PostNegotiationRequest,
+            // Invoices models
+            invoices::models::Invoice,
+            invoices::models::InvoiceKind,
+            invoices::models::InvoiceStatus,
+            invoices::models::InvoiceSort,
             // Favorites models
             favorites::models::AddFavoriteRequest,
             favorites::models::FavoriteResponse,
@@ -184,6 +189,7 @@ use crate::{
         (name = "Listings", description = "Listing (time-bound offer) endpoints"),
         (name = "Leases", description = "Lease-agreement endpoints"),
         (name = "Renewals", description = "Lease-renewal offer endpoints"),
+        (name = "Invoices", description = "Invoice (Escrow settlement) endpoints"),
         (name = "Favorites", description = "Tenant saved-listing endpoints"),
         (name = "Applications", description = "Rental-application endpoints"),
         (name = "Viewings", description = "In-person viewing-booking endpoints"),

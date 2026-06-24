@@ -24,6 +24,8 @@ pub mod auth;
 pub mod favorites;
 /// Health check feature module.
 pub mod health;
+/// Invoice (Escrow settlement) feature module; authenticated landlord/tenant surface.
+pub mod invoices;
 /// Lease-agreement feature module; authenticated landlord/tenant surface.
 pub mod leases;
 /// Listing (time-bound offer) feature module; mixed public/role-gated auth.
@@ -117,6 +119,7 @@ pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
         .nest("/users", users::routes::router())
         .merge(leases::routes::router())
         .merge(renewals::routes::router())
+        .merge(invoices::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
         .route_layer(axum::middleware::from_fn_with_state(
             state,
