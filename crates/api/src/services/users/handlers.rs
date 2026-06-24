@@ -1299,6 +1299,9 @@ const IDENTITY_HASH_DOMAIN_TAG: &[u8] = b"leasefi:identity:v1";
 fn derive_identity_hash(user_id: Uuid) -> String {
     let mut hasher = Sha256::new();
     hasher.update(IDENTITY_HASH_DOMAIN_TAG);
+    // `as_bytes()` is the 16 raw RFC 4122 (big-endian) bytes, NOT the 36-byte
+    // hyphenated string form - the two hash to different values, so any
+    // reimplementation must hash the same 16-byte representation.
     hasher.update(user_id.as_bytes());
     hex::encode(hasher.finalize())
 }
