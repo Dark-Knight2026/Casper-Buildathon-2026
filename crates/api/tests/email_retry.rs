@@ -192,10 +192,9 @@ async fn cleanup_deletes_terminal_rows_past_retention(pool: PgPool) {
     .await
     .expect("seed cleanup mix");
 
-    let deleted =
-        email_retry::db::cleanup_terminal_retries(&pool, Duration::from_secs(30 * 24 * 3600))
-            .await
-            .expect("cleanup");
+    let deleted = email_retry::db::cleanup_terminal_retries(&pool, Duration::from_hours(30 * 24))
+        .await
+        .expect("cleanup");
 
     assert_eq!(
         deleted, 1,

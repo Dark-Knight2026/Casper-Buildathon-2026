@@ -267,7 +267,7 @@ async fn revoke_all_does_not_touch_other_users(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(bob_active, "bob's session must survive alice's revoke-all",);
+    assert!(bob_active, "bob's session must survive alice's revoke-all");
 
     // Bob's access still authenticates against `/me`.
     let me_response = env
