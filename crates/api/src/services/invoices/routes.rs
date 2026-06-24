@@ -19,4 +19,6 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(handlers::list_invoices))
         .routes(routes!(handlers::get_invoice))
+        .routes(routes!(handlers::settle_invoice))
+        .routes(routes!(handlers::get_receipt))
 }

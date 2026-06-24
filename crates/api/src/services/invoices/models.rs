@@ -141,6 +141,26 @@ impl From<InvoiceRow> for Invoice {
     }
 }
 
+/// Tenant settlement of an invoice (Option A): the tenant signed and submitted
+/// `pay_invoice` via CSPR.click and reports the result here.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SettlementRequest {
+    /// Amount paid by this settlement (USDC decimal string). For rent this is a
+    /// partial or full instalment; for a deposit it must equal `amountDue`.
+    pub amount: String,
+    /// Deploy/tx hash of the on-chain `pay_invoice` call.
+    pub tx_hash: String,
+}
+
+/// Receipt link for an invoice.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiptResponse {
+    /// Receipt URL; null until a receipt is issued.
+    pub receipt_url: Option<String>,
+}
+
 /// Sort key for `GET /invoices`.
 #[derive(Debug, Clone, Copy, Default, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

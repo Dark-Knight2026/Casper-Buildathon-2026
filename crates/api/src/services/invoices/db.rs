@@ -308,18 +308,96 @@ pub async fn fetch_invoice(
     invoice_id: Uuid,
     caller: Uuid,
 ) -> Result<Option<InvoiceRow>, Error> {
-    let raw = QueryBuilder::<Postgres>::new("SELECT ")
-        .push(INVOICE_COLUMNS)
-        .push(" FROM invoices i WHERE i.id = ")
-        .push_bind(invoice_id)
-        .push(" AND (i.tenant_id = ")
-        .push_bind(caller)
-        .push(" OR i.landlord_id = ")
-        .push_bind(caller)
-        .push(")")
-        .build_query_as::<InvoiceRowRaw>()
-        .fetch_optional(pool)
-        .await?;
+    let raw = sqlx::query_as!(
+        InvoiceRowRaw,
+        r#"
+            SELECT
+                id,
+                onchain_invoice_id::text AS onchain_invoice_id,
+                lease_id,
+                kind,
+                tenant_id,
+                landlord_id,
+                property_id,
+                amount_due::text AS "amount_due!",
+                rent_paid::text AS "rent_paid!",
+                property_manager_id,
+                property_manager_bps,
+                status,
+                deadline,
+                landlord_charge::text AS landlord_charge,
+                tenant_refund::text AS tenant_refund,
+                tx_hash,
+                receipt_url,
+                created_at,
+                updated_at
+            FROM invoices
+            WHERE id = $1 AND (tenant_id = $2 OR landlord_id = $2)
+        "#,
+        invoice_id,
+        caller,
+    )
+    .fetch_optional(pool)
+    .await?;
 
     raw.map(InvoiceRow::try_from).transpose()
+}
+
+/// Records a settlement on an invoice: writes the new cumulative `rent_paid`,
+/// the derived `status`, and the on-chain `tx_hash`, returning the updated row.
+///
+/// The `status IN ('pending', 'partial')` guard makes the write safe under a
+/// concurrent double-submit (the second caller matches no row and gets
+/// [`Error::RowNotFound`]); `updated_at` is bumped by the table trigger.
+///
+/// # Errors
+///
+/// Returns [`Error::RowNotFound`] when the invoice is no longer settleable, or
+/// any other database error.
+#[inline]
+pub async fn settle_invoice(
+    pool: &PgPool,
+    invoice_id: Uuid,
+    rent_paid: &str,
+    status: InvoiceStatus,
+    tx_hash: &str,
+) -> Result<InvoiceRow, Error> {
+    let raw = sqlx::query_as!(
+        InvoiceRowRaw,
+        r#"
+            UPDATE invoices SET
+                rent_paid = $2::text::numeric,
+                status = $3,
+                tx_hash = $4
+            WHERE id = $1 AND status IN ('pending', 'partial')
+            RETURNING
+                id,
+                onchain_invoice_id::text AS onchain_invoice_id,
+                lease_id,
+                kind,
+                tenant_id,
+                landlord_id,
+                property_id,
+                amount_due::text AS "amount_due!",
+                rent_paid::text AS "rent_paid!",
+                property_manager_id,
+                property_manager_bps,
+                status,
+                deadline,
+                landlord_charge::text AS landlord_charge,
+                tenant_refund::text AS tenant_refund,
+                tx_hash,
+                receipt_url,
+                created_at,
+                updated_at
+        "#,
+        invoice_id,
+        rent_paid,
+        status.as_ref(),
+        tx_hash,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    InvoiceRow::try_from(raw)
 }

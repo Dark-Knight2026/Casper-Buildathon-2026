@@ -124,6 +124,8 @@ use crate::{
             invoices::models::InvoiceKind,
             invoices::models::InvoiceStatus,
             invoices::models::InvoiceSort,
+            invoices::models::SettlementRequest,
+            invoices::models::ReceiptResponse,
             // Favorites models
             favorites::models::AddFavoriteRequest,
             favorites::models::FavoriteResponse,
