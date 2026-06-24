@@ -16,7 +16,8 @@ use uuid::Uuid;
 
 use crate::{
     common::{
-        ApiError, ApiResult, AppState, ErrorResponse, SendReservation, UserInfo, password, tokens,
+        ApiError, ApiResult, AppState, ErrorResponse, SendReservation, UserInfo, UserStatus,
+        password, tokens,
     },
     providers::{EmailError, EmailMessage},
     services::{
@@ -302,8 +303,8 @@ pub async fn login_password(
     // must be able to log in; protected resources are gated separately by the
     // `VerifiedUser<_>` extractor.
     if !matches!(
-        record.status.as_deref(),
-        Some("active" | "pending_verification")
+        record.status,
+        Some(UserStatus::Active | UserStatus::PendingVerification)
     ) {
         tracing::warn!(
             event = "login_failed",
