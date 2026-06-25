@@ -3,7 +3,6 @@ use leasefi_contracts::{
         errors::Error as ComplianceError, types::ComplianceConfig, CompliancePolicy,
         CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
-    constants::MIN_DEADLINE_IN_MS,
     escrow::{Escrow, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,

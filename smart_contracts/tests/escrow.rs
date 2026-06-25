@@ -19,7 +19,8 @@ use leasefi_contracts::escrow::{
     Escrow, EscrowHostRef, EscrowInitArgs,
 };
 use leasefi_contracts::user_registry::{
-    UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD, ROLE_FLAG_TENANT,
+    UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
+    ROLE_FLAG_PROPERTY_MANAGER, ROLE_FLAG_TENANT,
 };
 
 use crate::escrow::events::{SecurityDepositHeld, SecurityDepositReleased};
@@ -55,7 +56,7 @@ fn setup(env: HostEnv) -> TestData {
         &env,
         EscrowInitArgs {
             owner,
-            min_deadline: MIN_DEADLINE,
+            min_deadline: MIN_DEADLINE_IN_MS,
             user_registry: user_registry.address(),
         },
     );
@@ -485,8 +486,8 @@ fn test_create_lease_invoice_should_succeed_at_exactly_min_deadline_boundary() {
 
     let deadline = test_data.env.block_time() + MIN_DEADLINE_IN_MS;
     let invoice_id = test_data.escrow.create_lease_invoice(CreateLeaseInvoiceParams {
-        tenant: test_data.env.get_account(0),
-        landlord: test_data.env.get_account(1),
+        tenant: test_data.tenant_id,
+        landlord: test_data.landlord_id,
         rent: CurrencyAmount::new(None, U256::one()),
         property_manager: None,
         property_manager_bps: 0,
@@ -708,11 +709,18 @@ fn test_pay_invoice_should_give_pm_bps_of_gross_rent() {
     // (Previously applied to post-fee net, causing silent dilution e.g. 30% PM got 29.4%.)
     // Landlord absorbs the fee in net. Total always sums to gross.
     let mut test_data = setup(odra_test::env());
-    let tenant = test_data.env.get_account(1);
-    let landlord = test_data.env.get_account(2);
-    let pm = test_data.env.get_account(3);
+    let tenant_wallet = test_data.env.get_account(1);
+    let landlord_wallet = test_data.env.get_account(2);
+    let pm_wallet = test_data.env.get_account(3);
     let gross = U256::from(10_000u64);
     let pm_bps = 3_000u32; // 30%
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let pm_id = test_data.user_registry.create_user(
+        [3u8; 32],
+        pm_wallet,
+        ROLE_FLAG_PROPERTY_MANAGER,
+    );
 
     test_data
         .env
@@ -720,18 +728,18 @@ fn test_pay_invoice_should_give_pm_bps_of_gross_rent() {
     let invoice_id = test_data
         .escrow
         .create_lease_invoice(CreateLeaseInvoiceParams {
-            tenant,
-            landlord,
+            tenant: test_data.tenant_id,
+            landlord: test_data.landlord_id,
             rent: CurrencyAmount::new(None, gross),
-            property_manager: Some(pm),
+            property_manager: Some(pm_id),
             property_manager_bps: pm_bps,
             deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
         });
 
-    let prev_pm = test_data.env.balance_of(&pm);
-    let prev_land = test_data.env.balance_of(&landlord);
+    let prev_pm = test_data.env.balance_of(&pm_wallet);
+    let prev_land = test_data.env.balance_of(&landlord_wallet);
 
-    test_data.env.set_caller(tenant);
+    test_data.env.set_caller(tenant_wallet);
     test_data
         .escrow
         .with_tokens(gross.to_u512())
@@ -742,12 +750,12 @@ fn test_pay_invoice_should_give_pm_bps_of_gross_rent() {
     let expected_land = gross - fee - expected_pm;
 
     assert_eq!(
-        test_data.env.balance_of(&pm),
+        test_data.env.balance_of(&pm_wallet),
         prev_pm + expected_pm.to_u512(),
         "PM must receive exact BPS of gross (no 2% dilution)"
     );
     assert_eq!(
-        test_data.env.balance_of(&landlord),
+        test_data.env.balance_of(&landlord_wallet),
         prev_land + expected_land.to_u512(),
         "Landlord receives gross minus fee minus PM share"
     );

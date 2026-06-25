@@ -10,7 +10,9 @@ use odra_modules::access::DEFAULT_ADMIN_ROLE;
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
     compliance_policy::{types::ComplianceConfig, CompliancePolicy, CompliancePolicyInitArgs},
-    constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
+    constants::{
+        MIN_DEADLINE_IN_MS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
+    },
     escrow::{Escrow, EscrowInitArgs},
     ico::{
         types::{Currency, ICOScheduleCreateParams},
@@ -30,7 +32,9 @@ use leasefi_contracts::{
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
-    user_registry::{UserRegistry, UserRegistryInitArgs},
+    user_registry::{
+        UserRegistry, UserRegistryInitArgs, ROLE_FLAG_LANDLORD, ROLE_FLAG_PROPERTY_MANAGER,
+    },
     vesting::{Vesting, VestingInitArgs},
 };
 
@@ -115,7 +119,7 @@ impl DeployScript for LeasefiDeployScript {
             container,
             310_000_000_000,
         )?;
-        let user_registry = UserRegistry::load_or_deploy_with_cfg(
+        let mut user_registry = UserRegistry::load_or_deploy_with_cfg(
             env,
             None,
             UserRegistryInitArgs {
@@ -140,7 +144,7 @@ impl DeployScript for LeasefiDeployScript {
             None,
             EscrowInitArgs {
                 owner: env.caller(),
-                min_deadline: 5 * 60,
+                min_deadline: MIN_DEADLINE_IN_MS,
                 user_registry: user_registry.address(),
             },
             InstallConfig::upgradable::<Escrow>(),
@@ -236,9 +240,13 @@ impl DeployScript for LeasefiDeployScript {
         )
         .unwrap();
 
-        property_registry.grant_role(&property_registry.property_manager_role(), &env.caller());
+        let bootstrap_user_id = user_registry.create_user(
+            [1u8; 32],
+            new_owner,
+            ROLE_FLAG_LANDLORD | ROLE_FLAG_PROPERTY_MANAGER,
+        );
         let sample_property_id = property_registry.create_property(CreatePropertyParams {
-            issuer: new_owner,
+            issuer: bootstrap_user_id,
             total_supply: U256::from(1_000_000u64) * U256::from(10).pow(U256::from(18)),
             metadata_uri: String::from("ipfs://leasefi-bootstrap-property"),
         });
@@ -282,7 +290,6 @@ impl DeployScript for LeasefiDeployScript {
             },
         );
         compliance.revoke_role(&compliance.compliance_manager_role(), &env.caller());
-        property_registry.set_revenue_distributor(sample_property_id, treasury.address());
         property_registry.set_property_status(sample_property_id, PropertyStatus::Active);
 
         // Setup Treasury
@@ -344,23 +351,6 @@ impl DeployScript for LeasefiDeployScript {
         big_coin.approve(&ico.address(), &(creation_params.sale_amount));
         ico.add_ico_schedule(creation_params);
 
-        // Grant all domain roles to new_owner during post-deployment setup.
-        // Without these, functions like Lease::create_lease_agreement (requires LANDLORD) and
-        // PropertyRegistry management functions (requires PROPERTY_MANAGER) revert with AccessDenied.
-        // Roles contract was init'd with new_owner as its DEFAULT_ADMIN_ROLE holder.
-        let deployer = env.caller();
-        env.set_caller(new_owner);
-        roles.grant_role(
-            &roles.get_role_admin(&roles.get_landlord_role()),
-            &new_owner,
-        );
-        roles.grant_role(&roles.get_landlord_role(), &new_owner);
-        roles.grant_role(&roles.get_role_admin(&roles.get_agent_role()), &new_owner);
-        roles.grant_role(&roles.get_agent_role(), &new_owner);
-        roles.grant_role(&roles.get_role_admin(&roles.get_manager_role()), &new_owner);
-        roles.grant_role(&roles.get_manager_role(), &new_owner);
-        env.set_caller(deployer);
-
         // Ownership handoff for admin roles. Since new_owner is env.caller() (the
         // deploy key), we grant any additional operational roles but do not revoke
         // DEFAULT_ADMIN from the final owner or call transfer_ownership to self
@@ -369,10 +359,6 @@ impl DeployScript for LeasefiDeployScript {
         nft.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
         property_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
 
-        // Grant PROPERTY_MANAGER role (in addition to DEFAULT_ADMIN_ROLE) so the mutating
-        // functions (create_property, set_property_token, set_revenue_distributor,
-        // set_metadata_uri, set_property_status) do not revert with AccessDenied.
-        property_registry.grant_role(&property_registry.property_manager_role(), &new_owner);
         // (no revoke of DEFAULT_ADMIN from final owner)
         investor_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
         // Grant VERIFICATION_MANAGER so that set_investor_record (KYC updates) works after handoff.

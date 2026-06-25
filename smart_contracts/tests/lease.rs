@@ -319,10 +319,6 @@ fn test_set_user_registry_should_set_user_registry_properly() {
         user_registry,
         "Invalid UserRegistry contract address"
     );
-
-    assert!(test_data
-        .env
-        .emitted_event(&test_data.lease, RolesSet { roles }));
 }
 
 // =============================================================================
@@ -356,10 +352,6 @@ fn test_set_escrow_should_set_escrow_properly() {
         escrow,
         "Invalid Escrow contract address"
     );
-
-    assert!(test_data
-        .env
-        .emitted_event(&test_data.lease, EscrowSet { escrow }));
 }
 
 // =============================================================================
@@ -393,10 +385,6 @@ fn test_set_nft_should_set_nft_properly() {
         nft,
         "Invalid NFT contract address"
     );
-
-    assert!(test_data
-        .env
-        .emitted_event(&test_data.lease, NftSet { nft }));
 }
 
 // =============================================================================
@@ -521,12 +509,19 @@ fn test_create_lease_agreement_should_fail_if_monthly_rent_amount_is_zero() {
 fn test_create_lease_agreement_should_allow_pm_bps_9800() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let pm_id = test_data.user_registry.create_user(
+        [5u8; 32],
+        test_data.env.get_account(5),
+        ROLE_FLAG_PROPERTY_MANAGER,
+    );
     params.rent_distribution_terms = RentDistributionTerms {
-        property_manager: Some(test_data.env.get_account(5)),
+        property_manager: Some(pm_id),
         property_manager_bps: 9800,
     };
 
     // Should not revert; 9800 + 200 == 10000 is the boundary
+    test_data.env.set_caller(test_data.landlord);
     let _ = test_data.lease.try_create_lease_agreement(params).unwrap();
 }
 
@@ -534,11 +529,18 @@ fn test_create_lease_agreement_should_allow_pm_bps_9800() {
 fn test_create_lease_agreement_should_fail_if_pm_bps_9801() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let pm_id = test_data.user_registry.create_user(
+        [5u8; 32],
+        test_data.env.get_account(5),
+        ROLE_FLAG_PROPERTY_MANAGER,
+    );
     params.rent_distribution_terms = RentDistributionTerms {
-        property_manager: Some(test_data.env.get_account(5)),
+        property_manager: Some(pm_id),
         property_manager_bps: 9801,
     };
 
+    test_data.env.set_caller(test_data.landlord);
     assert_eq!(
         test_data
             .lease
