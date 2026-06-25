@@ -13,7 +13,10 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, crypto},
+    common::{
+        ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, UserRole,
+        crypto,
+    },
     providers::{LeaseChainError, LeaseDocumentData},
     services::{
         auth::{AuthUser, LandlordRole, RoleUser},
@@ -406,6 +409,17 @@ pub async fn sign_lease(
             "lease is not awaiting signatures".to_owned(),
         ));
     }
+    // The claimed signing role must match the caller's JWT role: a Landlord-role
+    // token cannot record tenant consent, and vice versa. Guards against a user
+    // listed as the wrong party (e.g. after a data-migration error) filling the
+    // other party's signature slot.
+    let role_matches_jwt = match payload.role {
+        SignerRole::Landlord => claims.role == UserRole::Landlord,
+        SignerRole::Tenant => claims.role == UserRole::Tenant,
+    };
+    if !role_matches_jwt {
+        return Err(ApiError::Forbidden("signer_role_mismatch".to_owned()));
+    }
     // The caller must actually be the party they claim to sign as.
     let authorized = match payload.role {
         SignerRole::Landlord => lease.landlord_id == claims.sub,
@@ -466,6 +480,13 @@ pub async fn sign_lease(
     )
     .await?;
     Ok(Json(Lease::from(row)))
+}
+
+/// Whether `value` is a non-empty decimal string (a U256 id in canonical form).
+/// Used to validate the `onchainLeaseId`/`nftTokenId` commit params before the
+/// chain read and the `NUMERIC` cast.
+fn is_decimal_u256(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// Whether both `landlord` and `tenant` are marked signed in the
@@ -543,12 +564,17 @@ pub async fn commit_lease(
             "both consent signatures are required before commit".to_owned(),
         ));
     }
-    // Validate the id is a U256 decimal string before the chain read / NUMERIC cast.
-    if payload.onchain_lease_id.is_empty()
-        || !payload.onchain_lease_id.bytes().all(|b| b.is_ascii_digit())
-    {
+    // Validate both ids are non-empty decimal U256 strings before the chain read
+    // / NUMERIC cast. `0` is the Casper "uninitialized" sentinel for the
+    // agreement id, so it is rejected; the NFT token id only needs to be decimal.
+    if !is_decimal_u256(&payload.onchain_lease_id) || payload.onchain_lease_id == "0" {
         return Err(ApiError::BadRequest(
-            "onchainLeaseId must be a decimal U256 string".to_owned(),
+            "onchainLeaseId must be a non-zero decimal U256 string".to_owned(),
+        ));
+    }
+    if !is_decimal_u256(&payload.nft_token_id) {
+        return Err(ApiError::BadRequest(
+            "nftTokenId must be a decimal U256 string".to_owned(),
         ));
     }
     // Reconcile against the chain before persisting the bindings.
@@ -621,6 +647,15 @@ pub async fn lease_document(
     let lease = db::fetch_lease(&state.db, lease_id).await?;
     if lease.landlord_id != claims.sub && !lease.tenant_ids.contains(&claims.sub) {
         return Err(ApiError::Forbidden("not_a_lease_party".to_owned()));
+    }
+    // Once the lease leaves the editable phase its terms - and therefore its
+    // document - are frozen. Re-rendering an active lease would recompute the
+    // hash and overwrite the one committed on-chain, so serve the stored record
+    // unchanged instead (read-through). Only draft/pending_signatures render.
+    if lease.status != LeaseStatus::Draft.as_ref()
+        && lease.status != LeaseStatus::PendingSignatures.as_ref()
+    {
+        return Ok(Json(Lease::from(lease)));
     }
     let data = LeaseDocumentData::from(lease);
     let bytes = state

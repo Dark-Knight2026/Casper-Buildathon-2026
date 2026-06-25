@@ -328,7 +328,7 @@ async fn full_lifecycle_draft_to_active(pool: PgPool) {
         &format!("/api/v1/leases/{id}/commit"),
         &ltoken,
         &json!({
-            "onchainLeaseId": "0",
+            "onchainLeaseId": "42",
             "nftTokenId": "1",
             "commitTxHash": "deploy-test-1",
         }),
@@ -337,7 +337,7 @@ async fn full_lifecycle_draft_to_active(pool: PgPool) {
     assert_eq!(s_commit, StatusCode::OK);
     let committed = committed.unwrap();
     assert_eq!(committed["status"], "active");
-    assert_eq!(committed["onchainLeaseId"].as_str().unwrap(), "0");
+    assert_eq!(committed["onchainLeaseId"].as_str().unwrap(), "42");
     assert_eq!(committed["nftTokenId"].as_str().unwrap(), "1");
 }
 
@@ -1026,7 +1026,7 @@ async fn commit_idempotent_when_already_active(pool: PgPool) {
     );
     let commit_uri = format!("/api/v1/leases/{}/commit", p.id);
     let commit_body = json!({
-        "onchainLeaseId": "0",
+        "onchainLeaseId": "42",
         "nftTokenId": "1",
         "commitTxHash": "deploy-test-1",
     });

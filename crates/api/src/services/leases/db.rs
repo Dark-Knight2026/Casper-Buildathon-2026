@@ -572,13 +572,17 @@ pub async fn commit_lease(
 }
 
 /// Records a freshly rendered lease document on the lease: the stored
-/// (generated) URL, its SHA-256 hash, and the IPFS CID. Allowed at any live
-/// status (the document is a read-time artifact, not a lifecycle transition).
+/// (generated) URL, its SHA-256 hash, and the IPFS CID. Gated to the editable
+/// phase (`draft`/`pending_signatures`): once the lease is active the document -
+/// and the hash committed on-chain - is frozen, so this is a no-op
+/// (`RowNotFound`) past that point. The handler short-circuits to a read-through
+/// before reaching here; the guard defends the invariant if a future caller does
+/// not.
 ///
 /// # Errors
 ///
-/// Returns [`Error::RowNotFound`] when the lease is missing or soft-deleted, or
-/// any other database error.
+/// Returns [`Error::RowNotFound`] when the lease is missing, soft-deleted, or no
+/// longer in an editable status, or any other database error.
 #[inline]
 pub async fn set_lease_document(
     pool: &PgPool,
@@ -594,7 +598,7 @@ pub async fn set_lease_document(
                 lease_document_url = $2,
                 document_hash = $3,
                 ipfs_cid = $4
-            WHERE id = $1 AND deleted_at IS NULL
+            WHERE id = $1 AND status IN ('draft', 'pending_signatures') AND deleted_at IS NULL
             RETURNING
                 id, property_id, landlord_id, tenant_ids,
                 type AS "lease_type!",
