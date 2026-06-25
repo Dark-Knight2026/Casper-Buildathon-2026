@@ -2,9 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::access::Ownable;
 
 use crate::{
-    constants::{
-        LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS,
-    },
+    constants::{LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS},
     escrow::{types::CreateLeaseInvoiceParams, EscrowContractRef},
     lease::{
         errors::Error,
@@ -592,6 +590,11 @@ impl Lease {
     #[odra(non_reentrant)]
     pub fn recover_lease_nft(&mut self, lease_agreement_id: &U256) {
         let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+        if lease_agreement.is_finished {
+            self.env().revert(Error::LeaseAlreadyFinalized);
+        }
+
         self.assert_caller_is_active_user(lease_agreement.tenant, Error::InvalidTenant);
 
         let new_wallet = self.user_registry.get_active_wallet(lease_agreement.tenant);

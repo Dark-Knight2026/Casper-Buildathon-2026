@@ -1513,6 +1513,38 @@ fn test_recover_lease_nft_should_revert_if_caller_is_old_wallet() {
 }
 
 #[test]
+fn test_recover_lease_nft_should_revert_if_lease_is_finalized() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params);
+    let new_tenant_wallet = test_data.env.get_account(16);
+
+    pay_all_lease_agreement_invoices(&mut test_data, &lease_agreement_id);
+
+    test_data
+        .env
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
+    test_data
+        .lease
+        .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+    test_data
+        .user_registry
+        .replace_active_wallet(test_data.tenant_id, new_tenant_wallet);
+
+    test_data.env.set_caller(new_tenant_wallet);
+    assert_eq!(
+        test_data
+            .lease
+            .try_recover_lease_nft(&lease_agreement_id)
+            .unwrap_err(),
+        Error::LeaseAlreadyFinalized.into(),
+        "Recovery should revert when the lease agreement is finalized"
+    );
+}
+
+#[test]
 fn test_recover_lease_nft_should_revert_if_nft_already_on_active_wallet() {
     let mut test_data = setup(odra_test::env());
     let params = generate_lease_agreement_creation_params(&test_data);
