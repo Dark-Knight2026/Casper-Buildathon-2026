@@ -26,6 +26,7 @@ import { OnChainSdkHost } from '@/components/blockchain/OnChainSdkHost';
 import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useInvoicePayment } from '@/hooks/lease/useInvoicePayment';
+import { useUsdcBalance } from '@/hooks/useUsdcBalance';
 import {
   LEASE_CURRENCY,
   scaleToSmallestUnit,
@@ -137,6 +138,12 @@ function PayFlow({
   const remainingRaw = BigInt(scaleToSmallestUnit(remaining, dec));
   const amountValid = amountRaw > 0n && amountRaw <= remainingRaw;
 
+  // Pre-flight balance (advisory — fails open: undefined while loading/on error).
+  const { data: balance, refetch: refetchBalance } = useUsdcBalance(
+    account?.accountHash
+  );
+  const insufficient = balance !== undefined && balance < amountRaw;
+
   const payable =
     Boolean(invoice.onchainInvoiceId) &&
     ['pending', 'partial', 'overdue'].includes(invoice.status);
@@ -212,12 +219,37 @@ function PayFlow({
           <Row label="Already paid" value={fmt(invoice.rentPaid)} />
         )}
         <Row label="You pay now" value={fmt(amount)} strong />
+        {balance !== undefined && (
+          <Row
+            label="Wallet balance"
+            value={fmt(formatFromSmallestUnit(balance, dec))}
+            muted
+          />
+        )}
         <Row
           label="Network fee"
           value="≈ up to 13 CSPR (unused refunded)"
           muted
         />
       </div>
+
+      {insufficient && (
+        <div className="flex items-start gap-2 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Your {LEASE_CURRENCY.symbol} balance is less than this payment. Add
+            funds, then{' '}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => void refetchBalance()}
+            >
+              recheck
+            </button>
+            .
+          </span>
+        </div>
+      )}
 
       {/* Rent: full by default, with a collapsed partial-amount option */}
       {!isDeposit && (
@@ -280,7 +312,7 @@ function PayFlow({
       ) : (
         <Button
           className="w-full"
-          disabled={busy || !amountValid}
+          disabled={busy || !amountValid || insufficient}
           onClick={() => pay({ invoice, amount })}
         >
           {busy ? (

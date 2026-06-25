@@ -10,10 +10,14 @@
  */
 
 import { Args, CLValue, Key, Transaction } from 'casper-js-sdk';
+import { blake2bHex } from 'blakejs';
 
 import {
+  clValueToBigInt,
   contractHashToEntityKey,
   createContractCallTransaction,
+  hexToBytes,
+  queryDictionaryItem,
 } from '@/services/ico/casperClient';
 import { getAllowance } from '@/services/ico/cep18Service';
 
@@ -90,4 +94,39 @@ export async function isApproveNeeded({
     contractHashToEntityKey(spenderPackageHash)
   );
   return current < requiredRaw;
+}
+
+/** An account-hash key string to its tagged Casper `Key` bytes (account tag `0x00`). */
+function accountKeyBytes(accountHash: string): Uint8Array {
+  const bytes = hexToBytes(accountHash.replace(/^account-hash-/, ''));
+  const tagged = new Uint8Array(1 + bytes.length);
+  tagged[0] = 0x00; // Key::Account tag
+  tagged.set(bytes, 1);
+  return tagged;
+}
+
+/**
+ * An account's CEP-18 token balance, in the token's smallest unit.
+ *
+ * The Odra `balances` mapping keys items by `blake2b(key.to_bytes())`, so the
+ * dictionary item key is `blake2b` of the account's tagged `Key` bytes — the
+ * same derivation the (proven) allowance read uses, for a single key. Pass the
+ * token's **instance** hash (state lives there, not on the package). Returns
+ * `0n` when the account holds none.
+ */
+export async function getCep18Balance({
+  tokenInstanceHash,
+  ownerAccountHash,
+}: {
+  tokenInstanceHash: string;
+  ownerAccountHash: string;
+}): Promise<bigint> {
+  const dictKey = blake2bHex(accountKeyBytes(ownerAccountHash), undefined, 32);
+  const stored = await queryDictionaryItem(
+    tokenInstanceHash,
+    'balances',
+    dictKey
+  );
+  if (!stored?.clValue) return 0n;
+  return clValueToBigInt(stored.clValue);
 }
