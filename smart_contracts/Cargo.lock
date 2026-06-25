@@ -1598,6 +1598,7 @@ dependencies = [
  "odra-cli",
  "odra-modules",
  "odra-test",
+ "serde_json",
  "sha3",
 ]
 

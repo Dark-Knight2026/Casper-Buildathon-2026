@@ -19,6 +19,7 @@ odra-build = { version = "2.5.0", features = [], default-features = false }
 odra-build = { version = "2.5.0", features = [], default-features = false }
 odra-cli = { version = "2.5.0", features = [], default-features = false }
 odra-casper-livenet-env = { version = "2.6.0", features = [], default-features = false }
+serde_json = "1"
 
 [[bin]]
 name = "leasefi_contracts_build_contract"
