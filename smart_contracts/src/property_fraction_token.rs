@@ -75,7 +75,6 @@ pub mod errors {
         EmptySymbol = 1102,
         InvalidDecimals = 1103,
         ZeroInitialSupply = 1104,
-        AlreadyInitialized = 1105,
     }
 }
 
@@ -89,7 +88,6 @@ pub struct PropertyFractionToken {
     token: SubModule<Cep18>,
     compliance_policy: External<CompliancePolicyContractRef>,
     property_id: Var<U256>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -105,10 +103,6 @@ impl PropertyFractionToken {
     ///      the property registry may not be active until this token address is deployed and
     ///      registered.
     pub fn init(&mut self, params: PropertyFractionTokenInitParams) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
         self.validate_init_params(&params);
 
         self.access_control
@@ -132,8 +126,6 @@ impl PropertyFractionToken {
             initial_supply: params.initial_supply,
             compliance_policy: params.compliance_policy,
         });
-
-        self.initialized.set(true);
     }
 
     // =============================================================================

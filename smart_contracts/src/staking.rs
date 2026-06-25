@@ -122,7 +122,6 @@ pub mod errors {
         UnstakeBlockedByVestingLock = 613,
         CallerNotAuthorizedToManageLocks = 614,
         RenounceOwnershipNotAllowed = 615,
-        AlreadyInitialized = 616,
         RewardClaimHoldPeriodNotFinished = 617,
     }
 }
@@ -170,7 +169,6 @@ pub struct Staking {
     /// This value is updated whenever newly available rewards are deposited.
     reward_per_token_stored: Var<U256>,
     unclaimed_rewards: Var<U256>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -180,13 +178,7 @@ impl Staking {
     // =========================================================================
 
     pub fn init(&mut self, owner: Address) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
         self.ownable.init(owner);
-
-        self.initialized.set(true);
     }
 
     // =========================================================================

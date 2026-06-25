@@ -143,7 +143,6 @@ pub mod errors {
         CannotTransfer = 104,
         TokenIsFrozen = 105,
         NotAuthorized = 106,
-        AlreadyInitialized = 107,
     }
 }
 
@@ -172,7 +171,6 @@ pub struct NFT {
     tokens_count: Var<U256>,
     whitelist: Mapping<Address, bool>,
     frozen_tokens: Mapping<U256, bool>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -182,10 +180,6 @@ impl NFT {
     // =========================================================================
 
     pub fn init(&mut self, params: NFTInitParams) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &params.owner);
         self.cep95.init(params.symbol, params.name);
@@ -223,8 +217,6 @@ impl NFT {
             self.env()
                 .emit_event(ForceTransfererAdded { address: *address });
         });
-
-        self.initialized.set(true);
     }
 
     // =========================================================================

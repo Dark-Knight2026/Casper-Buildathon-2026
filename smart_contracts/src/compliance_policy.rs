@@ -102,7 +102,6 @@ pub mod errors {
         RecipientNotVerified = 1005,
         InvalidPropertyToken = 1006,
         RecipientNotEquityEligible = 1007,
-        AlreadyInitialized = 1008,
     }
 }
 
@@ -131,7 +130,6 @@ pub struct CompliancePolicy {
     configs: Mapping<U256, ComplianceConfig>,
     /// Accounts that are exempt from investor verification checks (e.g. issuance escrows).
     transfer_exempt_accounts: Mapping<Address, bool>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -148,10 +146,6 @@ impl CompliancePolicy {
         lease: Address,
         user_registry: Address,
     ) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
         self.investor_registry.set(investor_registry);

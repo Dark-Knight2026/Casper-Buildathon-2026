@@ -214,7 +214,6 @@ pub struct Lease {
     equity_eligible: Mapping<(U256, U256), bool>,
     /// Number of lease agreements created.
     leases_count: Var<U256>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]

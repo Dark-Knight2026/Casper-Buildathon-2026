@@ -229,7 +229,6 @@ pub struct Escrow {
     invoices_count: Var<U256>,
     /// Minimum delay required between invoice creation and deadline.
     min_deadline: Var<u64>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -242,8 +241,6 @@ impl Escrow {
         self.ownable.init(owner);
         self.user_registry.set(user_registry);
         self.set_min_deadline(min_deadline);
-
-        self.initialized.set(true);
     }
 
     // =========================================================================

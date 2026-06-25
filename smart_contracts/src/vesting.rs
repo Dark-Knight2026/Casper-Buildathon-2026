@@ -89,7 +89,6 @@ pub mod errors {
         NothingToClaim = 707,
         ClaimBlockedByActiveUnbonding = 708,
         RenounceOwnershipNotAllowed = 709,
-        AlreadyInitialized = 710,
     }
 }
 
@@ -109,7 +108,6 @@ pub mod errors {
 pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
     ownable: SubModule<Ownable>,
-    initialized: Var<bool>,
 
     /// Reference to the Staking contract.
     /// Used to unstake tokens when transfer tokens out (claim).
@@ -138,13 +136,7 @@ impl Vesting {
     // =========================================================================
 
     pub fn init(&mut self, owner: Address) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
         self.ownable.init(owner);
-
-        self.initialized.set(true);
     }
 
     // =========================================================================

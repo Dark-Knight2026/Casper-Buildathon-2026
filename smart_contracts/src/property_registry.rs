@@ -145,7 +145,6 @@ pub struct PropertyRegistry {
     properties_count: Sequence<U256>,
     /// Reverse lookup from property token address to property ID.
     token_to_property_id: Mapping<Address, Option<U256>>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]

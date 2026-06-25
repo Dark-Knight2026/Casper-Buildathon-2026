@@ -60,7 +60,6 @@ pub mod errors {
         DirectReservesTokenWithdrawalIsNotAllowed = 204,
         InsufficientWithdrawalTokenAmount = 205,
         RenounceOwnershipNotAllowed = 206,
-        AlreadyInitialized = 207,
     }
 }
 
@@ -79,7 +78,6 @@ pub struct Treasury {
     ownable: SubModule<Ownable>,
     staking: Var<Address>,
     big_coin: Var<Address>,
-    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -89,13 +87,7 @@ impl Treasury {
     // =============================================================================
 
     pub fn init(&mut self, owner: Address) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
         self.ownable.init(owner);
-
-        self.initialized.set(true);
     }
 
     // =========================================================================
