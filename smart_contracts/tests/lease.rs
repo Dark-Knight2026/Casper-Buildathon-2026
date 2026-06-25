@@ -1451,6 +1451,10 @@ fn test_recover_lease_nft_should_move_frozen_token_to_active_wallet() {
         test_data.nft.can_transact(&new_tenant_wallet),
         "New wallet should be whitelisted during recovery"
     );
+    assert!(
+        !test_data.nft.can_transact(&old_tenant_wallet),
+        "Old wallet should be removed from the NFT whitelist after recovery"
+    );
     assert!(test_data.env.emitted_event(
         &test_data.lease,
         LeaseNftRecovered {

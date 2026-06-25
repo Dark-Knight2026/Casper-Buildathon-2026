@@ -608,6 +608,7 @@ impl Lease {
         self.nft.add_to_whitelist(&new_wallet);
         self.nft
             .forced_transfer(old_wallet, new_wallet, lease_agreement.token_id);
+        self.nft.remove_from_whitelist(&old_wallet);
         self.nft.set_frozen_tokens(&lease_agreement.token_id, true);
 
         self.env().emit_event(LeaseNftRecovered {
