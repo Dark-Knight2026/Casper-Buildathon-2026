@@ -1249,3 +1249,126 @@ async fn second_lease_in_year_gets_a_sequential_number(pool: PgPool) {
     assert!(second.starts_with("LS"), "unexpected format: {second}");
     assert_ne!(first, second, "the second lease must get a fresh number");
 }
+
+// /commit reconciliation against prior on-chain events ------------------------
+
+/// Seed an orphan `InvoiceCreated` row into `blockchain_events` exactly as the
+/// indexer persists it: the raw event is stored, but binding was skipped because
+/// the off-chain mirror did not exist yet.
+async fn seed_orphan_invoice_event(
+    pool: &PgPool,
+    deploy_hash: &str,
+    transform_idx: i32,
+    onchain_invoice_id: &str,
+) {
+    sqlx::query(
+        r"
+            INSERT INTO blockchain_events
+                (event_type, contract_address, transaction_hash,
+                 block_number, event_data, transform_idx, processed)
+            VALUES ('InvoiceCreated', $1, $2, 100, $3, $4, true)
+        ",
+    )
+    .bind("escrow-contract")
+    .bind(deploy_hash)
+    .bind(json!({ "invoice_id": onchain_invoice_id, "created_at": 1_782_369_426_200_i64 }))
+    .bind(transform_idx)
+    .execute(pool)
+    .await
+    .expect("seed orphan InvoiceCreated event");
+}
+
+/// Regression (red until `/commit` reconciliation lands): the indexer streams
+/// `InvoiceCreated` ahead of `/commit`, so when it tries to bind, the off-chain
+/// invoices do not exist yet and it skips - but it still persists the events in
+/// `blockchain_events`. `/commit` then seeds the scheduled invoices and must
+/// reconcile them against those already-stored events, binding each to its
+/// on-chain id (deposit -> 10, rent -> 11) and moving it to `pending`.
+///
+/// Today `/commit` seeds the invoices but never reads `blockchain_events`, so
+/// they stay `scheduled` with `onchain_invoice_id IS NULL` and this fails.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_reconciles_invoices_against_prior_onchain_events(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let pending = pending_lease(&env, &pool).await;
+    assert_eq!(
+        sign_consent(
+            &env,
+            &pending.ltoken,
+            &pending.id,
+            "landlord",
+            &pending.landlord,
+            &pending.message,
+        )
+        .await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        sign_consent(
+            &env,
+            &pending.ttoken,
+            &pending.id,
+            "tenant",
+            &pending.tenant,
+            &pending.message,
+        )
+        .await,
+        StatusCode::OK
+    );
+
+    // The indexer already saw both InvoiceCreated events for this deploy (a
+    // 30-day term -> deposit then one rent month) and stored them, distinguished
+    // by transform_idx within the deploy. Binding was skipped (no mirror yet).
+    let deploy_hash = "f".repeat(64);
+    seed_orphan_invoice_event(&pool, &deploy_hash, 0, "10").await;
+    seed_orphan_invoice_event(&pool, &deploy_hash, 1, "11").await;
+
+    // Commit carries the same deploy hash the stored events do.
+    let (s_commit, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", pending.id),
+        &pending.ltoken,
+        &json!({
+            "onchainLeaseId": "4",
+            "nftTokenId": "4",
+            "commitTxHash": deploy_hash,
+            "invoiceValidityDuration": 0,
+        }),
+    )
+    .await;
+    assert_eq!(s_commit, StatusCode::OK);
+
+    let lease_uuid = Uuid::parse_str(&pending.id).unwrap();
+    let bound = sqlx::query_scalar::<_, i64>(
+        r"
+            SELECT COUNT(*) FROM invoices
+            WHERE lease_id = $1 AND onchain_invoice_id IS NOT NULL AND status = 'pending'
+        ",
+    )
+    .bind(lease_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        bound, 2,
+        "both scheduled invoices must be reconciled against the prior on-chain events"
+    );
+
+    let deposit_onchain = sqlx::query_scalar::<_, Option<String>>(
+        r"
+            SELECT onchain_invoice_id::text
+            FROM   invoices
+            WHERE  lease_id = $1 AND kind = 'security_deposit'
+        ",
+    )
+    .bind(lease_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        deposit_onchain.as_deref(),
+        Some("10"),
+        "the security deposit binds to the first on-chain invoice id"
+    );
+}
