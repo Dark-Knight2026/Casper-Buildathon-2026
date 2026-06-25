@@ -297,6 +297,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "lease_chain_reader_stub",
             "No real LeaseChainReader configured - using FakeLeaseChainReader (treats every commit as consistent, no on-chain check). Production MUST wire a real CSPR RPC reader before lease activation can be trusted."
         );
+        active_stubs.push("lease chain reader (FakeLeaseChainReader)");
         Arc::new(FakeLeaseChainReader::new())
     };
 
@@ -308,6 +309,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "lease_document_renderer_stub",
             "No real lease document renderer configured - using SimpleLeaseDocumentRenderer (plain text, not a legal PDF). Production MUST wire a real renderer before lease documents can be trusted."
         );
+        active_stubs.push("lease document renderer (SimpleLeaseDocumentRenderer)");
         Arc::new(SimpleLeaseDocumentRenderer::new())
     };
 

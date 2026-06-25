@@ -12,7 +12,16 @@
 -- Created: 2026-06-16
 -- ============================================================
 
--- Drop the orphaned renewals tables (renewal_reminders first: it FKs lease_renewals)
+-- Drop the orphaned renewals tables (renewal_reminders first: it FKs lease_renewals).
+-- FK-dependency audit confirms renewal_reminders is the only inbound FK, so the
+-- CASCADE drops nothing else. Verify against the target environment before
+-- applying:
+--   SELECT tc.table_name
+--   FROM information_schema.table_constraints tc
+--   JOIN information_schema.constraint_column_usage ccu
+--     ON tc.constraint_name = ccu.constraint_name
+--   WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'lease_renewals';
+--   -- expected: renewal_reminders (only)
 DROP TABLE IF EXISTS renewal_reminders CASCADE;
 DROP TABLE IF EXISTS lease_renewals CASCADE;
 
@@ -34,9 +43,9 @@ CREATE TABLE lease_renewals (
   rent_increase_reason TEXT,
   response_deadline DATE,
 
-  -- Lifecycle: draft -> sent -> under_review -> accepted | rejected | countered | expired
+  -- Lifecycle: draft -> sent -> accepted | rejected | countered | expired
   status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN (
-    'draft', 'sent', 'under_review', 'accepted', 'rejected', 'countered', 'expired'
+    'draft', 'sent', 'accepted', 'rejected', 'countered', 'expired'
   )),
 
   -- Tenant counter-offer ({ proposedRent, proposedTermMonths, notes }); null unless countered
@@ -101,7 +110,12 @@ CREATE TABLE lease_renewal_negotiations (
   kind VARCHAR(20) NOT NULL CHECK (kind IN ('message', 'counter_offer')),
   body TEXT,
   proposed_terms JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  -- A counter-offer must carry its terms; a message must not be mistaken for one.
+  CONSTRAINT proposed_terms_required_for_counter_offer CHECK (
+    kind <> 'counter_offer' OR proposed_terms IS NOT NULL
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_lease_renewal_negotiations_renewal_id
@@ -129,7 +143,7 @@ CREATE POLICY lease_renewal_negotiations_insert_author ON lease_renewal_negotiat
 
 -- Comments
 COMMENT ON TABLE lease_renewals IS 'Lease renewal offers (reference §4): landlord proposes new terms, tenant accepts/rejects/counters';
-COMMENT ON COLUMN lease_renewals.status IS 'Lifecycle: draft -> sent -> under_review -> accepted | rejected | countered | expired';
+COMMENT ON COLUMN lease_renewals.status IS 'Lifecycle: draft -> sent -> accepted | rejected | countered | expired';
 COMMENT ON COLUMN lease_renewals.counter_offer IS 'Tenant counter-offer payload ({ proposedRent, proposedTermMonths, notes }); null unless countered';
 COMMENT ON TABLE lease_renewal_negotiations IS 'Negotiation history (messages + counter-offers) on a renewal offer';
 COMMENT ON COLUMN lease_renewal_negotiations.kind IS 'message (free text) or counter_offer (carries proposed_terms)';

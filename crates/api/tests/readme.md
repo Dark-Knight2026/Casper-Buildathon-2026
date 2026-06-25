@@ -24,7 +24,7 @@
 | listings.rs               | Tests listing core: create draft + validation, public active-only list (filters/geo/sort), public detail, landlord list, owner-scoped update + Fair Housing re-screen, unique-tenant view tracking |
 | listings_lifecycle.rs     | Tests listing lifecycle (C23, non-gate): submit draft->pending, legal/illegal state transitions, soft withdraw, statistics + historical-data owner scoping, auto-expiry worker |
 | listings_gate.rs          | Tests authority gate D2 (C23): each gate blocks ->active in order (identity/authority-tier/fair-housing), provenance view, authority-document upload (T0->T1, PM), Fair Housing screen |
-| listings_media.rs         | Tests media pipeline: upload (MIME sniff, mismatch/oversize, bafy CID, pending), agent-only moderation (approved visible publicly), owner reorder/remove |
+| listings_media.rs         | Tests media pipeline: upload (MIME sniff, mismatch/oversize, stub:bafy CID, pending), agent-only moderation (approved visible publicly), owner reorder/remove |
 | models.rs                 | Unit tests for transaction models: TxType, HashType, ft_action_type_id                                          |
 | properties.rs             | Tests property domain: dedup-aware upsert (201/200, cross-landlord collapse), public detail, owner-scoped offer history, geo search (radius/bbox + validation) |
 | server.rs                 | Tests server configuration: rate limiting (SC-005), CORS (SC-007)                                               |

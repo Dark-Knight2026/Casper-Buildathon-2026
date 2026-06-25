@@ -243,12 +243,10 @@ impl UpdateLeaseRequest {
                 "securityDeposit must not be negative".to_owned(),
             ));
         }
-        let currency = self.currency.or_else(|| current.currency.clone());
-        if let Some(code) = &currency {
-            // Keep this set in sync with the `lease_currency_allowed` DB CHECK.
-            if !["cUSD", "CSPR", "USD", "USDT", "USDC"].contains(&code.as_str()) {
-                return Err(ApiError::BadRequest("unsupported currency".to_owned()));
-            }
+        let currency = self.currency.unwrap_or_else(|| current.currency.clone());
+        // Keep this set in sync with the `lease_currency_allowed` DB CHECK.
+        if !["cUSD", "CSPR", "USD", "USDT", "USDC"].contains(&currency.as_str()) {
+            return Err(ApiError::BadRequest("unsupported currency".to_owned()));
         }
         let clauses = match self.clauses {
             Some(list) => serde_json::to_value(list).unwrap_or_else(|_| Value::Array(Vec::new())),
@@ -384,7 +382,7 @@ pub struct Lease {
     /// Security deposit (off-chain amount).
     pub security_deposit: f64,
     /// Settlement currency.
-    pub currency: Option<String>,
+    pub currency: String,
     /// Property manager receiving a rent share, if any.
     #[schema(value_type = Option<Uuid>)]
     pub property_manager_id: Option<Uuid>,

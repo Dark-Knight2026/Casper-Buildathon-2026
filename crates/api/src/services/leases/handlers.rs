@@ -8,13 +8,17 @@ use axum::{
     http::StatusCode,
 };
 use chrono::Utc;
-use rust_decimal::prelude::ToPrimitive;
+use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use sqlx::Error;
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, crypto},
+    common::{
+        ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, UserRole,
+        crypto,
+    },
     providers::{LeaseChainError, LeaseDocumentData},
     services::{
         auth::{AuthUser, LandlordRole, RoleUser},
@@ -351,7 +355,7 @@ fn lease_consent_message(lease: &LeaseRow) -> String {
         tenant,
         lease.monthly_rent,
         lease.security_deposit,
-        lease.currency.as_deref().unwrap_or(""),
+        lease.currency,
         lease.start_date,
         lease.end_date,
     )
@@ -406,6 +410,17 @@ pub async fn sign_lease(
         return Err(ApiError::Conflict(
             "lease is not awaiting signatures".to_owned(),
         ));
+    }
+    // The claimed signing role must match the caller's JWT role: a Landlord-role
+    // token cannot record tenant consent, and vice versa. Guards against a user
+    // listed as the wrong party (e.g. after a data-migration error) filling the
+    // other party's signature slot.
+    let role_matches_jwt = match payload.role {
+        SignerRole::Landlord => claims.role == UserRole::Landlord,
+        SignerRole::Tenant => claims.role == UserRole::Tenant,
+    };
+    if !role_matches_jwt {
+        return Err(ApiError::Forbidden("signer_role_mismatch".to_owned()));
     }
     // The caller must actually be the party they claim to sign as.
     let authorized = match payload.role {
@@ -469,16 +484,44 @@ pub async fn sign_lease(
     Ok(Json(Lease::from(row)))
 }
 
-/// Whether both `landlord` and `tenant` are marked signed in the
-/// signature-progress object. The gate `/commit` enforces before going on-chain.
-fn both_parties_signed(progress: &Value) -> bool {
-    ["landlord", "tenant"].iter().all(|party| {
-        progress
-            .get(party)
-            .and_then(|entry| entry.get("signed"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    })
+/// Whether `value` is a non-empty decimal string (a U256 id in canonical form).
+/// Used to validate the `onchainLeaseId`/`nftTokenId` commit params before the
+/// chain read and the `NUMERIC` cast.
+fn is_decimal_u256(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// Per-party consent state inside the `signature_progress` JSONB; only the
+/// `signed` flag gates `/commit` (the `timestamp` key is ignored here).
+#[derive(Debug, Deserialize)]
+struct PartyConsentStatus {
+    signed: bool,
+}
+
+/// Typed view of the `signature_progress` JSONB the `/commit` gate reads.
+///
+/// `landlord` and `tenant` are required keys: a malformed shape (missing party
+/// or `signed` flag) fails loudly with a deserialization error rather than
+/// silently reading as "not signed" and blocking commit with no actionable cause.
+#[derive(Debug, Deserialize)]
+struct SignatureProgress {
+    landlord: PartyConsentStatus,
+    tenant: PartyConsentStatus,
+}
+
+/// Maps a [`LeaseChainError`] to the API error `/commit` surfaces. `NotFound` is
+/// the caller's fault (unknown id -> `400`); a transport failure is ours
+/// (-> `500`). Shared by every `LeaseChainReader` read in `commit_lease`.
+fn map_lease_chain_error(err: LeaseChainError) -> ApiError {
+    match err {
+        LeaseChainError::NotFound(_) => {
+            ApiError::BadRequest("lease agreement not found on-chain".to_owned())
+        }
+        LeaseChainError::Transport(reason) => {
+            tracing::error!(%reason, "lease chain reconciliation failed");
+            ApiError::Internal("on-chain reconciliation failed".to_owned())
+        }
+    }
 }
 
 // `POST /api/v1/leases/{id}/commit`
@@ -486,16 +529,19 @@ fn both_parties_signed(progress: &Value) -> bool {
 /// Records the on-chain result of `create_lease_agreement` and activates the lease.
 ///
 /// Landlord-only, owner-only. Blocked until both parties have signed. Reconciles
-/// the submitted `onchainLeaseId` against the chain via `LeaseChainReader` before
-/// persisting the bindings and moving `pending_signatures -> active`. Idempotent:
-/// re-committing an already-active lease returns it unchanged (the indexer's
-/// `LeaseAgreementCreated` handler may have activated it first).
+/// the submitted `onchainLeaseId` against the chain via `LeaseChainReader` -
+/// requiring the agreement to exist, be unfinished, and be fully funded (deposit
+/// plus invoices) - before persisting the bindings and moving
+/// `pending_signatures -> active`. Idempotent: an already-active lease (the
+/// indexer's `LeaseAgreementCreated` handler may have won the race) returns
+/// unchanged, even when the activation lands between this handler's read and write.
 ///
 /// # Errors
 ///
-/// Returns `400` on a non-decimal `onchainLeaseId` or an id absent on-chain,
-/// `403` when not the landlord, `404` when the lease is missing, `409` when the
-/// lease is not awaiting commit, both signatures are not yet present, or the
+/// Returns `400` on a zero/non-decimal `onchainLeaseId`, a non-decimal
+/// `nftTokenId`, or an id absent on-chain, `403` when not the landlord, `404`
+/// when the lease is missing, `409` when the lease is not awaiting commit, both
+/// signatures are not yet present, the agreement is not fully funded, or the
 /// on-chain lease is already finished, `500` on an on-chain transport failure.
 #[utoipa::path(
     post,
@@ -539,17 +585,29 @@ pub async fn commit_lease(
             "lease is not awaiting commit".to_owned(),
         ));
     }
-    if !both_parties_signed(&current.signature_progress.0) {
+    let progress = serde_json::from_value::<SignatureProgress>(
+        current.signature_progress.0.clone(),
+    )
+    .map_err(|err| {
+        tracing::error!(?err, "malformed lease signature_progress");
+        ApiError::Internal("lease signature progress is malformed".to_owned())
+    })?;
+    if !(progress.landlord.signed && progress.tenant.signed) {
         return Err(ApiError::Conflict(
             "both consent signatures are required before commit".to_owned(),
         ));
     }
-    // Validate the id is a U256 decimal string before the chain read / NUMERIC cast.
-    if payload.onchain_lease_id.is_empty()
-        || !payload.onchain_lease_id.bytes().all(|b| b.is_ascii_digit())
-    {
+    // Validate both ids are non-empty decimal U256 strings before the chain read
+    // / NUMERIC cast. `0` is the Casper "uninitialized" sentinel for the
+    // agreement id, so it is rejected; the NFT token id only needs to be decimal.
+    if !is_decimal_u256(&payload.onchain_lease_id) || payload.onchain_lease_id == "0" {
         return Err(ApiError::BadRequest(
-            "onchainLeaseId must be a decimal U256 string".to_owned(),
+            "onchainLeaseId must be a non-zero decimal U256 string".to_owned(),
+        ));
+    }
+    if !is_decimal_u256(&payload.nft_token_id) {
+        return Err(ApiError::BadRequest(
+            "nftTokenId must be a decimal U256 string".to_owned(),
         ));
     }
     // Reconcile against the chain before persisting the bindings.
@@ -557,40 +615,67 @@ pub async fn commit_lease(
         .lease_chain_reader
         .get_lease_agreement_by_id(&payload.onchain_lease_id)
         .await
-        .map_err(|err| match err {
-            LeaseChainError::NotFound(_) => {
-                ApiError::BadRequest("lease agreement not found on-chain".to_owned())
-            }
-            LeaseChainError::Transport(reason) => {
-                tracing::error!(%reason, "lease chain reconciliation failed");
-                ApiError::Internal("on-chain reconciliation failed".to_owned())
-            }
-        })?;
+        .map_err(map_lease_chain_error)?;
     if onchain.is_finished {
         return Err(ApiError::Conflict(
             "on-chain lease is already finished".to_owned(),
         ));
     }
-    let validity_secs = payload
-        .invoice_validity_duration
-        .to_i64()
-        .unwrap_or_default();
-
+    // Activation requires the agreement to be fully funded on-chain: the security
+    // deposit settled and no unpaid invoices outstanding.
+    if !state
+        .lease_chain_reader
+        .is_security_deposit_paid(&payload.onchain_lease_id)
+        .await
+        .map_err(map_lease_chain_error)?
+    {
+        return Err(ApiError::Conflict(
+            "security deposit is not yet paid on-chain".to_owned(),
+        ));
+    }
+    if !state
+        .lease_chain_reader
+        .is_all_invoices_paid(&payload.onchain_lease_id)
+        .await
+        .map_err(map_lease_chain_error)?
+    {
+        return Err(ApiError::Conflict(
+            "on-chain invoices are not all paid".to_owned(),
+        ));
+    }
+    // Activate and seed the invoice mirror atomically.
     let mut tx = state.db.begin().await?;
-    let row = db::commit_lease(
+    let row = match db::commit_lease(
         tx.as_mut(),
         lease_id,
         &payload.onchain_lease_id,
         &payload.nft_token_id,
         &payload.commit_tx_hash,
     )
-    .await?;
+    .await
+    {
+        Ok(row) => row,
+        // The indexer's LeaseAgreementCreated handler activated the lease between
+        // our status read and this write. Re-fetch: an active lease is success
+        // (idempotent), anything else is a genuine conflict. The empty tx rolls
+        // back on drop.
+        Err(Error::RowNotFound) => {
+            let latest = db::fetch_lease(&state.db, lease_id).await?;
+            if latest.status == LeaseStatus::Active.as_ref() {
+                return Ok(Json(Lease::from(latest)));
+            }
+            return Err(ApiError::Conflict(
+                "lease is not awaiting commit".to_owned(),
+            ));
+        }
+        Err(err) => return Err(err.into()),
+    };
+    let validity_secs = i64::try_from(payload.invoice_validity_duration).unwrap_or_default();
     db::create_lease_invoices(tx.as_mut(), &row, validity_secs).await?;
     // Bind any `InvoiceCreated` events the indexer stored before this commit
     // seeded the mirror (the stream races ahead of /commit).
     db::reconcile_invoices_from_onchain_events(tx.as_mut(), row.id, &payload.commit_tx_hash)
         .await?;
-
     tx.commit().await?;
     Ok(Json(Lease::from(row)))
 }
@@ -635,6 +720,15 @@ pub async fn lease_document(
     let lease = db::fetch_lease(&state.db, lease_id).await?;
     if lease.landlord_id != claims.sub && !lease.tenant_ids.contains(&claims.sub) {
         return Err(ApiError::Forbidden("not_a_lease_party".to_owned()));
+    }
+    // Once the lease leaves the editable phase its terms - and therefore its
+    // document - are frozen. Re-rendering an active lease would recompute the
+    // hash and overwrite the one committed on-chain, so serve the stored record
+    // unchanged instead (read-through). Only draft/pending_signatures render.
+    if lease.status != LeaseStatus::Draft.as_ref()
+        && lease.status != LeaseStatus::PendingSignatures.as_ref()
+    {
+        return Ok(Json(Lease::from(lease)));
     }
     let data = LeaseDocumentData::from(lease);
     let bytes = state

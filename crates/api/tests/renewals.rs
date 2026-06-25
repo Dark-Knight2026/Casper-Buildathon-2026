@@ -248,7 +248,7 @@ async fn respond_rejected_for_non_tenant(pool: PgPool) {
     let renewal = create_renewal(&env, &ltoken, lease_id).await;
     let id = renewal["id"].as_str().unwrap();
 
-    let (status, _) = common::authed_request::<Value>(
+    let (status, body) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         &format!("/api/v1/renewals/{id}/respond"),
@@ -257,7 +257,12 @@ async fn respond_rejected_for_non_tenant(pool: PgPool) {
     )
     .await;
 
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "not_the_renewal_tenant",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -278,7 +283,7 @@ async fn respond_twice_conflicts(pool: PgPool) {
         &respond,
     )
     .await;
-    let (s_second, _) = common::authed_request::<Value>(
+    let (s_second, second_body) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         &format!("/api/v1/renewals/{id}/respond"),
@@ -288,7 +293,12 @@ async fn respond_twice_conflicts(pool: PgPool) {
     .await;
 
     assert_eq!(s_first, StatusCode::OK);
-    assert_eq!(s_second, StatusCode::CONFLICT);
+    common::assert_api_error(
+        s_second,
+        second_body.as_ref(),
+        StatusCode::CONFLICT,
+        "renewal is not awaiting a response",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -351,7 +361,7 @@ async fn create_renewal_rejected_for_non_owner_lease(pool: PgPool) {
     let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
     let lease_id = seed_lease(&pool, landlord_a, tenant_id, "active").await;
 
-    let (status, _) = common::authed_request::<Value>(
+    let (status, body) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         "/api/v1/renewals",
@@ -359,7 +369,12 @@ async fn create_renewal_rejected_for_non_owner_lease(pool: PgPool) {
         &renewal_body(lease_id),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "not_lease_landlord",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -542,12 +557,17 @@ async fn negotiations_rejected_for_non_party(pool: PgPool) {
         renewal["id"].as_str().unwrap()
     );
 
-    let (s_get, _) =
+    let (s_get, get_body) =
         common::authed_request::<Value>(&env.server, &Method::GET, &uri, &outsider, &Value::Null)
             .await;
-    assert_eq!(s_get, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        s_get,
+        get_body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "not_a_renewal_party",
+    );
 
-    let (s_post, _) = common::authed_request::<Value>(
+    let (s_post, post_body) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         &uri,
@@ -555,7 +575,12 @@ async fn negotiations_rejected_for_non_party(pool: PgPool) {
         &json!({ "kind": "message", "body": "let me in" }),
     )
     .await;
-    assert_eq!(s_post, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        s_post,
+        post_body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "not_a_renewal_party",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]

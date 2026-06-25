@@ -2,7 +2,7 @@
 //!
 //! - **Upload** (`POST`): owner-only multipart; magic-byte MIME sniff
 //!   (PNG/JPEG/WebP), declared-vs-sniffed cross-check, EXIF strip (noop in the
-//!   hackathon), content pin -> deterministic `bafy<sha256>` CID. New media is
+//!   hackathon), content pin -> deterministic `stub:bafy<sha256>` CID. New media is
 //!   auto-approved on upload (an agent may still `reject` it later).
 //! - **Moderation** (`PUT /{mediaId}/moderation`): an AGENT decision, not the
 //!   lister's; only `approved` media is shown publicly, but the landlord sees
@@ -83,8 +83,8 @@ async fn moderate(
 
 // `POST /listings/{id}/media` upload ------------------------------------------
 
-/// Happy path: a PNG uploads auto-approved, with a `bafy`-prefixed CID and a
-/// stored URL, at position 0.
+/// Happy path: a PNG uploads auto-approved, with a `stub:`-prefixed synthetic
+/// CID and a stored URL, at position 0.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn upload_returns_201_approved_with_cid(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), false).await;
@@ -97,8 +97,8 @@ async fn upload_returns_201_approved_with_cid(pool: PgPool) {
     assert_eq!(body["moderationStatus"], "approved");
     assert_eq!(body["position"], 0);
     assert!(
-        body["cid"].as_str().unwrap().starts_with("bafy"),
-        "FakePinner returns a bafy<sha256> CID; got {}",
+        body["cid"].as_str().unwrap().starts_with("stub:bafy"),
+        "FakePinner returns a stub:bafy<sha256> synthetic CID; got {}",
         body["cid"]
     );
     assert!(

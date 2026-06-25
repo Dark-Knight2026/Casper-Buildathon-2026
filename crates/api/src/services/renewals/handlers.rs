@@ -173,7 +173,7 @@ pub async fn list_renewals(
 /// Records the tenant's response to a renewal offer.
 ///
 /// Tenant-only (the tenant on the renewal). Drives the offer
-/// `sent`/`under_review` -> `accepted` | `rejected` | `countered`. A `counter`
+/// `sent` -> `accepted` | `rejected` | `countered`. A `counter`
 /// requires a `counterOffer` body. On `accepted` the offer becomes the landlord's
 /// signal to run `prolong_lease_agreement` on-chain (the indexer reflects the new
 /// end date); the lease itself is not changed here. Responding to an offer that
@@ -216,10 +216,7 @@ pub async fn respond_renewal(
     if current.tenant_id != user.0.sub {
         return Err(ApiError::Forbidden("not_the_renewal_tenant".to_owned()));
     }
-    if !matches!(
-        current.status,
-        RenewalStatus::Sent | RenewalStatus::UnderReview
-    ) {
+    if current.status != RenewalStatus::Sent {
         return Err(ApiError::Conflict(
             "renewal is not awaiting a response".to_owned(),
         ));

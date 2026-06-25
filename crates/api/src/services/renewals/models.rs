@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// Renewal-offer lifecycle status. Stored as `VARCHAR` (CHECK) in the DB
-/// (`snake_case`); the wire form is hyphenated (`under-review`).
+/// (`snake_case`); the wire form is hyphenated (`counter-offer` style).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display,
 )]
@@ -29,8 +29,6 @@ pub enum RenewalStatus {
     Draft,
     /// Sent to the tenant; awaiting a response.
     Sent,
-    /// The tenant is reviewing the offer.
-    UnderReview,
     /// Accepted by the tenant.
     Accepted,
     /// Rejected by the tenant.

@@ -59,8 +59,8 @@ pub struct LeaseDocumentData {
     pub monthly_rent: f64,
     /// Security deposit.
     pub security_deposit: f64,
-    /// Settlement currency, if set.
-    pub currency: Option<String>,
+    /// Settlement currency.
+    pub currency: String,
     /// Agreement clauses (JSON array of `{title, content, category}`).
     pub clauses: Value,
 }
@@ -136,7 +136,7 @@ impl LeaseDocumentRenderer for SimpleLeaseDocumentRenderer {
             end = data.end_date,
             rent = data.monthly_rent,
             deposit = data.security_deposit,
-            currency = data.currency.as_deref().unwrap_or(""),
+            currency = data.currency.as_str(),
         );
 
         if let Some(clauses) = data.clauses.as_array().filter(|list| !list.is_empty()) {

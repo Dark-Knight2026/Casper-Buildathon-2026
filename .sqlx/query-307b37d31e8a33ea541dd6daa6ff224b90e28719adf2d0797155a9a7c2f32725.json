@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE lease_renewals SET\n                status = $2,\n                counter_offer = $3\n            WHERE id = $1 AND status IN ('sent', 'under_review') AND deleted_at IS NULL\n            RETURNING\n                id, lease_id, landlord_id, tenant_id,\n                proposed_rent::float8 AS \"proposed_rent!\",\n                proposed_term_months,\n                proposed_start_date,\n                rent_increase_reason,\n                response_deadline,\n                status,\n                counter_offer AS \"counter_offer?: Json<Value>\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            UPDATE lease_renewals SET\n                status = $2,\n                counter_offer = $3\n            WHERE id = $1 AND status = 'sent' AND deleted_at IS NULL\n            RETURNING\n                id, lease_id, landlord_id, tenant_id,\n                proposed_rent::float8 AS \"proposed_rent!\",\n                proposed_term_months,\n                proposed_start_date,\n                rent_increase_reason,\n                response_deadline,\n                status,\n                counter_offer AS \"counter_offer?: Json<Value>\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -165,5 +165,5 @@
       true
     ]
   },
-  "hash": "02b6695877418921be584dc7212881f1831e4cb418d620727adc7b221ebef5d3"
+  "hash": "307b37d31e8a33ea541dd6daa6ff224b90e28719adf2d0797155a9a7c2f32725"
 }
