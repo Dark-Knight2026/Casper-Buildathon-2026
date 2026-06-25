@@ -670,6 +670,66 @@ pub async fn create_lease_invoices(
     Ok(())
 }
 
+/// Binds invoices the indexer already saw on-chain but could not match because
+/// the `InvoiceCreated` event raced ahead of this `/commit`.
+///
+/// The streamed events for the commit deploy are persisted in `blockchain_events`
+/// keyed by `transaction_hash = commit_tx_hash`, each carrying the contract's
+/// `invoice_id`. They are paired with the freshly seeded `scheduled` invoices
+/// positionally - both in the contract's creation order (security deposit first,
+/// then rent by ascending deadline, which matches ascending on-chain id) - and
+/// each is stamped with its id and moved to `pending`.
+///
+/// Idempotent: only unbound `scheduled` invoices are touched, so a re-run, a
+/// missing event, or a later live `InvoiceCreated` for the same deploy is a
+/// no-op rather than a double-bind.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn reconcile_invoices_from_onchain_events(
+    conn: &mut PgConnection,
+    lease_id: Uuid,
+    commit_tx_hash: &str,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r#"
+            WITH ordered_invoices AS (
+                SELECT id, ROW_NUMBER() OVER (
+                    ORDER BY (kind = 'security_deposit') DESC, deadline ASC
+                ) AS pos
+                FROM invoices
+                WHERE lease_id = $1
+                  AND onchain_invoice_id IS NULL
+                  AND status = 'scheduled'
+            ),
+            ordered_events AS (
+                SELECT
+                    (event_data->>'invoice_id')::NUMERIC AS onchain_invoice_id,
+                    ROW_NUMBER() OVER (
+                        ORDER BY (event_data->>'invoice_id')::NUMERIC ASC
+                    ) AS pos
+                FROM blockchain_events
+                WHERE event_type = 'InvoiceCreated'
+                  AND transaction_hash = $2
+            )
+            UPDATE invoices i
+            SET onchain_invoice_id = oe.onchain_invoice_id,
+                status = 'pending'
+            FROM ordered_invoices oi
+            JOIN ordered_events oe ON oe.pos = oi.pos
+            WHERE i.id = oi.id
+        "#,
+        lease_id,
+        commit_tx_hash,
+    )
+    .execute(conn)
+    .await?;
+
+    Ok(())
+}
+
 /// Records a freshly rendered lease document on the lease: the stored
 /// (generated) URL, its SHA-256 hash, and the IPFS CID. Allowed at any live
 /// status (the document is a read-time artifact, not a lifecycle transition).

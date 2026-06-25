@@ -586,6 +586,10 @@ pub async fn commit_lease(
     )
     .await?;
     db::create_lease_invoices(tx.as_mut(), &row, validity_secs).await?;
+    // Bind any `InvoiceCreated` events the indexer stored before this commit
+    // seeded the mirror (the stream races ahead of /commit).
+    db::reconcile_invoices_from_onchain_events(tx.as_mut(), row.id, &payload.commit_tx_hash)
+        .await?;
 
     tx.commit().await?;
     Ok(Json(Lease::from(row)))
