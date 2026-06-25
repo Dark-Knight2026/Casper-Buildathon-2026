@@ -59,10 +59,12 @@ pub type SharedContentPinner = Arc<dyn ContentPinner>;
 
 /// Hackathon implementation that returns a deterministic synthetic CID.
 ///
-/// The CID is `bafy` + the hex SHA-256 of the bytes: content-addressed like a
-/// real CID (same bytes -> same CID) but not a real multihash-encoded one. The
-/// bytes are not stored anywhere - this MUST NOT be relied on to actually
-/// retrieve content. Swap for a real IPFS node/provider before production.
+/// The CID is `stub:bafy` + the hex SHA-256 of the bytes: content-addressed like
+/// a real CID (same bytes -> same CID) but not a real multihash-encoded one. The
+/// `stub:` prefix marks it as synthetic so clients can never mistake it for a
+/// pinned CID; the bytes are not stored anywhere and this MUST NOT be relied on
+/// to actually retrieve content. Swap for a real IPFS node/provider before
+/// production.
 #[derive(Debug, Clone, Default)]
 pub struct FakePinner;
 
@@ -80,7 +82,7 @@ impl ContentPinner for FakePinner {
     #[inline]
     async fn pin(&self, bytes: &[u8]) -> PinResult<String> {
         let digest = Sha256::digest(bytes);
-        let cid = format!("bafy{}", hex::encode(digest));
+        let cid = format!("stub:bafy{}", hex::encode(digest));
         tracing::info!(
             event = "content_pin_stub",
             cid = %cid,

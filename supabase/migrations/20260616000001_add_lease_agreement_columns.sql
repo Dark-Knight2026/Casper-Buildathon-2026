@@ -15,7 +15,7 @@
 -- Off-chain terms
 ALTER TABLE IF EXISTS leases
   ADD COLUMN IF NOT EXISTS clauses JSONB NOT NULL DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS currency TEXT,
+  ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'cUSD',
   ADD COLUMN IF NOT EXISTS property_manager_id UUID REFERENCES users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS property_manager_bps INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS equity_property_id UUID REFERENCES properties(id) ON DELETE SET NULL;
@@ -45,7 +45,7 @@ ALTER TABLE IF EXISTS leases
 ALTER TABLE IF EXISTS leases
   DROP CONSTRAINT IF EXISTS lease_currency_allowed;
 ALTER TABLE IF EXISTS leases
-  ADD CONSTRAINT lease_currency_allowed CHECK (currency IS NULL OR currency IN ('cUSD', 'CSPR', 'USD', 'USDT', 'USDC'));
+  ADD CONSTRAINT lease_currency_allowed CHECK (currency IN ('cUSD', 'CSPR', 'USD', 'USDT', 'USDC'));
 
 -- Manager rent split: bps in [0, 10000]; must be 0 when there is no manager.
 ALTER TABLE IF EXISTS leases

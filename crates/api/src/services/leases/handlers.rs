@@ -353,7 +353,7 @@ fn lease_consent_message(lease: &LeaseRow) -> String {
         tenant,
         lease.monthly_rent,
         lease.security_deposit,
-        lease.currency.as_deref().unwrap_or(""),
+        lease.currency,
         lease.start_date,
         lease.end_date,
     )

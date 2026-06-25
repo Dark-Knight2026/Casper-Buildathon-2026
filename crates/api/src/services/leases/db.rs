@@ -53,7 +53,7 @@ pub struct LeaseEdit {
     /// Security deposit (off-chain amount).
     pub security_deposit: f64,
     /// Settlement currency.
-    pub currency: Option<String>,
+    pub currency: String,
     /// Agreement clauses (JSON array).
     pub clauses: Value,
 }
@@ -83,7 +83,7 @@ pub struct LeaseRow {
     /// Security deposit (off-chain amount).
     pub security_deposit: f64,
     /// Settlement currency.
-    pub currency: Option<String>,
+    pub currency: String,
     /// Agreement clauses (JSONB).
     pub clauses: Json<Value>,
     /// Property manager receiving a rent share, if any.
