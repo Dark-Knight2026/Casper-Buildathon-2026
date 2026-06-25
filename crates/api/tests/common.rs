@@ -981,6 +981,26 @@ pub async fn authed_request<T: DeserializeOwned>(
     (status, body_result.ok())
 }
 
+/// Asserts an error response: both the HTTP status and the JSON `error` field
+/// (the machine-readable code/message from `ErrorResponse`). Pinning the `error`
+/// field catches regressions a status-only check misses - a renamed error code,
+/// or the right status returned from the wrong branch.
+#[inline]
+pub fn assert_api_error(
+    status: StatusCode,
+    body: Option<&Value>,
+    expected_status: StatusCode,
+    expected_error: &str,
+) {
+    assert_eq!(status, expected_status, "unexpected status code");
+    let body = body.expect("error response must carry a JSON body");
+    assert_eq!(
+        body["error"].as_str(),
+        Some(expected_error),
+        "unexpected error field; body = {body}"
+    );
+}
+
 /// Signs a message using the Casper Wallet "Casper Message:\n" prefix,
 /// matching the byte sequence the browser extension produces. Every
 /// integration test that needs a wallet-login round-trip flows the

@@ -534,7 +534,26 @@ async fn pending_lease(env: &TestEnv, pool: &PgPool) -> PendingLease {
     }
 }
 
-/// Posts a `/sign` request and returns the status.
+/// Posts a `/sign` request and returns the status with the JSON body.
+async fn post_sign_body(
+    env: &TestEnv,
+    token: &str,
+    lease_id: &str,
+    role: &str,
+    signature: &str,
+    signer_wallet: &str,
+) -> (StatusCode, Option<Value>) {
+    common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{lease_id}/sign"),
+        token,
+        &json!({ "role": role, "signature": signature, "signerWallet": signer_wallet }),
+    )
+    .await
+}
+
+/// Posts a `/sign` request and returns just the status.
 async fn post_sign(
     env: &TestEnv,
     token: &str,
@@ -543,15 +562,9 @@ async fn post_sign(
     signature: &str,
     signer_wallet: &str,
 ) -> StatusCode {
-    let (status, _) = common::authed_request::<Value>(
-        &env.server,
-        &Method::POST,
-        &format!("/api/v1/leases/{lease_id}/sign"),
-        token,
-        &json!({ "role": role, "signature": signature, "signerWallet": signer_wallet }),
-    )
-    .await;
-    status
+    post_sign_body(env, token, lease_id, role, signature, signer_wallet)
+        .await
+        .0
 }
 
 /// Signs `role`'s consent correctly with `session`'s wallet over `message`.
@@ -920,7 +933,7 @@ async fn sign_rejects_invalid_signature(pool: PgPool) {
         &p.landlord.secret_key,
         &p.landlord.public_key,
     );
-    let status = post_sign(
+    let (status, body) = post_sign_body(
         &env,
         &p.ltoken,
         &p.id,
@@ -929,7 +942,12 @@ async fn sign_rejects_invalid_signature(pool: PgPool) {
         &p.landlord.public_key.to_hex(),
     )
     .await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::UNAUTHORIZED,
+        "signature verification failed",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -941,7 +959,7 @@ async fn sign_rejects_wrong_wallet(pool: PgPool) {
     let (_, other_pk) = common::generate_random_ed25519();
     let signature =
         common::sign_with_prefix(&p.message, &p.landlord.secret_key, &p.landlord.public_key);
-    let status = post_sign(
+    let (status, body) = post_sign_body(
         &env,
         &p.ltoken,
         &p.id,
@@ -950,7 +968,12 @@ async fn sign_rejects_wrong_wallet(pool: PgPool) {
         &other_pk.to_hex(),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "signer_wallet_mismatch",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -962,7 +985,7 @@ async fn sign_rejects_non_party(pool: PgPool) {
 
     let signature =
         common::sign_with_prefix(&p.message, &outsider.secret_key, &outsider.public_key);
-    let status = post_sign(
+    let (status, body) = post_sign_body(
         &env,
         &otoken,
         &p.id,
@@ -971,7 +994,12 @@ async fn sign_rejects_non_party(pool: PgPool) {
         &outsider.public_key.to_hex(),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "not_the_signing_party",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -985,8 +1013,22 @@ async fn sign_rejects_when_not_pending(pool: PgPool) {
     let id = lease["id"].as_str().unwrap();
 
     let message = consent_message(&lease);
-    let status = sign_consent(&env, &ltoken, id, "landlord", &landlord, &message).await;
-    assert_eq!(status, StatusCode::CONFLICT);
+    let signature = common::sign_with_prefix(&message, &landlord.secret_key, &landlord.public_key);
+    let (status, body) = post_sign_body(
+        &env,
+        &ltoken,
+        id,
+        "landlord",
+        &signature,
+        &landlord.public_key.to_hex(),
+    )
+    .await;
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::CONFLICT,
+        "lease is not awaiting signatures",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -1008,8 +1050,13 @@ async fn sign_rejects_without_active_wallet(pool: PgPool) {
     .await;
 
     // The signature/wallet values are irrelevant: the caller has no active wallet.
-    let status = post_sign(&env, &ltoken, id, "landlord", "deadbeef", "01abc").await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, body) = post_sign_body(&env, &ltoken, id, "landlord", "deadbeef", "01abc").await;
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::BAD_REQUEST,
+        "no active wallet linked",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -1061,7 +1108,7 @@ async fn commit_rejects_non_owner(pool: PgPool) {
     // A different landlord (has the role, but does not own the lease).
     let (_, other_landlord) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
 
-    let (status, _) = common::authed_request::<Value>(
+    let (status, body) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         &format!("/api/v1/leases/{}/commit", p.id),
@@ -1069,7 +1116,12 @@ async fn commit_rejects_non_owner(pool: PgPool) {
         &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "x" }),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "not_lease_landlord",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -1235,7 +1287,7 @@ async fn second_lease_in_year_gets_a_sequential_number(pool: PgPool) {
     assert_ne!(first, second, "the second lease must get a fresh number");
 }
 
-// Regression tests for System of Review #1 (commit/sign/document hardening) ----
+// -----------------------------------------------------------------------------
 
 /// Drives a fresh lease to `pending_signatures` with BOTH parties' consent
 /// recorded, so `/commit` is the only remaining step.
@@ -1313,10 +1365,25 @@ async fn sign_rejects_role_mismatch_with_jwt(pool: PgPool) {
     // The tenant party, but carrying a Landlord-role token.
     let landlord_jwt =
         common::create_test_jwt(p.tenant.user_id, UserRole::Landlord, &env.jwt_secret);
+    let signature =
+        common::sign_with_prefix(&p.message, &p.tenant.secret_key, &p.tenant.public_key);
 
-    let status = sign_consent(&env, &landlord_jwt, &p.id, "tenant", &p.tenant, &p.message).await;
+    let (status, body) = post_sign_body(
+        &env,
+        &landlord_jwt,
+        &p.id,
+        "tenant",
+        &signature,
+        &p.tenant.public_key.to_hex(),
+    )
+    .await;
 
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    common::assert_api_error(
+        status,
+        body.as_ref(),
+        StatusCode::FORBIDDEN,
+        "signer_role_mismatch",
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -1362,4 +1429,151 @@ async fn document_hash_stable_after_activation(pool: PgPool) {
         body.unwrap()["documentHash"].as_str().unwrap(),
         committed_hash
     );
+}
+
+// -----------------------------------------------------------------------------
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_idempotent_after_indexer_activation(pool: PgPool) {
+    // Coverage (#20): the indexer's LeaseAgreementCreated handler can flip the
+    // lease to `active` before the landlord's /commit lands. /commit must then be
+    // a no-op success, not a 409/500.
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = fully_signed_lease(&env, &pool).await;
+
+    // The indexer activated the lease out-of-band, before /commit.
+    sqlx::query("UPDATE leases SET status = 'active' WHERE id = $1")
+        .bind(Uuid::parse_str(&p.id).unwrap())
+        .execute(&pool)
+        .await
+        .expect("simulate indexer activation");
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", p.id),
+        &p.ltoken,
+        &json!({ "onchainLeaseId": "42", "nftTokenId": "1", "commitTxHash": "deploy-test-1" }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.unwrap()["status"], "active");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn sign_records_consent_signature(pool: PgPool) {
+    // Coverage (#21): each /sign must persist the party's consent entry -
+    // signature, signerWallet, signedAt - so a regression that nulls them out is
+    // caught (the lifecycle test never asserted consentSignatures).
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+
+    let wallet = p.landlord.public_key.to_hex();
+    let signature =
+        common::sign_with_prefix(&p.message, &p.landlord.secret_key, &p.landlord.public_key);
+    let (status, body) =
+        post_sign_body(&env, &p.ltoken, &p.id, "landlord", &signature, &wallet).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let consent = body.unwrap();
+    let landlord = &consent["consentSignatures"]["landlord"];
+    assert_eq!(landlord["signature"].as_str(), Some(signature.as_str()));
+    assert_eq!(landlord["signerWallet"].as_str(), Some(wallet.as_str()));
+    assert!(landlord["signedAt"].is_string());
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_onchain_id_boundary_values(pool: PgPool) {
+    // Coverage (#23): an empty id is rejected; the full 78-digit U256 max is
+    // accepted and round-trips back as the same decimal string.
+    let env = common::setup_test_server(pool.clone(), false).await;
+
+    let empty = fully_signed_lease(&env, &pool).await;
+    let (s_empty, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", empty.id),
+        &empty.ltoken,
+        &json!({ "onchainLeaseId": "", "nftTokenId": "1", "commitTxHash": "deploy-test-1" }),
+    )
+    .await;
+    assert_eq!(s_empty, StatusCode::BAD_REQUEST);
+
+    let max = fully_signed_lease(&env, &pool).await;
+    let max_u256 = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+    let (s_max, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", max.id),
+        &max.ltoken,
+        &json!({ "onchainLeaseId": max_u256, "nftTokenId": "1", "commitTxHash": "deploy-test-2" }),
+    )
+    .await;
+    assert_eq!(s_max, StatusCode::OK);
+    let committed = body.unwrap();
+    assert_eq!(committed["status"], "active");
+    assert_eq!(committed["onchainLeaseId"].as_str(), Some(max_u256));
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_leases_combined_scope_and_pagination(pool: PgPool) {
+    // Coverage (#24): both scope params together and neither param both resolve to
+    // "both" (landlord OR tenant); limit/offset page correctly with a stable total.
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, ltoken) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let tenant_id = common::seed_user(&pool, UserRole::Tenant).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    for _ in 0..3 {
+        create_draft(&env, &ltoken, property_id, tenant_id).await;
+    }
+
+    // Both params present -> "both" scope -> all 3 (caller is landlord on each).
+    let (s_both, both) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases?landlordId=me&tenantId=me",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_both, StatusCode::OK);
+    assert_eq!(both.unwrap()["data"].as_array().unwrap().len(), 3);
+
+    // Neither param -> also "both" -> all 3.
+    let (s_none, none) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(s_none, StatusCode::OK);
+    assert_eq!(none.unwrap()["data"].as_array().unwrap().len(), 3);
+
+    // First page of two, then the remaining one; total is stable at 3.
+    let (_, page1) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases?page=1&page_size=2",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    let page1 = page1.unwrap();
+    assert_eq!(page1["data"].as_array().unwrap().len(), 2);
+    assert_eq!(page1["itemCount"].as_i64(), Some(3));
+
+    let (_, page2) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/leases?page=2&page_size=2",
+        &ltoken,
+        &Value::Null,
+    )
+    .await;
+    let page2 = page2.unwrap();
+    assert_eq!(page2["data"].as_array().unwrap().len(), 1);
+    assert_eq!(page2["itemCount"].as_i64(), Some(3));
 }
