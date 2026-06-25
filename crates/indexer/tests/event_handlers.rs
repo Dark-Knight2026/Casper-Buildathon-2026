@@ -14,6 +14,10 @@
 //!   stored as `"UNKNOWN"` in `ico_purchases` and `blockchain_transactions`.
 //! - **`IcoScheduleAdded`** - writes `ico_schedules` row with schedule ID,
 //!   price, and sale amount; UPSERT updates existing rows.
+//! - **`LeaseAgreementCreated`** - flips the lease matched by
+//!   `commit_tx_hash = deploy_hash` to `active` and stamps `onchain_lease_id`.
+//! - **`InvoiceCreated`** - binds the contract invoice id to the lease's next
+//!   unbound `scheduled` invoice (deposit first, then rent by deadline).
 
 #![cfg(feature = "integration")]
 
@@ -22,7 +26,7 @@ mod common;
 use std::collections::HashSet;
 
 use serde_json::json;
-use sqlx::PgPool;
+use sqlx::{FromRow, PgPool};
 
 use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
@@ -33,7 +37,7 @@ use indexer::{
 
 /// `transaction_type` / `from_address` / `amount` of a `blockchain_transactions`
 /// row, read back via a runtime `query_as` (no compile-time macro in tests).
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct TxTypeFromAmountRow {
     transaction_type: String,
     from_address: String,
@@ -41,7 +45,7 @@ struct TxTypeFromAmountRow {
 }
 
 /// `transaction_type` / `from_address` of a `blockchain_transactions` audit row.
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct TxTypeFromRow {
     transaction_type: String,
     from_address: String,
@@ -49,7 +53,7 @@ struct TxTypeFromRow {
 
 /// `transaction_type` / `from_address` / `amount` / `currency` of a
 /// `blockchain_transactions` row.
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct TxTypeFromAmountCurrencyRow {
     transaction_type: String,
     from_address: String,
@@ -58,7 +62,7 @@ struct TxTypeFromAmountCurrencyRow {
 }
 
 /// `buyer_address` / `amount` / `currency` of an `ico_purchases` row.
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct IcoPurchaseRow {
     buyer_address: String,
     amount: String,
@@ -66,7 +70,7 @@ struct IcoPurchaseRow {
 }
 
 /// Full `ico_schedules` row read back to assert schedule, price, and audit fields.
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct IcoScheduleRow {
     schedule_id: String,
     start_timestamp: i64,
@@ -79,11 +83,29 @@ struct IcoScheduleRow {
 
 /// `price` / `sale_amount` / `block_height` of an `ico_schedules` row, used to
 /// assert UPSERT and stale-event guard behaviour.
-#[derive(sqlx::FromRow)]
+#[derive(FromRow)]
 struct IcoSchedulePriceRow {
     price: String,
     sale_amount: String,
     block_height: i64,
+}
+
+/// `status` and (`NUMERIC`-as-text) `onchain_lease_id` of a `leases` row, read
+/// back to assert lease activation. `onchain_lease_id` is `NULL` until bound.
+#[derive(FromRow)]
+struct LeaseStateRow {
+    status: String,
+    onchain_lease_id: Option<String>,
+}
+
+/// `kind` / `status` / (`NUMERIC`-as-text) `onchain_invoice_id` / `deadline` of
+/// an `invoices` row, read back to assert positional invoice binding.
+#[derive(FromRow)]
+struct InvoiceReconRow {
+    kind: String,
+    status: String,
+    onchain_invoice_id: Option<String>,
+    deadline: String,
 }
 
 // Transfer handler — blockchain_transactions
@@ -920,7 +942,7 @@ async fn upsert_contract_registry_preserves_foreign_contracts(pool: PgPool) {
         .unwrap();
 
     // Foreign contract must still be active.
-    let foreign_active: bool = sqlx::query_scalar(
+    let foreign_active = sqlx::query_scalar::<_, bool>(
         "SELECT is_active FROM contract_registry WHERE contract_type = 'staking'",
     )
     .fetch_one(&pool)
@@ -933,11 +955,12 @@ async fn upsert_contract_registry_preserves_foreign_contracts(pool: PgPool) {
     );
 
     // ICO contract must be active with the correct hash.
-    let ico_active: bool =
-        sqlx::query_scalar("SELECT is_active FROM contract_registry WHERE contract_type = 'ico'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let ico_active = sqlx::query_scalar::<_, bool>(
+        "SELECT is_active FROM contract_registry WHERE contract_type = 'ico'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert!(ico_active, "managed contract must be active after upsert");
 }
 
@@ -981,7 +1004,7 @@ async fn null_and_zero_transform_idx_are_distinct_events(pool: PgPool) {
     .await
     .expect("transform_idx=0 must not collide with transform_idx=NULL");
 
-    let count: i64 = sqlx::query_scalar(
+    let count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM blockchain_events
           WHERE transaction_hash = $1 AND event_type = 'Transfer' AND contract_address = $2",
     )
@@ -994,5 +1017,196 @@ async fn null_and_zero_transform_idx_are_distinct_events(pool: PgPool) {
     assert_eq!(
         count, 2,
         "NULL and 0 transform_idx must produce two distinct rows"
+    );
+}
+
+// Escrow / Lease handlers — on-chain reconciliation (commit_tx_hash matching)
+
+/// Seed the off-chain mirror that `/commit` writes: a `pending_signatures` lease
+/// wired to `commit_tx_hash`, plus its three `scheduled` invoices (one security
+/// deposit, then two rent months by ascending deadline). Gives the bind/activate
+/// handlers a real `users -> property -> lease -> invoices` graph to match.
+///
+/// Every UUID and date is generated in SQL: the indexer test crate depends on
+/// neither `uuid` nor `chrono`, so nothing crosses the Rust boundary but the
+/// `commit_tx_hash`.
+async fn seed_committed_lease_mirror(pool: &PgPool, commit_tx_hash: &str) {
+    sqlx::query(
+        r"
+            WITH landlord AS (
+                INSERT INTO users (email, first_name, last_name, role)
+                VALUES ('landlord-' || gen_random_uuid()::text || '@test.example', 'Test', 'Landlord', 'landlord')
+                RETURNING id
+            ),
+            tenant AS (
+                INSERT INTO users (email, first_name, last_name, role)
+                VALUES ('tenant-' || gen_random_uuid()::text || '@test.example', 'Test', 'Tenant', 'tenant')
+                RETURNING id
+            ),
+            property AS (
+                INSERT INTO properties (landlord_id, property_type, address_line1, city, state, zip_code)
+                SELECT landlord.id, 'single_family', '1 Test St', 'Denver', 'CO', '80202'
+                FROM landlord
+                RETURNING id, landlord_id
+            ),
+            lease AS (
+                INSERT INTO leases (landlord_id, property_id, tenant_ids, primary_tenant_id, type, status, start_date, end_date, monthly_rent, security_deposit, created_by, commit_tx_hash)
+                SELECT p.landlord_id, p.id, ARRAY[t.id], t.id, 'fixed_term', 'pending_signatures', DATE '2026-06-25', DATE '2027-06-20', 10.00, 10.00, p.landlord_id, $1
+                FROM property p, tenant t
+                RETURNING id, landlord_id, property_id, primary_tenant_id
+            )
+            INSERT INTO invoices (lease_id, kind, tenant_id, landlord_id, property_id, amount_due, deadline)
+            SELECT lease.id, mirror.kind, lease.primary_tenant_id, lease.landlord_id, lease.property_id, 10.00, mirror.deadline
+            FROM lease,
+                 (VALUES ('security_deposit', DATE '2026-07-25'),
+                         ('rent',             DATE '2026-07-25'),
+                         ('rent',             DATE '2026-08-24')) AS mirror(kind, deadline)
+        ",
+    )
+    .bind(commit_tx_hash)
+    .execute(pool)
+    .await
+    .expect("seed committed lease mirror");
+}
+
+/// `LeaseAgreementCreated` whose deploy hash equals the lease's `commit_tx_hash`
+/// flips that lease to `active` and stamps `onchain_lease_id`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn lease_agreement_created_activates_matching_pending_lease(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let commit_tx_hash = "a".repeat(64);
+    seed_committed_lease_mirror(&pool, &commit_tx_hash).await;
+
+    let mut tx = pool.begin().await.unwrap();
+    let activated = events::db::activate_lease_by_commit_tx_hash(&mut tx, &commit_tx_hash, "4")
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(activated, "matching commit_tx_hash must activate the lease");
+
+    let lease = sqlx::query_as::<_, LeaseStateRow>(
+        r"
+            SELECT status, onchain_lease_id::text AS onchain_lease_id
+            FROM   leases
+            WHERE  commit_tx_hash = $1
+        ",
+    )
+    .bind(&commit_tx_hash)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(lease.status, "active");
+    assert_eq!(lease.onchain_lease_id.as_deref(), Some("4"));
+}
+
+/// A deploy hash that matches no lease activates nothing: the seeded lease stays
+/// `pending_signatures` with a `NULL` `onchain_lease_id`, and the handler reports
+/// no match (the skip path behind the "no matching pending lease" warning).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn lease_agreement_created_skips_on_hash_mismatch(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let real_hash = "d".repeat(64);
+    seed_committed_lease_mirror(&pool, &real_hash).await;
+
+    let other_hash = "e".repeat(64);
+    let mut tx = pool.begin().await.unwrap();
+    let activated = events::db::activate_lease_by_commit_tx_hash(&mut tx, &other_hash, "4")
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(!activated, "non-matching hash must not activate any lease");
+
+    let lease = sqlx::query_as::<_, LeaseStateRow>(
+        r"
+            SELECT status, onchain_lease_id::text AS onchain_lease_id
+            FROM   leases
+            WHERE  commit_tx_hash = $1
+        ",
+    )
+    .bind(&real_hash)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(lease.status, "pending_signatures");
+    assert_eq!(lease.onchain_lease_id, None);
+}
+
+/// On-chain `InvoiceCreated` events bind to the lease's scheduled invoices
+/// positionally: the security deposit first, then rent by ascending deadline.
+/// Two events bind two invoices; the later rent month stays unbound.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn invoice_created_binds_scheduled_invoices_deposit_first(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let commit_tx_hash = "b".repeat(64);
+    seed_committed_lease_mirror(&pool, &commit_tx_hash).await;
+
+    let mut tx = pool.begin().await.unwrap();
+    let first =
+        events::db::bind_invoice_onchain_id_by_commit_tx_hash(&mut tx, &commit_tx_hash, "100")
+            .await
+            .unwrap();
+    let second =
+        events::db::bind_invoice_onchain_id_by_commit_tx_hash(&mut tx, &commit_tx_hash, "101")
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(first && second, "both events must bind an invoice");
+
+    let invoices = sqlx::query_as::<_, InvoiceReconRow>(
+        r"
+            SELECT i.kind, i.status, i.onchain_invoice_id::text AS onchain_invoice_id, i.deadline::text AS deadline
+            FROM invoices i
+            JOIN leases l ON l.id = i.lease_id
+            WHERE l.commit_tx_hash = $1
+            ORDER BY (i.kind = 'security_deposit') DESC, i.deadline ASC
+        ",
+    )
+    .bind(&commit_tx_hash)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    // First event bound the deposit; it moved to `pending` with id 100.
+    assert_eq!(invoices[0].kind, "security_deposit");
+    assert_eq!(invoices[0].onchain_invoice_id.as_deref(), Some("100"));
+    assert_eq!(invoices[0].status, "pending");
+
+    // Second event bound the earliest-deadline rent month with id 101.
+    assert_eq!(invoices[1].kind, "rent");
+    assert_eq!(invoices[1].deadline, "2026-07-25");
+    assert_eq!(invoices[1].onchain_invoice_id.as_deref(), Some("101"));
+    assert_eq!(invoices[1].status, "pending");
+
+    // Only two events arrived, so the later rent month is still unbound.
+    assert_eq!(invoices[2].onchain_invoice_id, None);
+    assert_eq!(invoices[2].status, "scheduled");
+}
+
+/// Reconciliation is order-tolerant downward: an `InvoiceCreated` that arrives
+/// before `/commit` seeded any mirror binds nothing and is skipped cleanly,
+/// never errors (the skip path behind the "no matching unbound invoice" warning).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn invoice_created_skips_when_mirror_not_seeded(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let commit_tx_hash = "c".repeat(64);
+    let mut tx = pool.begin().await.unwrap();
+    let bound =
+        events::db::bind_invoice_onchain_id_by_commit_tx_hash(&mut tx, &commit_tx_hash, "1")
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(
+        !bound,
+        "no seeded mirror -> nothing to bind, must skip cleanly"
     );
 }

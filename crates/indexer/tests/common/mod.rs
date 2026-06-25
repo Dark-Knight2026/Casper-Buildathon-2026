@@ -12,7 +12,7 @@
 use core::fmt::{Display, Formatter, Result as FmtResult};
 
 use indexer::config::{Casper, ContractRegistry, IndexerConfig};
-use sqlx::PgPool;
+use sqlx::{AssertSqlSafe, PgPool};
 
 pub mod payloads;
 
@@ -67,7 +67,9 @@ impl Display for FakeAddress {
     }
 }
 
-/// Disable Row Level Security for all indexer-owned tables.
+/// Disable Row Level Security for indexer-owned tables plus the app tables the
+/// on-chain reconciliation handlers write to (`leases`, `invoices`) and their
+/// FK dependencies (`users`, `properties`).
 ///
 /// Mirrors the helper in `backfill_ico.rs` — needed because Supabase migrations
 /// enable RLS and `sqlx::test` connections have no auth context.
@@ -83,12 +85,16 @@ pub async fn disable_rls(pool: &PgPool) {
         "staking_events",
         "staking_reward_deposits",
         "staking_reward_state",
+        "users",
+        "properties",
+        "leases",
+        "invoices",
     ] {
         // `sqlx 0.9` guards `query()` behind `SqlSafeStr`; identifiers cannot
         // be bound, but the table names above are a hardcoded literal array (no
         // caller input reaches this string), so `AssertSqlSafe` is the
         // documented opt-out.
-        sqlx::query(sqlx::AssertSqlSafe(format!(
+        sqlx::query(AssertSqlSafe(format!(
             r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"
         )))
         .execute(pool)
