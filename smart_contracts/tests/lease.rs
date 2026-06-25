@@ -630,7 +630,8 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
             property_manager: None,
             property_manager_bps: 0,
             deadline: test_data.env.block_time() + params.invoice_validity_duration,
-            is_paid: false
+            is_paid: false,
+            lease_id: U256::zero(),
         },
         "Invalid security deposit invoice"
     );
@@ -654,7 +655,8 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
                 deadline: test_data.env.block_time()
                     + (ONE_MONTH_IN_MILLISECONDS * (i - 1) as u64)
                     + params.invoice_validity_duration,
-                is_paid: false
+                is_paid: false,
+                lease_id: U256::zero(),
             },
             "Invalid lease payment invoice - {}",
             i
@@ -1351,7 +1353,8 @@ fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_in
                 deadline: test_data.env.block_time()
                     + (ONE_MONTH_IN_MILLISECONDS * n as u64)
                     + params.invoice_validity_duration,
-                is_paid: false
+                is_paid: false,
+                lease_id: U256::zero(),
             },
             "Invalid prolonged lease payment invoice - {}",
             i

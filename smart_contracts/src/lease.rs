@@ -387,11 +387,13 @@ impl Lease {
         }
 
         let block_timestamp = self.env().get_block_time();
+        let lease_agreement_id = self.get_lease_agreements_count();
         let mut invoices_ids = vec![self.escrow.create_security_deposit_invoice(
             params.tenant,
             landlord,
             params.security_deposit,
             block_timestamp + params.invoice_validity_duration,
+            lease_agreement_id,
         )];
 
         for i in 0..(lease_duration / ONE_MONTH_IN_MILLISECONDS) {
@@ -404,10 +406,9 @@ impl Lease {
                 deadline: block_timestamp
                     + (ONE_MONTH_IN_MILLISECONDS * i)
                     + params.invoice_validity_duration,
+                lease_id: lease_agreement_id,
             }));
         }
-
-        let lease_agreement_id = self.get_lease_agreements_count();
 
         // Mint a lease NFT to the tenant and freeze it.
         // Invariant: The NFT remains frozen for the entire lease lifecycle to prevent
@@ -581,6 +582,7 @@ impl Lease {
                     deadline: block_timestamp
                         + (ONE_MONTH_IN_MILLISECONDS * i)
                         + invoice_validity_duration,
+                    lease_id: *lease_agreement_id,
                 }));
         }
 

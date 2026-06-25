@@ -67,6 +67,8 @@ pub mod types {
         pub deadline: u64,
         /// Whether the invoice has been fully paid.
         pub is_paid: bool,
+        /// On-chain lease agreement ID that created this invoice.
+        pub lease_id: U256,
     }
 
     #[odra::odra_type]
@@ -84,6 +86,8 @@ pub mod types {
         pub property_manager_bps: u32,
         /// Timestamp after which the invoice can longer be paid.
         pub deadline: u64,
+        /// On-chain lease agreement ID that owns this invoice.
+        pub lease_id: U256,
     }
 
     #[odra::odra_type]
@@ -124,6 +128,7 @@ pub mod events {
     pub struct InvoiceCreated {
         pub invoice_id: U256,
         pub created_at: u64,
+        pub lease_id: U256,
     }
 
     #[odra::event]
@@ -249,9 +254,7 @@ impl Escrow {
         self.set_min_deadline(min_deadline);
         self.metadata.init(
             Some("BIG LeaseFi Escrow".into()),
-            Some(
-                "Conditional fund locking for rent, invoices, and security deposits.".into(),
-            ),
+            Some("Conditional fund locking for rent, invoices, and security deposits.".into()),
             None,
             None,
         );
@@ -368,18 +371,22 @@ impl Escrow {
             self.env().revert(Error::ZeroAmount);
         }
 
-        self.create_invoice(Invoice {
-            kind: InvoiceKind::Lease,
-            buyer: params.tenant,
-            seller: params.landlord,
-            amount_due: CurrencyAmount::new(*rent.currency(), rent_amount),
-            rent_amount,
-            rent_paid: U256::zero(),
-            property_manager: params.property_manager,
-            property_manager_bps: params.property_manager_bps,
-            deadline: params.deadline,
-            is_paid: false,
-        })
+        self.create_invoice(
+            Invoice {
+                kind: InvoiceKind::Lease,
+                buyer: params.tenant,
+                seller: params.landlord,
+                amount_due: CurrencyAmount::new(*rent.currency(), rent_amount),
+                rent_amount,
+                rent_paid: U256::zero(),
+                property_manager: params.property_manager,
+                property_manager_bps: params.property_manager_bps,
+                deadline: params.deadline,
+                is_paid: false,
+                lease_id: params.lease_id,
+            },
+            params.lease_id,
+        )
     }
 
     /// Allows the Lease contract to create a USDC security deposit invoice.
@@ -392,22 +399,27 @@ impl Escrow {
         landlord: U256,
         mut amount_due: CurrencyAmount,
         deadline: u64,
+        lease_id: U256,
     ) -> U256 {
         self.assert_lease();
         self.assert_security_deposit_currency(&mut amount_due);
 
-        self.create_invoice(Invoice {
-            kind: InvoiceKind::SecurityDeposit,
-            buyer: tenant,
-            seller: landlord,
-            amount_due,
-            rent_amount: U256::zero(),
-            rent_paid: U256::zero(),
-            property_manager: None,
-            property_manager_bps: 0,
-            deadline,
-            is_paid: false,
-        })
+        self.create_invoice(
+            Invoice {
+                kind: InvoiceKind::SecurityDeposit,
+                buyer: tenant,
+                seller: landlord,
+                amount_due,
+                rent_amount: U256::zero(),
+                rent_paid: U256::zero(),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline,
+                is_paid: false,
+                lease_id,
+            },
+            lease_id,
+        )
     }
 
     /// Pays an invoice created earlier.
@@ -581,7 +593,7 @@ impl Escrow {
     // Invoices
     // =============================================================================
 
-    fn create_invoice(&mut self, mut invoice: Invoice) -> U256 {
+    fn create_invoice(&mut self, mut invoice: Invoice, lease_id: U256) -> U256 {
         if invoice.buyer == invoice.seller {
             self.env().revert(Error::EqualBuyerAndSeller)
         }
@@ -602,6 +614,7 @@ impl Escrow {
         self.env().emit_event(InvoiceCreated {
             invoice_id,
             created_at: self.env().get_block_time(),
+            lease_id,
         });
 
         invoice_id
