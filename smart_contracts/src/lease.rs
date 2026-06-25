@@ -2,7 +2,9 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::access::Ownable;
 
 use crate::{
-    constants::{ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS},
+    constants::{
+        LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS,
+    },
     escrow::{types::CreateLeaseInvoiceParams, EscrowContractRef},
     lease::{
         errors::Error,
@@ -194,10 +196,6 @@ pub mod errors {
   LeaseNftRecovered,
   EquityEligibilityGranted,
   EquityEligibilityRevoked,
-  RolesSet,
-  EscrowSet,
-  NftSet,
-  PropertyRegistrySet,
 ])]
 pub struct Lease {
     /// Ownership control for contract configuration.
@@ -233,10 +231,6 @@ impl Lease {
         property_registry: Address,
         user_registry: Address,
     ) {
-        if self.initialized.get_or_default() {
-            self.env().revert(Error::AlreadyInitialized);
-        }
-
         self.ownable.init(owner);
         self.escrow.set(escrow);
         self.nft.set(nft);
@@ -254,8 +248,6 @@ impl Lease {
     pub fn set_escrow(&mut self, escrow: Address) {
         self.assert_owner();
         self.escrow.set(escrow);
-
-        self.env().emit_event(EscrowSet { escrow });
     }
 
     /// Sets the NFT contract address by the owner
@@ -264,8 +256,6 @@ impl Lease {
     pub fn set_nft(&mut self, nft: Address) {
         self.assert_owner();
         self.nft.set(nft);
-
-        self.env().emit_event(NftSet { nft });
     }
 
     /// Sets the PropertyRegistry contract address by the owner
@@ -274,9 +264,6 @@ impl Lease {
     pub fn set_property_registry(&mut self, property_registry: Address) {
         self.assert_owner();
         self.property_registry.set(property_registry);
-
-        self.env()
-            .emit_event(PropertyRegistrySet { property_registry });
     }
 
     /// Sets the UserRegistry contract address by the owner
@@ -538,70 +525,6 @@ impl Lease {
         });
     }
 
-    /// Allows early cancellation/termination of a lease agreement by the landlord.
-    /// The security deposit (if paid) is released via Escrow using the provided charge
-    /// (charge=0 for full refund to tenant). Equity eligibility is cleared if present.
-    /// Future rent invoices are left as-is (parties may settle off-chain).
-    ///
-    /// @dev Callable only by the landlord. Does not require the end date to have passed
-    /// and does not require all invoices to be paid (unlike finalize).
-    #[odra(non_reentrant)]
-    pub fn cancel_lease_agreement(
-        &mut self,
-        lease_agreement_id: &U256,
-        security_deposit_charge: &U256,
-    ) {
-        let mut lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
-
-        if lease_agreement.is_finished {
-            self.env().revert(Error::LeaseAlreadyFinalized);
-        }
-
-        if lease_agreement.landlord != self.env().caller() {
-            self.env().revert(Error::InvalidLandlord);
-        }
-
-        // Release security deposit if it was paid (and not yet released).
-        // We do not call assert_all_invoices_paid here to allow early exit even if
-        // some rent remains unpaid.
-        let security_invoice_id = lease_agreement.invoices_ids[0];
-        let sec_invoice = self.escrow.get_invoice_by_id(security_invoice_id);
-        if matches!(
-            sec_invoice.kind,
-            crate::escrow::types::InvoiceKind::SecurityDeposit
-        ) && sec_invoice.is_paid
-        {
-            self.escrow.release_security_deposit(
-                security_invoice_id,
-                lease_agreement.landlord,
-                *security_deposit_charge,
-            );
-        }
-
-        // Clear the `equity_eligible` entry (same as finalize)
-        if let Some(ref equity_option) = lease_agreement.equity_option {
-            let property_id = equity_option.property_id;
-            let tenant = lease_agreement.tenant;
-            self.equity_eligible.set(&(property_id, tenant), false);
-
-            self.env().emit_event(EquityEligibilityRevoked {
-                property_id,
-                account: tenant,
-            });
-        }
-
-        // The lease NFT remains frozen.
-        lease_agreement.is_finished = true;
-
-        self.leases.set(lease_agreement_id, lease_agreement);
-
-        self.env().emit_event(events::LeaseAgreementCancelled {
-            lease_agreement_id: *lease_agreement_id,
-            cancelled_at: self.env().get_block_time(),
-            security_deposit_charge: *security_deposit_charge,
-        });
-    }
-
     /// Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties decided to prolong it
     /// @dev The lease NFT is not updated during prolongation — the token persists in its current state. Lease terms are authoritative via get_lease_agreement_by_id(); the NFT metadata references the lease ID, not the terms themselves.
     #[odra(non_reentrant)]
@@ -699,16 +622,10 @@ impl Lease {
     // Ownable delegation
     // =========================================================================
 
-    /// renounce_ownership is disabled to prevent a single transaction from
-    /// permanently removing all admin controls (which would brick lease
-    /// management, equity eligibility, etc.).
-    pub fn renounce_ownership(&mut self) {
-        self.env().revert(Error::RenounceOwnershipNotAllowed);
-    }
-
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
+            fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
     }
@@ -775,7 +692,9 @@ impl Lease {
         landlord: U256,
     ) {
         // TODO: Can't use u16 for property_maanger_bps. Find out why and determine if we really need to type cast the constant to u32
-        if terms.property_manager_bps + LEASEFI_TRANSACTION_FEE_BPS as u32 > ONE_HUNDRED_PERCENT_BPS as u32 {
+        if terms.property_manager_bps + LEASEFI_TRANSACTION_FEE_BPS as u32
+            > ONE_HUNDRED_PERCENT_BPS as u32
+        {
             self.env().revert(Error::InvalidPropertyManagerBps);
         }
 
