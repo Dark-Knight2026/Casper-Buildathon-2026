@@ -1020,17 +1020,26 @@ async fn null_and_zero_transform_idx_are_distinct_events(pool: PgPool) {
     );
 }
 
-// Escrow / Lease handlers — on-chain reconciliation (commit_tx_hash matching)
+// Escrow / Lease handlers — on-chain reconciliation
+// (lease activation by commit_tx_hash; invoice bind by onchain_lease_id)
 
 /// Seed the off-chain mirror that `/commit` writes: a `pending_signatures` lease
-/// wired to `commit_tx_hash`, plus its three `scheduled` invoices (one security
-/// deposit, then two rent months by ascending deadline). Gives the bind/activate
-/// handlers a real `users -> property -> lease -> invoices` graph to match.
+/// wired to `commit_tx_hash` (and optionally `onchain_lease_id`), plus its three
+/// `scheduled` invoices (one security deposit, then two rent months by ascending
+/// deadline). Gives the bind/activate handlers a real
+/// `users -> property -> lease -> invoices` graph to match.
+///
+/// Pass `onchain_lease_id = None` for a lease still awaiting activation (the
+/// activate-by-hash tests); pass `Some(id)` for the invoice-bind tests, which
+/// match the lease by `onchain_lease_id`.
 ///
 /// Every UUID and date is generated in SQL: the indexer test crate depends on
-/// neither `uuid` nor `chrono`, so nothing crosses the Rust boundary but the
-/// `commit_tx_hash`.
-async fn seed_committed_lease_mirror(pool: &PgPool, commit_tx_hash: &str) {
+/// neither `uuid` nor `chrono`.
+async fn seed_committed_lease_mirror(
+    pool: &PgPool,
+    commit_tx_hash: &str,
+    onchain_lease_id: Option<&str>,
+) {
     sqlx::query(
         r"
             WITH landlord AS (
@@ -1050,8 +1059,8 @@ async fn seed_committed_lease_mirror(pool: &PgPool, commit_tx_hash: &str) {
                 RETURNING id, landlord_id
             ),
             lease AS (
-                INSERT INTO leases (landlord_id, property_id, tenant_ids, primary_tenant_id, type, status, start_date, end_date, monthly_rent, security_deposit, created_by, commit_tx_hash)
-                SELECT p.landlord_id, p.id, ARRAY[t.id], t.id, 'fixed_term', 'pending_signatures', DATE '2026-06-25', DATE '2027-06-20', 10.00, 10.00, p.landlord_id, $1
+                INSERT INTO leases (landlord_id, property_id, tenant_ids, primary_tenant_id, type, status, start_date, end_date, monthly_rent, security_deposit, created_by, commit_tx_hash, onchain_lease_id)
+                SELECT p.landlord_id, p.id, ARRAY[t.id], t.id, 'fixed_term', 'pending_signatures', DATE '2026-06-25', DATE '2027-06-20', 10.00, 10.00, p.landlord_id, $1, $2::TEXT::NUMERIC
                 FROM property p, tenant t
                 RETURNING id, landlord_id, property_id, primary_tenant_id
             )
@@ -1064,6 +1073,7 @@ async fn seed_committed_lease_mirror(pool: &PgPool, commit_tx_hash: &str) {
         ",
     )
     .bind(commit_tx_hash)
+    .bind(onchain_lease_id)
     .execute(pool)
     .await
     .expect("seed committed lease mirror");
@@ -1076,7 +1086,7 @@ async fn lease_agreement_created_activates_matching_pending_lease(pool: PgPool) 
     common::disable_rls(&pool).await;
 
     let commit_tx_hash = "a".repeat(64);
-    seed_committed_lease_mirror(&pool, &commit_tx_hash).await;
+    seed_committed_lease_mirror(&pool, &commit_tx_hash, None).await;
 
     let mut tx = pool.begin().await.unwrap();
     let activated = events::db::activate_lease_by_commit_tx_hash(&mut tx, &commit_tx_hash, "4")
@@ -1110,7 +1120,7 @@ async fn lease_agreement_created_skips_on_hash_mismatch(pool: PgPool) {
     common::disable_rls(&pool).await;
 
     let real_hash = "d".repeat(64);
-    seed_committed_lease_mirror(&pool, &real_hash).await;
+    seed_committed_lease_mirror(&pool, &real_hash, None).await;
 
     let other_hash = "e".repeat(64);
     let mut tx = pool.begin().await.unwrap();
@@ -1139,23 +1149,22 @@ async fn lease_agreement_created_skips_on_hash_mismatch(pool: PgPool) {
 
 /// On-chain `InvoiceCreated` events bind to the lease's scheduled invoices
 /// positionally: the security deposit first, then rent by ascending deadline.
-/// Two events bind two invoices; the later rent month stays unbound.
+/// Two events bind two invoices; the later rent month stays unbound. The lease
+/// is matched by the `onchain_lease_id` carried in the event.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn invoice_created_binds_scheduled_invoices_deposit_first(pool: PgPool) {
     common::disable_rls(&pool).await;
 
-    let commit_tx_hash = "b".repeat(64);
-    seed_committed_lease_mirror(&pool, &commit_tx_hash).await;
+    let onchain_lease_id = "7";
+    seed_committed_lease_mirror(&pool, &"b".repeat(64), Some(onchain_lease_id)).await;
 
     let mut tx = pool.begin().await.unwrap();
-    let first =
-        events::db::bind_invoice_onchain_id_by_commit_tx_hash(&mut tx, &commit_tx_hash, "100")
-            .await
-            .unwrap();
-    let second =
-        events::db::bind_invoice_onchain_id_by_commit_tx_hash(&mut tx, &commit_tx_hash, "101")
-            .await
-            .unwrap();
+    let first = events::db::bind_invoice_onchain_id_by_lease_id(&mut tx, onchain_lease_id, "100")
+        .await
+        .unwrap();
+    let second = events::db::bind_invoice_onchain_id_by_lease_id(&mut tx, onchain_lease_id, "101")
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
 
     assert!(first && second, "both events must bind an invoice");
@@ -1165,11 +1174,11 @@ async fn invoice_created_binds_scheduled_invoices_deposit_first(pool: PgPool) {
             SELECT i.kind, i.status, i.onchain_invoice_id::text AS onchain_invoice_id, i.deadline::text AS deadline
             FROM invoices i
             JOIN leases l ON l.id = i.lease_id
-            WHERE l.commit_tx_hash = $1
+            WHERE l.onchain_lease_id = $1::TEXT::NUMERIC
             ORDER BY (i.kind = 'security_deposit') DESC, i.deadline ASC
         ",
     )
-    .bind(&commit_tx_hash)
+    .bind(onchain_lease_id)
     .fetch_all(&pool)
     .await
     .unwrap();
@@ -1190,19 +1199,17 @@ async fn invoice_created_binds_scheduled_invoices_deposit_first(pool: PgPool) {
     assert_eq!(invoices[2].status, "scheduled");
 }
 
-/// Reconciliation is order-tolerant downward: an `InvoiceCreated` that arrives
-/// before `/commit` seeded any mirror binds nothing and is skipped cleanly,
+/// An `InvoiceCreated` for a lease with no off-chain mirror yet (not activated,
+/// so no matching `onchain_lease_id`) binds nothing and is skipped cleanly,
 /// never errors (the skip path behind the "no matching unbound invoice" warning).
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn invoice_created_skips_when_mirror_not_seeded(pool: PgPool) {
     common::disable_rls(&pool).await;
 
-    let commit_tx_hash = "c".repeat(64);
     let mut tx = pool.begin().await.unwrap();
-    let bound =
-        events::db::bind_invoice_onchain_id_by_commit_tx_hash(&mut tx, &commit_tx_hash, "1")
-            .await
-            .unwrap();
+    let bound = events::db::bind_invoice_onchain_id_by_lease_id(&mut tx, "999", "1")
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
 
     assert!(

@@ -1280,27 +1280,26 @@ pub async fn set_lease_terminated_by_onchain_id(
 // Invoices (on-chain reconciliation) ------------------------------------------
 
 /// Binds the contract-assigned `invoice_id` to the next unmatched off-chain
-/// invoice of the lease behind this deploy, the `InvoiceCreated` reconciliation
-/// step.
+/// invoice of its lease, the `InvoiceCreated` reconciliation step.
 ///
-/// The lease is located by `commit_tx_hash = deploy_hash`: every `InvoiceCreated`
-/// emitted during `create_lease_agreement` shares the deploy hash with the
-/// `LeaseAgreementCreated` the landlord pushed to `/commit`, so no chain lookup
-/// is needed. Among that lease's still-unbound `scheduled` invoices the next one
-/// is picked in the contract's own creation order - the security deposit first,
-/// then rent months by ascending deadline - and stamped with the id and moved to
-/// `pending`. Events therefore bind to invoices positionally, in arrival order.
+/// The lease is located directly by `onchain_lease_id` (carried in the event),
+/// so no deploy-hash match is needed and streamed and backfilled events bind
+/// identically. Among that lease's still-unbound `scheduled` invoices the next
+/// one is picked in the contract's own creation order - the security deposit
+/// first, then rent months by ascending deadline - stamped with the id and moved
+/// to `pending`. Events therefore bind to invoices positionally, in arrival order.
 ///
-/// Returns `true` when an invoice was bound, `false` when none matched (the
-/// event arrived before `/commit` seeded the mirrors, or all are already bound).
+/// Returns `true` when an invoice was bound, `false` when none matched (the lease
+/// is not yet activated off-chain - `/commit` reconciles those - or all are
+/// already bound).
 ///
 /// # Errors
 ///
 /// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
 #[inline]
-pub async fn bind_invoice_onchain_id_by_commit_tx_hash(
+pub async fn bind_invoice_onchain_id_by_lease_id(
     tx: &mut PgTransaction<'_>,
-    commit_tx_hash: &str,
+    onchain_lease_id: &str,
     onchain_invoice_id: &str,
 ) -> IndexerResult<bool> {
     let result = sqlx::query!(
@@ -1312,14 +1311,14 @@ pub async fn bind_invoice_onchain_id_by_commit_tx_hash(
                 SELECT i.id
                 FROM invoices i
                 JOIN leases l ON l.id = i.lease_id
-                WHERE l.commit_tx_hash = $1
+                WHERE l.onchain_lease_id = $1::TEXT::NUMERIC
                   AND i.onchain_invoice_id IS NULL
                   AND i.status = 'scheduled'
                 ORDER BY (i.kind = 'security_deposit') DESC, i.deadline ASC
                 LIMIT 1
             )
         ",
-        commit_tx_hash,
+        onchain_lease_id,
         onchain_invoice_id,
     )
     .execute(tx.as_mut())
