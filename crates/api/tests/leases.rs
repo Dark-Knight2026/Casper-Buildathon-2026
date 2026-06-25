@@ -1234,3 +1234,132 @@ async fn second_lease_in_year_gets_a_sequential_number(pool: PgPool) {
     assert!(second.starts_with("LS"), "unexpected format: {second}");
     assert_ne!(first, second, "the second lease must get a fresh number");
 }
+
+// Regression tests for System of Review #1 (commit/sign/document hardening) ----
+
+/// Drives a fresh lease to `pending_signatures` with BOTH parties' consent
+/// recorded, so `/commit` is the only remaining step.
+async fn fully_signed_lease(env: &TestEnv, pool: &PgPool) -> PendingLease {
+    let p = pending_lease(env, pool).await;
+    assert_eq!(
+        sign_consent(env, &p.ltoken, &p.id, "landlord", &p.landlord, &p.message).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        sign_consent(env, &p.ttoken, &p.id, "tenant", &p.tenant, &p.message).await,
+        StatusCode::OK
+    );
+    p
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_rejects_zero_onchain_id(pool: PgPool) {
+    // Regression (#6): "0" is the Casper "uninitialized" sentinel and must be
+    // rejected even though it is a non-empty all-digits string.
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = fully_signed_lease(&env, &pool).await;
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", p.id),
+        &p.ltoken,
+        &json!({ "onchainLeaseId": "0", "nftTokenId": "1", "commitTxHash": "deploy-test-1" }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn commit_rejects_non_decimal_nft_token_id(pool: PgPool) {
+    // Regression (#5): nft_token_id is persisted verbatim, so it must be
+    // validated as a non-empty decimal U256 string just like onchain_lease_id.
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = fully_signed_lease(&env, &pool).await;
+    let uri = format!("/api/v1/leases/{}/commit", p.id);
+
+    // A hex-encoded token id is rejected.
+    let (s_hex, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &uri,
+        &p.ltoken,
+        &json!({ "onchainLeaseId": "42", "nftTokenId": "0x1A", "commitTxHash": "deploy-test-1" }),
+    )
+    .await;
+    assert_eq!(s_hex, StatusCode::BAD_REQUEST);
+
+    // An empty token id is rejected too.
+    let (s_empty, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &uri,
+        &p.ltoken,
+        &json!({ "onchainLeaseId": "42", "nftTokenId": "", "commitTxHash": "deploy-test-1" }),
+    )
+    .await;
+    assert_eq!(s_empty, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn sign_rejects_role_mismatch_with_jwt(pool: PgPool) {
+    // Regression (#4): a tenant party authenticated with a Landlord-role JWT
+    // must not record consent as the tenant. The claimed `role` has to match the
+    // role in the caller's JWT, not just lease-party membership.
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = pending_lease(&env, &pool).await;
+
+    // The tenant party, but carrying a Landlord-role token.
+    let landlord_jwt =
+        common::create_test_jwt(p.tenant.user_id, UserRole::Landlord, &env.jwt_secret);
+
+    let status = sign_consent(&env, &landlord_jwt, &p.id, "tenant", &p.tenant, &p.message).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn document_hash_stable_after_activation(pool: PgPool) {
+    // Regression (#2): once a lease is active, /document must be a read-through -
+    // it must NOT re-render and overwrite the document_hash committed on-chain.
+    // We stand in a known committed hash and assert the endpoint returns it
+    // unchanged (current code re-renders and clobbers it).
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let p = fully_signed_lease(&env, &pool).await;
+
+    let (s_commit, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/leases/{}/commit", p.id),
+        &p.ltoken,
+        &json!({ "onchainLeaseId": "42", "nftTokenId": "1", "commitTxHash": "deploy-test-1" }),
+    )
+    .await;
+    assert_eq!(s_commit, StatusCode::OK);
+
+    // The hash frozen at activation, distinct from any real render output.
+    let committed_hash = "0".repeat(64);
+    sqlx::query("UPDATE leases SET document_hash = $1, lease_document_url = $2 WHERE id = $3")
+        .bind(&committed_hash)
+        .bind("ipfs://committed-doc")
+        .bind(Uuid::parse_str(&p.id).unwrap())
+        .execute(&pool)
+        .await
+        .expect("freeze committed document hash");
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/leases/{}/document", p.id),
+        &p.ltoken,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body.unwrap()["documentHash"].as_str().unwrap(),
+        committed_hash
+    );
+}
