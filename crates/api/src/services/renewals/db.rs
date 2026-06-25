@@ -213,6 +213,14 @@ pub async fn list_renewals(
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<RenewalRow>, i64), Error> {
+    // Snapshot both reads so the count and the page agree under concurrent
+    // writes (REPEATABLE READ); a plain pair of autocommit queries can skip or
+    // duplicate rows across pages.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
     let total = sqlx::query_scalar!(
         r#"
             SELECT COUNT(*) AS "count!"
@@ -227,7 +235,7 @@ pub async fn list_renewals(
         caller,
         scope,
     )
-    .fetch_one(pool)
+    .fetch_one(tx.as_mut())
     .await?;
 
     let rows = sqlx::query_as!(
@@ -259,21 +267,22 @@ pub async fn list_renewals(
         limit,
         offset,
     )
-    .fetch_all(pool)
+    .fetch_all(tx.as_mut())
     .await?
     .into_iter()
     .map(RenewalRow::try_from)
     .collect::<Result<Vec<_>, _>>()?;
 
+    tx.commit().await?;
     Ok((rows, total))
 }
 
 /// Records the tenant's response on a renewal awaiting one, setting the new
 /// `status` (and `counter_offer` when countering).
 ///
-/// The `status IN ('sent', 'under_review')` guard makes this a no-op
-/// (`RowNotFound`) once the renewal already left those states, so a second
-/// response is rejected rather than overwriting the first.
+/// The `status = 'sent'` guard makes this a no-op (`RowNotFound`) once the
+/// renewal already left the awaiting-response state, so a second response is
+/// rejected rather than overwriting the first.
 ///
 /// # Errors
 ///
@@ -292,7 +301,7 @@ pub async fn update_renewal_response(
             UPDATE lease_renewals SET
                 status = $2,
                 counter_offer = $3
-            WHERE id = $1 AND status IN ('sent', 'under_review') AND deleted_at IS NULL
+            WHERE id = $1 AND status = 'sent' AND deleted_at IS NULL
             RETURNING
                 id, lease_id, landlord_id, tenant_id,
                 proposed_rent::float8 AS "proposed_rent!",

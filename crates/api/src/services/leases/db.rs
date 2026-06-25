@@ -276,6 +276,14 @@ pub async fn list_leases(
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<LeaseRow>, i64), Error> {
+    // Snapshot both reads so the count and the page agree under concurrent
+    // writes (REPEATABLE READ); a plain pair of autocommit queries can skip or
+    // duplicate rows across pages.
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
     let total = sqlx::query_scalar!(
         r#"
             SELECT COUNT(*) AS "count!"
@@ -292,7 +300,7 @@ pub async fn list_leases(
         scope,
         status,
     )
-    .fetch_one(pool)
+    .fetch_one(tx.as_mut())
     .await?;
 
     let rows = sqlx::query_as!(
@@ -334,9 +342,10 @@ pub async fn list_leases(
         limit,
         offset,
     )
-    .fetch_all(pool)
+    .fetch_all(tx.as_mut())
     .await?;
 
+    tx.commit().await?;
     Ok((rows, total))
 }
 
