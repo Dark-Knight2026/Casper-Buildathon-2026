@@ -9,46 +9,17 @@ use odra_modules::access::DEFAULT_ADMIN_ROLE;
 
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
-    constants::{
-        MIN_DEADLINE_IN_MS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
-    },
+    constants::MIN_DEADLINE_IN_MS,
     escrow::{Escrow, EscrowInitArgs},
-    ico::{
-        types::{Currency, ICOScheduleCreateParams},
-        ICOInitArgs, ICO,
-    },
     lease::{Lease, LeaseInitArgs},
     nft::{types::NFTInitParams, NFTInitArgs, NFT},
     property_registry::{PropertyRegistry, PropertyRegistryInitArgs},
     roles::{Roles, RolesInitArgs},
-    staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
     user_registry::{UserRegistry, UserRegistryInitArgs},
-    vesting::{Vesting, VestingInitArgs},
 };
 
 struct LeasefiDeployScript;
-
-impl LeasefiDeployScript {
-    const ONE_SECOND: u64 = 1_000;
-    const ONE_MINUTE: u64 = 60 * Self::ONE_SECOND;
-    const ONE_HOUR: u64 = 60 * Self::ONE_MINUTE;
-    const ONE_DAY: u64 = 24 * Self::ONE_HOUR;
-
-    fn get_ico_schedule_creation_params(env: &HostEnv) -> ICOScheduleCreateParams {
-        ICOScheduleCreateParams {
-            start_timestamp: env.block_time() + Self::ONE_MINUTE + Self::ONE_HOUR,
-            end_timestamp: env.block_time()
-                + Self::ONE_MINUTE
-                + Self::ONE_HOUR
-                + (20 * Self::ONE_DAY),
-            sale_amount: U256::from(500_000_000) * U256::from(10).pow(U256::from(18)),
-            price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
-            cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
-            vesting_duration: PRIVATE_SALE_VESTING_DURATION,
-        }
-    }
-}
 
 impl DeployScript for LeasefiDeployScript {
     fn deploy(
@@ -62,7 +33,7 @@ impl DeployScript for LeasefiDeployScript {
         // The deploy is always run with ODRA_CASPER_*_SECRET_KEY_PATH, so the
         // operator controls the resulting owner.
         let new_owner = env.caller();
-        let mut big_coin = BigCoin::load_or_deploy_with_cfg(
+        let big_coin = BigCoin::load_or_deploy_with_cfg(
             env,
             None,
             BigCoinInitArgs {
@@ -108,7 +79,7 @@ impl DeployScript for LeasefiDeployScript {
             container,
             310_000_000_000,
         )?;
-        let mut user_registry = UserRegistry::load_or_deploy_with_cfg(
+        let user_registry = UserRegistry::load_or_deploy_with_cfg(
             env,
             None,
             UserRegistryInitArgs {
@@ -151,7 +122,7 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
-        let mut lease = Lease::load_or_deploy_with_cfg(
+        let lease = Lease::load_or_deploy_with_cfg(
             env,
             None,
             LeaseInitArgs {
@@ -165,40 +136,6 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
-        let mut vesting = Vesting::load_or_deploy_with_cfg(
-            env,
-            None,
-            VestingInitArgs {
-                owner: env.caller(),
-            },
-            InstallConfig::upgradable::<Vesting>(),
-            container,
-            400_000_000_000,
-        )?;
-        let mut staking = Staking::load_or_deploy_with_cfg(
-            env,
-            None,
-            StakingInitArgs {
-                owner: env.caller(),
-            },
-            InstallConfig::upgradable::<Staking>(),
-            container,
-            400_000_000_000,
-        )?;
-        let mut ico = ICO::load_or_deploy_with_cfg(
-            env,
-            None,
-            ICOInitArgs {
-                owner: env.caller(),
-                styks_price_feed: Address::new(
-                    "hash-2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc", // testnet, 814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121 - mainnet
-                )
-                .unwrap(),
-            },
-            InstallConfig::upgradable::<ICO>(),
-            container,
-            400_000_000_000,
-        )?;
 
         let usdc_address = Address::new(
             "hash-7f06f66426f18ca8d3b8df69f977a54554d39fda43ebe942fd22ece0d20235bd", // testnet, 48bd364532febf044cca8d2d716336b93d27458ce0aa48ad292ca28304fa8649 - mainnet
@@ -207,15 +144,6 @@ impl DeployScript for LeasefiDeployScript {
 
         // Setup Treasury
         treasury.set_big_coin(big_coin.address());
-        treasury.set_staking(staking.address());
-
-        // Setup Staking
-        staking.set_big_coin(big_coin.address());
-        staking.set_vesting(vesting.address());
-
-        // Setup Vesting
-        vesting.add_whitelisted_creator(ico.address());
-        vesting.set_staking(staking.address());
 
         // Setup Lease
         // Redundant as Lease::init now sets these
@@ -236,33 +164,6 @@ impl DeployScript for LeasefiDeployScript {
         escrow.set_lease(lease.address());
         escrow.set_treasury(treasury.address());
         escrow.set_security_deposit_token(usdc_address);
-
-        // Setup ICO
-        let creation_params = LeasefiDeployScript::get_ico_schedule_creation_params(env);
-
-        ico.set_big_coin(big_coin.address());
-        ico.set_treasury(treasury.address());
-        ico.set_vesting(vesting.address());
-        ico.set_staking(staking.address());
-        ico.add_currency(Currency::CSPR, None);
-        env.set_gas(15_000_000_000);
-        ico.add_currency(Currency::USDC, Some(usdc_address));
-        ico.add_currency(
-            Currency::USDT,
-            Some(
-                Address::new(
-                    "hash-7c902e8a111b3116e00c7507138b92b83f96b29be98aa95247928583720e297a", // testnet, b53fa728c7074c84f35407f4d0989eb4133d391402b7ce13b7feeb01479a4f01 - mainnet
-                )
-                .unwrap(),
-            ),
-        );
-        env.set_gas(20_000_000_000);
-        // The deployer (== ICO owner, since ICOInitArgs uses owner: env.caller() and new_owner
-        // remains the deploy key with no transfer_ownership for ICO) must hold BIG and approve
-        // before add_ico_schedule. This implements the "pull from caller()" fix for H-8 (avoids
-        // relying on a stale get_owner() address + orphaned approvals after any ownership change).
-        big_coin.approve(&ico.address(), &(creation_params.sale_amount));
-        ico.add_ico_schedule(creation_params);
 
         // Ownership handoff for admin roles. Since new_owner is env.caller() (the
         // deploy key), we grant any additional operational roles but do not revoke
@@ -288,9 +189,6 @@ pub fn main() {
         .contract::<Treasury>()
         .contract::<Escrow>()
         .contract::<Lease>()
-        .contract::<Staking>()
-        .contract::<Vesting>()
-        .contract::<ICO>()
         .contract::<PropertyRegistry>()
         .build()
         .run();
