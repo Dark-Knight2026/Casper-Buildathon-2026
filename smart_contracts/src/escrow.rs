@@ -358,8 +358,7 @@ impl Escrow {
     // =========================================================================
 
     /// Allows the Lease contract to create a rent invoice.
-    /// @dev Lease invoices track base rent and optional equity separately so payment
-    ///            distribution can always satisfy rent before equity.
+    /// @dev Lease invoices track base rent for payment distribution to landlords and property managers.
     #[odra(non_reentrant)]
     pub fn create_lease_invoice(&mut self, params: CreateLeaseInvoiceParams) -> U256 {
         self.assert_lease();
