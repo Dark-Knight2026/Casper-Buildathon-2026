@@ -53,4 +53,4 @@ package_hash = "hash-dfc5d21eb4e2eb9098019c810d774805a43af8a56bba8c9c6fd47b4d404
 [[contracts]]
 name = "Lease"
 package_name = "Lease"
-package_hash = "hash-54582fb41a7c0bd6f4ac719eb8ba4ca9901cbff39a1281e4365e51554e415127"
+package_hash = "hash-e41a90b197bb24d04c9185e91d15b0b33f80711b7addf74ca8e00b3ddd3132a4"

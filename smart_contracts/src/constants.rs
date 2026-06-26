@@ -20,6 +20,9 @@ pub const STYKS_ORACLE_MAX_CSPR_USD_PRICE: u64 = 50_000;
 
 pub const ONE_MONTH_IN_MILLISECONDS: u64 = ONE_MONTH_IN_SECONDS * 1_000;
 
+/// Default minimum invoice deadline delay used in Escrow deploy helpers.
+pub const MIN_DEADLINE_IN_MS: u64 = 5 * 60 * 1_000;
+
 pub const PRIVATE_SALE_CLIFF_DURATION: u64 = 6 * ONE_MONTH_IN_MILLISECONDS;
 
 pub const PRIVATE_SALE_VESTING_DURATION: u64 = 12 * ONE_MONTH_IN_MILLISECONDS;
