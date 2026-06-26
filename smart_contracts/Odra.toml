@@ -26,16 +26,7 @@ fqn = "ico::ICO"
 fqn = "vesting::Vesting"
 
 [[contracts]]
-fqn = "investor_registry::InvestorRegistry"
-
-[[contracts]]
 fqn = "property_registry::PropertyRegistry"
-
-[[contracts]]
-fqn = "compliance_policy::CompliancePolicy"
-
-[[contracts]]
-fqn = "property_fraction_token::PropertyFractionToken"
 
 [[contracts]]
 fqn = "user_registry::UserRegistry"
