@@ -674,9 +674,7 @@ impl Escrow {
         // Protocol fee revenue (2% of rent) is sent to Treasury (as CSPR via transfer_tokens
         // or CEP-18 via transfer_from). See Treasury::deposit_rewards documentation for the
         // intended off-chain conversion pathway (withdraw fees -> convert to BIG -> call
-        // deposit_rewards) that routes 60% (STAKING_REWARDS_BPS) of the value to stakers
-        // (40% INCENTIVES_REWARDS_BPS stays as reserves). deposit_rewards() is the on-chain
-        // step that actually delivers BIG to the staking reward pool.
+        // deposit_rewards). deposit_rewards() credits the full BIG amount to Treasury reserves.
 
         // Pass gross amount so PM BPS is applied to gross rent (not net after fee).
         // Landlord receives gross - fee - PM_share (absorbs the fee; PM no longer diluted).

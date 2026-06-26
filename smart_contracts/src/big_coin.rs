@@ -22,7 +22,7 @@ impl BigCoin {
         self.metadata.init(
             Some("BIG LeaseFi Token".into()),
             Some(
-                "CEP-18 protocol token for LeaseFi payments, staking, and treasury operations."
+                "CEP-18 protocol token for LeaseFi payments and treasury operations."
                     .into(),
             ),
             None,

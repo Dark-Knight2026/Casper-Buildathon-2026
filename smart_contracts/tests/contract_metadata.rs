@@ -1,20 +1,16 @@
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
     escrow::{Escrow, EscrowInitArgs},
-    ico::{ICOInitArgs, ICO},
     lease::{Lease, LeaseInitArgs},
-    mocks::styks_price_feed::StyksPriceFeed,
     nft::{types::NFTInitParams, NFT},
     property_registry::{PropertyRegistry, PropertyRegistryInitArgs},
     roles::{Roles, RolesInitArgs},
-    staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
     user_registry::{UserRegistry, UserRegistryInitArgs},
-    vesting::{Vesting, VestingInitArgs},
 };
 use odra::{
     casper_types::U256,
-    host::{Deployer, HostEnv, NoArgs},
+    host::{Deployer, HostEnv},
     prelude::*,
 };
 
@@ -85,7 +81,7 @@ fn test_big_coin_metadata() {
     assert_cep96_metadata!(
         big_coin,
         "BIG LeaseFi Token",
-        "CEP-18 protocol token for LeaseFi payments, staking, and treasury operations."
+        "CEP-18 protocol token for LeaseFi payments and treasury operations."
     );
 }
 
@@ -148,7 +144,7 @@ fn test_treasury_metadata() {
     assert_cep96_metadata!(
         treasury,
         "BIG LeaseFi Treasury",
-        "Protocol treasury for BIG token reserves and reward distribution."
+        "Protocol treasury for BIG token reserves and protocol fee revenue."
     );
 }
 
@@ -213,60 +209,7 @@ fn test_lease_metadata() {
     assert_cep96_metadata!(
         lease,
         "BIG LeaseFi Lease",
-        "Property lease lifecycle, invoicing, and equity eligibility."
-    );
-}
-
-#[test]
-fn test_staking_metadata() {
-    let env = odra_test::env();
-    let staking = Staking::deploy(
-        &env,
-        StakingInitArgs {
-            owner: env.get_account(0),
-        },
-    );
-
-    assert_cep96_metadata!(
-        staking,
-        "BIG LeaseFi Staking",
-        "BIG token staking and reward claims."
-    );
-}
-
-#[test]
-fn test_ico_metadata() {
-    let env = odra_test::env();
-    let styks_price_feed = StyksPriceFeed::deploy(&env, NoArgs);
-    let ico = ICO::deploy(
-        &env,
-        ICOInitArgs {
-            owner: env.get_account(0),
-            styks_price_feed: styks_price_feed.address(),
-        },
-    );
-
-    assert_cep96_metadata!(
-        ico,
-        "BIG LeaseFi ICO",
-        "BIG token sale schedules and multi-currency purchases."
-    );
-}
-
-#[test]
-fn test_vesting_metadata() {
-    let env = odra_test::env();
-    let vesting = Vesting::deploy(
-        &env,
-        VestingInitArgs {
-            owner: env.get_account(0),
-        },
-    );
-
-    assert_cep96_metadata!(
-        vesting,
-        "BIG LeaseFi Vesting",
-        "Time-based BIG token vesting schedules."
+        "Property lease lifecycle, invoicing, and rent payments."
     );
 }
 

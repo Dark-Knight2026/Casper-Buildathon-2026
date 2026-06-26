@@ -196,7 +196,7 @@ impl Lease {
         self.user_registry.set(user_registry);
         self.metadata.init(
             Some("BIG LeaseFi Lease".into()),
-            Some("Property lease lifecycle, invoicing, and equity eligibility.".into()),
+            Some("Property lease lifecycle, invoicing, and rent payments.".into()),
             None,
             None,
         );
