@@ -23,11 +23,9 @@
             "ty": "RentDistributionTerms"
           },
           {
-            "name": "equity_option",
+            "name": "property_id",
             "description": null,
-            "ty": {
-              "Option": "LeaseEquityOption"
-            }
+            "ty": "U256"
           },
           {
             "name": "monthly_rent",
@@ -79,42 +77,6 @@
     },
     {
       "struct": {
-        "name": "EquityEligibilityGranted",
-        "description": null,
-        "members": [
-          {
-            "name": "property_id",
-            "description": null,
-            "ty": "U256"
-          },
-          {
-            "name": "account",
-            "description": null,
-            "ty": "U256"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "EquityEligibilityRevoked",
-        "description": null,
-        "members": [
-          {
-            "name": "property_id",
-            "description": null,
-            "ty": "U256"
-          },
-          {
-            "name": "account",
-            "description": null,
-            "ty": "U256"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
         "name": "LeaseAgreement",
         "description": null,
         "members": [
@@ -134,11 +96,9 @@
             "ty": "RentDistributionTerms"
           },
           {
-            "name": "equity_option",
+            "name": "property_id",
             "description": null,
-            "ty": {
-              "Option": "LeaseEquityOption"
-            }
+            "ty": "U256"
           },
           {
             "name": "monthly_rent",
@@ -230,19 +190,6 @@
             "name": "prolonged_at",
             "description": null,
             "ty": "U64"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "LeaseEquityOption",
-        "description": null,
-        "members": [
-          {
-            "name": "property_id",
-            "description": null,
-            "ty": "U256"
           }
         ]
       }
@@ -425,11 +372,6 @@
       "discriminant": 408
     },
     {
-      "name": "TenantAlreadyEquityEligible",
-      "description": "",
-      "discriminant": 414
-    },
-    {
       "name": "ZeroAmount",
       "description": "",
       "discriminant": 404
@@ -594,28 +536,6 @@
       "access": "public"
     },
     {
-      "name": "is_equity_eligible",
-      "description": "Returns `true` if `account` is equity-eligible for `property_id`, `false` otherwise.",
-      "is_mutable": false,
-      "arguments": [
-        {
-          "name": "property_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "account",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "Bool",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
       "name": "create_lease_agreement",
       "description": "Allows to create a new lease agreement and all invoices for this agreement by a landlord",
       "is_mutable": true,
@@ -733,14 +653,6 @@
     }
   ],
   "events": [
-    {
-      "name": "EquityEligibilityGranted",
-      "ty": "EquityEligibilityGranted"
-    },
-    {
-      "name": "EquityEligibilityRevoked",
-      "ty": "EquityEligibilityRevoked"
-    },
     {
       "name": "LeaseAgreementCreated",
       "ty": "LeaseAgreementCreated"
