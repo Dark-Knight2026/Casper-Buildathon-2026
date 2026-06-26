@@ -9,6 +9,19 @@
   "types": [
     {
       "struct": {
+        "name": "BigCoinSet",
+        "description": null,
+        "members": [
+          {
+            "name": "big_coin",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "OwnershipTransferred",
         "description": null,
         "members": [
@@ -133,49 +146,17 @@
       "discriminant": 20000
     },
     {
+      "name": "RenounceOwnershipNotAllowed",
+      "description": "",
+      "discriminant": 206
+    },
+    {
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
-    },
-    {
-      "name": "StakingContractIsNotSet",
-      "description": "",
-      "discriminant": 201
     }
   ],
   "entry_points": [
-    {
-      "name": "receive",
-      "description": "Allows to receive CSPR tokens by this contract",
-      "is_mutable": false,
-      "arguments": [
-        {
-          "name": "__cargo_purse",
-          "description": null,
-          "ty": "URef",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "set_staking",
-      "description": "Sets the Staking contract address by the owner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "staking",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
     {
       "name": "set_big_coin",
       "description": "Sets the BIG token contract address by the owner",
@@ -193,14 +174,48 @@
       "access": "public"
     },
     {
+      "name": "get_reserves",
+      "description": "Returns the BIG token reserves stored on this contract and available to withdraw by the owner",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_big_coin_contract_address",
+      "description": "Returns the BIG token contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "deposit_rewards",
-      "description": "Allows to deposit any rewards amount in the BIG token by anyone, then distributes these rewards",
+      "description": "Allows anyone to deposit BIG token rewards into Treasury reserves.",
       "is_mutable": true,
       "arguments": [
         {
           "name": "amount",
           "description": null,
           "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "receive",
+      "description": "Allows to receive CSPR tokens by this contract",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "__cargo_purse",
+          "description": null,
+          "ty": "URef",
           "optional": false
         }
       ],
@@ -261,29 +276,11 @@
       "access": "public"
     },
     {
-      "name": "get_reserves",
-      "description": "Returns the BIG token reserves stored on this contract and available to withdraw by the owner",
-      "is_mutable": false,
+      "name": "renounce_ownership",
+      "description": "renounce_ownership is disabled to prevent accidental or malicious permanent",
+      "is_mutable": true,
       "arguments": [],
-      "return_ty": "U256",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_staking_contract_address",
-      "description": "Returns the Staking contract address",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_big_coin_contract_address",
-      "description": "Returns the BIG token contract address",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -299,15 +296,6 @@
           "optional": false
         }
       ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "renounce_ownership",
-      "description": "Delegated. See `self.ownable.renounce_ownership()` for details.",
-      "is_mutable": true,
-      "arguments": [],
       "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
@@ -367,6 +355,10 @@
     }
   ],
   "events": [
+    {
+      "name": "BigCoinSet",
+      "ty": "BigCoinSet"
+    },
     {
       "name": "OwnershipTransferred",
       "ty": "OwnershipTransferred"

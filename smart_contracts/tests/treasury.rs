@@ -1,7 +1,7 @@
 use odra::{
     casper_types::{U256, U512},
     host::{Deployer, HostEnv, HostRef},
-    prelude::{Address, Addressable},
+    prelude::Addressable,
     uints::ToU256,
 };
 use odra_modules::access::errors::Error as AccessError;

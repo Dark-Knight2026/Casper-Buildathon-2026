@@ -213,6 +213,19 @@
     },
     {
       "struct": {
+        "name": "LeaseSet",
+        "description": null,
+        "members": [
+          {
+            "name": "lease",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "MinDeadlineSet",
         "description": null,
         "members": [
@@ -347,6 +360,19 @@
         "members": [
           {
             "name": "token",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "TreasurySet",
+        "description": null,
+        "members": [
+          {
+            "name": "treasury",
             "description": null,
             "ty": "Key"
           }
@@ -792,15 +818,6 @@
       "access": "public"
     },
     {
-      "name": "renounce_ownership",
-      "description": "Delegated. See `self.ownable.renounce_ownership()` for details.",
-      "is_mutable": true,
-      "arguments": [],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
       "name": "get_owner",
       "description": "Delegated. See `self.ownable.get_owner()` for details.",
       "is_mutable": false,
@@ -868,6 +885,10 @@
       "ty": "InvoicePaymentApplied"
     },
     {
+      "name": "LeaseSet",
+      "ty": "LeaseSet"
+    },
+    {
       "name": "MinDeadlineSet",
       "ty": "MinDeadlineSet"
     },
@@ -886,6 +907,10 @@
     {
       "name": "SecurityDepositTokenSet",
       "ty": "SecurityDepositTokenSet"
+    },
+    {
+      "name": "TreasurySet",
+      "ty": "TreasurySet"
     }
   ],
   "call": {
