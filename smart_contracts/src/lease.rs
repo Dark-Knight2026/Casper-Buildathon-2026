@@ -10,8 +10,8 @@ use crate::{
     lease::{
         errors::Error,
         events::{
-            EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
-            LeaseAgreementFinished, LeaseAgreementProlonged, LeaseNftRecovered,
+            LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged,
+            LeaseNftRecovered,
         },
         types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     },
@@ -37,8 +37,8 @@ pub mod types {
         pub landlord: U256,
         /// Rent split rules used when lease invoice payments are distributed.
         pub rent_distribution_terms: RentDistributionTerms,
-        /// Optional lease-to-own terms that make the tenant eligible for property equity.
-        pub equity_option: Option<LeaseEquityOption>,
+        /// Property this lease is tied to.
+        pub property_id: U256,
         /// Required monthly base rent.
         pub monthly_rent: CurrencyAmount,
         /// Security deposit held until lease finalization.
@@ -59,7 +59,7 @@ pub mod types {
     pub struct CreateLeaseAgreementParams {
         pub tenant: U256,
         pub rent_distribution_terms: RentDistributionTerms,
-        pub equity_option: Option<LeaseEquityOption>,
+        pub property_id: U256,
         pub monthly_rent: CurrencyAmount,
         pub security_deposit: CurrencyAmount,
         pub start: u64,
@@ -71,18 +71,11 @@ pub mod types {
     #[odra::odra_type]
     pub struct RentDistributionTerms {
         /// Optional property manager user ID that receives a percentage of the base rent
-        /// @dev This applies to the rent, not security deposits or equity top-ups
+        /// @dev This applies to the rent, not security deposits
         pub property_manager: Option<U256>,
         /// Property manager rent share in basis points
         /// @dev 10_000 = 100%. Must be zero when `property_manager` is `None`.
         pub property_manager_bps: u32,
-    }
-
-    #[odra::odra_type]
-    pub struct LeaseEquityOption {
-        /// Property for which the tenant receives equity eligibility
-        /// @dev This only gates future property-token distribution. It does not create an equity payment schedule in phase 1/MVP.
-        pub property_id: U256,
     }
 }
 
@@ -122,38 +115,6 @@ pub mod events {
         /// Tenant user's active wallet that received the lease NFT.
         pub new_wallet: Address,
     }
-
-    #[odra::event]
-    pub struct EquityEligibilityGranted {
-        pub property_id: U256,
-        pub account: U256,
-    }
-
-    #[odra::event]
-    pub struct EquityEligibilityRevoked {
-        pub property_id: U256,
-        pub account: U256,
-    }
-
-    #[odra::event]
-    pub struct RolesSet {
-        pub roles: Address,
-    }
-
-    #[odra::event]
-    pub struct EscrowSet {
-        pub escrow: Address,
-    }
-
-    #[odra::event]
-    pub struct NftSet {
-        pub nft: Address,
-    }
-
-    #[odra::event]
-    pub struct PropertyRegistrySet {
-        pub property_registry: Address,
-    }
 }
 
 // =============================================================================
@@ -179,7 +140,6 @@ pub mod errors {
         InvalidPropertyManagerBps = 411,
         InvalidPropertyManager = 412,
         LeaseAlreadyFinalized = 413,
-        TenantAlreadyEquityEligible = 414,
         InvalidTenant = 415,
         LeaseNftOwnerNotFound = 416,
         LeaseNftAlreadyOwnedByActiveWallet = 417,
@@ -195,8 +155,6 @@ pub mod errors {
   LeaseAgreementFinished,
   LeaseAgreementProlonged,
   LeaseNftRecovered,
-  EquityEligibilityGranted,
-  EquityEligibilityRevoked,
 ])]
 pub struct Lease {
     /// Ownership control for contract configuration.
@@ -205,14 +163,12 @@ pub struct Lease {
     escrow: External<EscrowContractRef>,
     /// NFT contract used to mint frozen lease NFTs to tenants.
     nft: External<NFTContractRef>,
-    /// Property registry used to validate lease equity options.
+    /// Property registry used to validate lease property associations.
     property_registry: External<PropertyRegistryContractRef>,
     /// User registry used to authorize user IDs and resolve active wallets.
     user_registry: External<UserRegistryContractRef>,
     /// Lease agreements keyed by lease agreement ID.
     leases: Mapping<U256, LeaseAgreement>,
-    /// Equity Eligibility keyed by property ID and tenant user ID.
-    equity_eligible: Mapping<(U256, U256), bool>,
     /// Number of lease agreements created.
     leases_count: Var<U256>,
     /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
@@ -341,14 +297,6 @@ impl Lease {
         true
     }
 
-    /// Returns `true` if `account` is equity-eligible for `property_id`, `false` otherwise.
-    /// @dev Eligibility is not automatically time-bounded. It persists until the
-    /// landlord calls `finalize_lease_agreement` for the associated lease.
-    /// Finalization is a protocol-level obligation after lease expiry.
-    pub fn is_equity_eligible(&self, property_id: U256, account: U256) -> bool {
-        self.equity_eligible.get_or_default(&(property_id, account))
-    }
-
     // =========================================================================
     // Lease Management
     // =========================================================================
@@ -422,44 +370,25 @@ impl Lease {
         let token_id = self.nft.mint(tenant_wallet, metadata);
         self.nft.set_frozen_tokens(&token_id, true);
 
-        // Mark the tenant as eligible for property equity
-        if let Some(equity_option) = &params.equity_option {
-            let property_id = equity_option.property_id;
+        let property_id = params.property_id;
+        let property = self.property_registry.get_property(property_id);
 
-            if self
-                .equity_eligible
-                .get_or_default(&(property_id, params.tenant))
-            {
-                self.env().revert(Error::TenantAlreadyEquityEligible);
-            }
+        if !matches!(
+            property.status,
+            crate::property_registry::types::PropertyStatus::Active
+        ) {
+            self.env().revert(Error::InvalidPropertyStatus);
+        }
 
-            let property = self.property_registry.get_property(property_id);
-
-            if !matches!(
-                property.status,
-                crate::property_registry::types::PropertyStatus::Active
-            ) {
-                self.env().revert(Error::InvalidPropertyStatus);
-            }
-
-            if property.issuer != landlord {
-                self.env().revert(Error::InvalidPropertyIssuer);
-            }
-
-            self.equity_eligible
-                .set(&(property_id, params.tenant), true);
-
-            self.env().emit_event(EquityEligibilityGranted {
-                property_id,
-                account: params.tenant,
-            });
+        if property.issuer != landlord {
+            self.env().revert(Error::InvalidPropertyIssuer);
         }
 
         let lease_agreement = LeaseAgreement {
             tenant: params.tenant,
             landlord,
             rent_distribution_terms: params.rent_distribution_terms,
-            equity_option: params.equity_option,
+            property_id,
             monthly_rent,
             security_deposit: params.security_deposit,
             invoices_ids,
@@ -481,11 +410,6 @@ impl Lease {
     }
 
     /// Allows to finalize lease agreement between tenant and landlord when agreement has finished and won't be prolonged
-    ///
-    /// @dev Finalization is a protocol-level obligation after lease expiry. This
-    /// is the only mechanism that removes equity eligibility for the tenant.
-    /// Until this function is called, the tenant remains eligible regardless of
-    /// the lease end time.
     #[odra(non_reentrant)]
     pub fn finalize_lease_agreement(
         &mut self,
@@ -510,18 +434,6 @@ impl Lease {
             lease_agreement.landlord,
             *security_deposit_charge,
         );
-
-        // Clear the `equity_eligible` entry that was set at lease creation
-        if let Some(ref equity_option) = lease_agreement.equity_option {
-            let property_id = equity_option.property_id;
-            let tenant = lease_agreement.tenant;
-            self.equity_eligible.set(&(property_id, tenant), false);
-
-            self.env().emit_event(EquityEligibilityRevoked {
-                property_id,
-                account: tenant,
-            });
-        }
 
         // The lease NFT remains frozen (set at creation) to prevent unauthorized transfers.
         lease_agreement.is_finished = true;
