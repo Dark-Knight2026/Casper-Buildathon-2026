@@ -1,0 +1,11 @@
+resources/legacy
+.builder*
+.backend*
+/target
+.vscode
+/wasm
+/keys
+.idea
+
+.DS_Store
+.env

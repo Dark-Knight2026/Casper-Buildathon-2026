@@ -1,0 +1,23 @@
+[[contracts]]
+fqn = "big_coin::BigCoin"
+
+[[contracts]]
+fqn = "roles::Roles"
+
+[[contracts]]
+fqn = "escrow::Escrow"
+
+[[contracts]]
+fqn = "treasury::Treasury"
+
+[[contracts]]
+fqn = "nft::NFT"
+
+[[contracts]]
+fqn = "lease::Lease"
+
+[[contracts]]
+fqn = "property_registry::PropertyRegistry"
+
+[[contracts]]
+fqn = "user_registry::UserRegistry"
