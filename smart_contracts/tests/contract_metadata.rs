@@ -1,16 +1,10 @@
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
-    compliance_policy::{CompliancePolicy, CompliancePolicyInitArgs},
     escrow::{Escrow, EscrowInitArgs},
     ico::{ICOInitArgs, ICO},
-    investor_registry::{InvestorRegistry, InvestorRegistryInitArgs},
     lease::{Lease, LeaseInitArgs},
     mocks::styks_price_feed::StyksPriceFeed,
     nft::{types::NFTInitParams, NFT},
-    property_fraction_token::{
-        types::PropertyFractionTokenInitParams, PropertyFractionToken,
-        PropertyFractionTokenInitArgs,
-    },
     property_registry::{PropertyRegistry, PropertyRegistryInitArgs},
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
@@ -277,23 +271,6 @@ fn test_vesting_metadata() {
 }
 
 #[test]
-fn test_investor_registry_metadata() {
-    let env = odra_test::env();
-    let investor_registry = InvestorRegistry::deploy(
-        &env,
-        InvestorRegistryInitArgs {
-            owner: env.get_account(0),
-        },
-    );
-
-    assert_cep96_metadata!(
-        investor_registry,
-        "BIG LeaseFi Investor Registry",
-        "On-chain investor verification and freeze state for tokenized property flows."
-    );
-}
-
-#[test]
 fn test_property_registry_metadata() {
     let env = odra_test::env();
     let owner = env.get_account(0);
@@ -310,54 +287,5 @@ fn test_property_registry_metadata() {
         property_registry,
         "BIG LeaseFi Property Registry",
         "Tokenized property records and lifecycle management."
-    );
-}
-
-#[test]
-fn test_compliance_policy_metadata() {
-    let env = odra_test::env();
-    let owner = env.get_account(0);
-    let compliance = CompliancePolicy::deploy(
-        &env,
-        CompliancePolicyInitArgs {
-            owner,
-            investor_registry: env.get_account(1),
-            property_registry: env.get_account(2),
-            lease: env.get_account(3),
-            user_registry: env.get_account(4),
-        },
-    );
-
-    assert_cep96_metadata!(
-        compliance,
-        "BIG LeaseFi Compliance Policy",
-        "Transfer compliance gate for property ownership tokens."
-    );
-}
-
-#[test]
-fn test_property_fraction_token_metadata() {
-    let env = odra_test::env();
-    let owner = env.get_account(0);
-    let token = PropertyFractionToken::deploy(
-        &env,
-        PropertyFractionTokenInitArgs {
-            params: PropertyFractionTokenInitParams {
-                owner,
-                property_id: U256::zero(),
-                compliance_policy: env.get_account(1),
-                symbol: String::from("LFPROP"),
-                name: String::from("LeaseFi Property Fraction"),
-                decimals: 18,
-                initial_supply: U256::from(1_000_000),
-                initial_holder: env.get_account(2),
-            },
-        },
-    );
-
-    assert_cep96_metadata!(
-        token,
-        "BIG LeaseFi Property Fraction Token",
-        "Reference property ownership fraction token with compliance checks."
     );
 }

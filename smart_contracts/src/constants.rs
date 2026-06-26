@@ -27,9 +27,6 @@ pub const PRIVATE_SALE_CLIFF_DURATION: u64 = 6 * ONE_MONTH_IN_MILLISECONDS;
 
 pub const PRIVATE_SALE_VESTING_DURATION: u64 = 12 * ONE_MONTH_IN_MILLISECONDS;
 
-/// Minimum invoice deadline window for escrow (5 minutes in milliseconds).
-pub const MIN_DEADLINE_IN_MS: u64 = 5 * 60 * 1_000;
-
 /// Required waiting period between unstaking and withdrawal
 pub const UNBONDING_PERIOD: u64 = 48 * 60 * 60 * 1_000; // 48 hours
 
