@@ -314,6 +314,30 @@ LeaseFi's product principle is **"the wallet is invisible."** Renters sign up wi
 
 > The dApp is mid-rebuild onto the Rust backend: **auth + profile are live against `/api/v1`**, while richer dashboards currently render against typed mock fixtures behind feature flags until each backend endpoint lands. Status per surface is tracked in the frontend's `docs/FRONTEND_MVP_TASKS.md` (🟢 REAL / 🟠 MOCK / ⛔ BE-BLOCKED).
 
+### On-chain integration layer
+
+A dedicated **`src/lib/casper/`** module is the bridge between React and the deployed Odra contracts — pure, framework-agnostic Casper `bytesrepr` encoders and CES event decoders, so the dApp builds and reads real deploys directly (no backend round-trip for money-moving actions):
+
+| File | Responsibility |
+|---|---|
+| `leaseAgreement.ts` | Encodes `create_lease_agreement(params)` — tenant `user_id`, rent-distribution terms, **on-chain `property_id`**, rent/deposit `CurrencyAmount`, term, invoice validity — plus gas estimation and revert-reason mapping. |
+| `escrow.ts` | Builds `pay_invoice(invoice_id, amount)` for deposit/rent settlement; maps Escrow **and** UserRegistry revert codes to friendly copy. |
+| `propertyRegistry.ts` | Encodes `create_property` + status/metadata setters for landlord-signed property registration. |
+| `cep18.ts` | CEP-18 `approve` (escrow allowance) + balance reads. |
+| `leaseAgreementEvents.ts` | Decodes CES events from a confirmed deploy (`LeaseAgreementCreated`, NFT `Mint`, `InvoiceCreated`) to recover the on-chain lease id, NFT token id, and invoice ids. |
+| `signature.ts` | Casper message signing for the gasless lease-consent signature. |
+
+**Signed flows** (all via CSPR.click; each signing surface mounts its own hidden SDK host):
+
+1. **Property registration** — landlord signs `create_property` (+ NFT mint).
+2. **Lease consent** — both parties sign the canonical consent message → `POST /leases/{id}/sign`.
+3. **Lease recording** — landlord signs `create_lease_agreement`, then the parsed on-chain ids (read from the deploy's CES events) are reported to `POST /leases/{id}/commit`.
+4. **Payments** — tenant pays deposit/rent → CEP-18 `approve` (only if the allowance is short) → `Escrow.pay_invoice` (2% fee deducted atomically).
+
+**Real-time freshness.** Money-moving views use narrowly-scoped, self-terminating TanStack Query polling: the lease page polls while a lease awaits the **counterparty's signature** and (after commit) until the **indexer** writes the on-chain ids; payment views refetch on settlement. Every contract revert is surfaced as a human message (e.g. *"the property isn't Active on-chain yet"*, *"a party to this lease isn't fully registered on-chain"*) rather than a raw `User error: <n>`.
+
+> **Dev note:** open the dApp at **`https://lvh.me:5173`** (and `localhost`) — the CSPR.click app id is whitelisted for the `lvh.me` origin.
+
 ---
 
 ## 🤖 The Agentic AI layer (the Buildathon thesis)
