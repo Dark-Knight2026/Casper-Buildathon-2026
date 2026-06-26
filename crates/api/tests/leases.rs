@@ -1443,13 +1443,15 @@ async fn fully_signed_lease(env: &TestEnv, pool: &PgPool) -> PendingLease {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn commit_rejects_zero_onchain_id(pool: PgPool) {
-    // Regression (#6): "0" is the Casper "uninitialized" sentinel and must be
-    // rejected even though it is a non-empty all-digits string.
+async fn commit_accepts_zero_onchain_id(pool: PgPool) {
+    // Regression: the contract assigns lease-agreement ids from
+    // `get_lease_agreements_count()` BEFORE incrementing, so the first lease on
+    // chain has id "0". "0" is a valid id and must be committed, not rejected as
+    // an "uninitialized" sentinel.
     let env = common::setup_test_server(pool.clone(), false).await;
     let p = fully_signed_lease(&env, &pool).await;
 
-    let (status, _) = common::authed_request::<Value>(
+    let (status, body) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         &format!("/api/v1/leases/{}/commit", p.id),
@@ -1458,7 +1460,10 @@ async fn commit_rejects_zero_onchain_id(pool: PgPool) {
     )
     .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::OK);
+    let committed = body.unwrap();
+    assert_eq!(committed["onchainLeaseId"].as_str(), Some("0"));
+    assert_eq!(committed["status"], "active");
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]

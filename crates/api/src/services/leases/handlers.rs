@@ -538,7 +538,7 @@ fn map_lease_chain_error(err: LeaseChainError) -> ApiError {
 ///
 /// # Errors
 ///
-/// Returns `400` on a zero/non-decimal `onchainLeaseId`, a non-decimal
+/// Returns `400` on an empty/non-decimal `onchainLeaseId`, a non-decimal
 /// `nftTokenId`, or an id absent on-chain, `403` when not the landlord, `404`
 /// when the lease is missing, `409` when the lease is not awaiting commit, both
 /// signatures are not yet present, the agreement is not fully funded, or the
@@ -597,12 +597,13 @@ pub async fn commit_lease(
             "both consent signatures are required before commit".to_owned(),
         ));
     }
-    // Validate both ids are non-empty decimal U256 strings before the chain read
-    // / NUMERIC cast. `0` is the Casper "uninitialized" sentinel for the
-    // agreement id, so it is rejected; the NFT token id only needs to be decimal.
-    if !is_decimal_u256(&payload.onchain_lease_id) || payload.onchain_lease_id == "0" {
+    // Validate both ids are non-empty decimal U256 strings before the chain
+    // read / NUMERIC cast. `0` is a valid agreement id: the contract assigns
+    // ids from `get_lease_agreements_count()` BEFORE incrementing, so the first
+    // lease is id `0`. Only an empty or non-decimal value is rejected.
+    if !is_decimal_u256(&payload.onchain_lease_id) {
         return Err(ApiError::BadRequest(
-            "onchainLeaseId must be a non-zero decimal U256 string".to_owned(),
+            "onchainLeaseId must be a decimal U256 string".to_owned(),
         ));
     }
     if !is_decimal_u256(&payload.nft_token_id) {
