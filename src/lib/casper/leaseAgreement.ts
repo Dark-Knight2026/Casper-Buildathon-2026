@@ -104,8 +104,8 @@ export interface CreateLeaseAgreementParamsInput {
   tenantUserId: U256Input;
   /** Rent split for an optional property manager; omit for none. */
   rentDistributionTerms?: RentDistributionTermsInput;
-  /** Equity property's on-chain id; null = no equity option. */
-  equityPropertyId?: U256Input | null;
+  /** Property's on-chain id (`U256`) — required; the lease is bound to it. */
+  propertyId: U256Input;
   monthlyRent: CurrencyAmountInput;
   securityDeposit: CurrencyAmountInput;
   /**
@@ -227,24 +227,19 @@ export function encodeRentDistributionTerms(
 
 /**
  * `CreateLeaseAgreementParams::to_bytes` — concatenated fields in declaration
- * order (deployed `user-registry` struct):
+ * order (deployed struct):
  *   tenant (U256), rent_distribution_terms (RentDistributionTerms),
- *   equity_option: Option<{ property_id: U256 }>, monthly_rent (CurrencyAmount),
+ *   property_id (U256, required — NOT an Option), monthly_rent (CurrencyAmount),
  *   security_deposit (CurrencyAmount), start (U64), end (U64),
  *   invoice_validity_duration (U64).
  */
 export function encodeCreateLeaseAgreementParams(
   params: CreateLeaseAgreementParamsInput
 ): Uint8Array {
-  const equityOption =
-    params.equityPropertyId == null
-      ? null
-      : u256ToBytes(params.equityPropertyId);
-
   return concatBytes(
     u256ToBytes(params.tenantUserId),
     encodeRentDistributionTerms(params.rentDistributionTerms),
-    optionToBytes(equityOption),
+    u256ToBytes(params.propertyId),
     encodeCurrencyAmount(params.monthlyRent),
     encodeCurrencyAmount(params.securityDeposit),
     u64ToBytes(params.startUnixMillis),
@@ -296,6 +291,10 @@ const LEASE_ERROR_MAP: Record<string, string> = {
     'Invalid lease dates — the term must be a whole number of 30-day months.',
   '404': 'The monthly rent must be greater than zero.',
   '405': 'Invalid landlord — register your on-chain identity first.',
+  '409':
+    'The property isn’t Active on-chain. Register and activate the property in PropertyRegistry before recording a lease against it, and check you entered the right property id.',
+  '410':
+    'You’re not the issuer of this property on-chain — only the landlord who registered the property can record a lease against it. Check the property id.',
   '411':
     'The property-manager share is invalid (must be 0 when there is no manager).',
   '412': 'Invalid property manager — check the manager’s on-chain id.',

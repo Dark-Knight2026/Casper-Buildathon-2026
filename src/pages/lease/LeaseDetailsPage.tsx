@@ -39,6 +39,9 @@ import { LeaseOnChainCommitCard } from '@/components/lease/LeaseOnChainCommitCar
 // it gives up (rather than polling forever) if the indexer is down.
 const INDEXER_POLL_MS = 15_000;
 const INDEXER_POLL_WINDOW_MS = 5 * 60_000;
+// While a lease awaits signatures, poll so the counterparty's signature appears
+// without a manual reload (foreground only).
+const SIGNATURE_POLL_MS = 15_000;
 
 /** Both submit and delete fail with `409` on a status conflict, `403` if not the landlord. */
 function mapActionError(err: unknown): string {
@@ -81,9 +84,21 @@ export const LeaseDetailsPage = () => {
     // stopped/lagging indexer doesn't poll forever, and never in a background tab.
     refetchInterval: (query) => {
       const l = query.state.data;
-      if (!l?.commitTxHash || l.onchainLeaseId) return false;
-      const sinceUpdate = Date.now() - Date.parse(l.updatedAt);
-      return sinceUpdate < INDEXER_POLL_WINDOW_MS ? INDEXER_POLL_MS : false;
+      if (!l) return false;
+      // Awaiting the counterparty's signature — poll so it shows up live.
+      if (l.status === 'pending-signatures') {
+        const bothSigned = Boolean(
+          l.signatureProgress?.landlord?.signed &&
+          l.signatureProgress?.tenant?.signed
+        );
+        if (!bothSigned) return SIGNATURE_POLL_MS;
+      }
+      // After commit, poll until the indexer writes the on-chain ids (bounded).
+      if (l.commitTxHash && !l.onchainLeaseId) {
+        const sinceUpdate = Date.now() - Date.parse(l.updatedAt);
+        return sinceUpdate < INDEXER_POLL_WINDOW_MS ? INDEXER_POLL_MS : false;
+      }
+      return false;
     },
     refetchIntervalInBackground: false,
   });

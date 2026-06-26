@@ -125,7 +125,7 @@ describe('encodeCreateLeaseAgreementParams', () => {
   it('concatenates fields in declaration order with no outer length prefix', () => {
     const bytes = encodeCreateLeaseAgreementParams({
       tenantUserId: 5n,
-      equityPropertyId: null,
+      propertyId: 0n,
       monthlyRent: { amount: 250n },
       securityDeposit: { amount: 250n },
       startUnixMillis: 0n,
@@ -136,7 +136,7 @@ describe('encodeCreateLeaseAgreementParams', () => {
     const expected =
       TENANT_HEX + // tenant U256(5)
       NO_MANAGER_HEX + // rent_distribution_terms: None ++ bps 0
-      '00' + // equity_option Option::None
+      '00' + // property_id U256(0)
       '00' +
       '01fa' + // monthly_rent: None ++ U256(250)
       '00' +
@@ -148,14 +148,14 @@ describe('encodeCreateLeaseAgreementParams', () => {
     expect(hex(bytes)).toBe(expected);
   });
 
-  it('encodes Some equity_option and a property manager', () => {
+  it('encodes property_id and a property manager', () => {
     const bytes = encodeCreateLeaseAgreementParams({
       tenantUserId: 5n,
       rentDistributionTerms: {
         propertyManagerUserId: 7n,
         propertyManagerBps: 250,
       },
-      equityPropertyId: 9n,
+      propertyId: 9n,
       monthlyRent: { amount: 1n },
       securityDeposit: { amount: 1n },
       startUnixMillis: 0n,
@@ -168,8 +168,7 @@ describe('encodeCreateLeaseAgreementParams', () => {
       '01' +
       '0107' +
       'fa000000' + // rent_distribution_terms: Some(U256(7)) ++ bps u32(250)
-      '01' +
-      '0109' + // equity_option Option::Some { property_id U256(9) }
+      '0109' + // property_id U256(9) — plain U256, no Option tag
       '00' +
       '0101' + // monthly_rent: None ++ U256(1)
       '00' +
@@ -192,7 +191,7 @@ describe('estimateCreateLeaseGas', () => {
     const at = (months: bigint) =>
       estimateCreateLeaseGas({
         tenantUserId: 1n,
-        equityPropertyId: null,
+        propertyId: 0n,
         monthlyRent: { amount: 1n },
         securityDeposit: { amount: 1n },
         startUnixMillis: 0n,
@@ -207,7 +206,7 @@ describe('estimateCreateLeaseGas', () => {
   it('falls back to the base when the term is empty/inverted', () => {
     const gas = estimateCreateLeaseGas({
       tenantUserId: 1n,
-      equityPropertyId: null,
+      propertyId: 0n,
       monthlyRent: { amount: 1n },
       securityDeposit: { amount: 1n },
       startUnixMillis: 100n,

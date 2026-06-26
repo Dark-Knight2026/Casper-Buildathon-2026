@@ -32,6 +32,14 @@ export interface LeaseCommitIds {
   onchainLeaseId: string | null;
   /** The lease NFT's `Mint.token_id` (U256 decimal string). */
   nftTokenId: string | null;
+  /**
+   * Every `InvoiceCreated.invoice_id` (U256 decimal strings), in the contract's
+   * creation order: the security deposit first, then one per rent month. Lets
+   * the FE resolve an invoice's on-chain id when the backend indexer hasn't
+   * bound it yet (maps positionally to the lease's invoices sorted deposit-first
+   * then by deadline). Empty on any parse failure.
+   */
+  invoiceIds: string[];
 }
 
 const RPC_PROXY_URL = '/api/casper-rpc';
@@ -156,7 +164,11 @@ export async function extractLeaseCommitIds(
   deployHash: string,
   signal?: AbortSignal
 ): Promise<LeaseCommitIds> {
-  const empty: LeaseCommitIds = { onchainLeaseId: null, nftTokenId: null };
+  const empty: LeaseCommitIds = {
+    onchainLeaseId: null,
+    nftTokenId: null,
+    invoiceIds: [],
+  };
 
   try {
     const controller = new AbortController();
@@ -193,6 +205,7 @@ export async function extractLeaseCommitIds(
 
     let onchainLeaseId: string | null = null;
     let nftTokenId: string | null = null;
+    const invoiceIds: string[] = [];
 
     for (const { name, reader } of iterEventBytes(effects)) {
       try {
@@ -201,13 +214,15 @@ export async function extractLeaseCommitIds(
         } else if (name === 'event_Mint' && nftTokenId === null) {
           reader.skipKey(); // `to`
           nftTokenId = reader.u256(); // token_id
+        } else if (name === 'event_InvoiceCreated') {
+          invoiceIds.push(reader.u256()); // invoice_id; created_at unused
         }
       } catch {
-        // Field layout didn't match — leave that id null.
+        // Field layout didn't match — leave that id out.
       }
     }
 
-    return { onchainLeaseId, nftTokenId };
+    return { onchainLeaseId, nftTokenId, invoiceIds };
   } catch (err) {
     logger.warn('Failed to read lease commit ids from deploy:', err);
     return empty;

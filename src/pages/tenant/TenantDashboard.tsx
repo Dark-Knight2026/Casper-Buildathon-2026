@@ -14,15 +14,10 @@ import {
   DollarSign,
   Wrench,
   Calendar,
-  Download,
   CreditCard,
   Bell,
   MapPin,
   Check,
-  Clock,
-  AlertTriangle,
-  Loader2,
-  RotateCcw,
   ArrowRight,
 } from 'lucide-react';
 import {
@@ -36,9 +31,9 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { Payment } from '@/services/paymentService';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { TenantPaymentsSummary } from '@/components/payments/TenantPaymentsSummary';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
 import { TenantScoreCard } from '@/components/tenant/TenantScoreCard';
@@ -65,26 +60,7 @@ function DemoBadge() {
   );
 }
 
-// Demo fixtures — no backend for payments / lease-activity yet.
-const MOCK_PAYMENTS: Payment[] = [
-  {
-    id: 'p1',
-    amount: 1500,
-    paymentDate: new Date('2025-12-01'),
-    paymentMethod: 'bank_transfer',
-    paymentStatus: 'completed',
-    leaseId: 'mock-lease-1',
-  } as Payment,
-  {
-    id: 'p2',
-    amount: 1500,
-    paymentDate: new Date('2025-11-01'),
-    paymentMethod: 'bank_transfer',
-    paymentStatus: 'completed',
-    leaseId: 'mock-lease-1',
-  } as Payment,
-];
-
+// Demo fixture — no backend for lease-activity yet (payments are now real).
 type ActivityItem = {
   id: string;
   label: string;
@@ -122,28 +98,6 @@ const formatDate = (date: Date | string) =>
     month: 'short',
     day: 'numeric',
   }).format(new Date(date));
-
-const getPaymentStatusBadge = (status: string) => {
-  const statusStyles: Record<
-    string,
-    { className: string; icon: typeof Check }
-  > = {
-    completed: { className: 'bg-green-100 text-green-800', icon: Check },
-    pending: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
-    processing: { className: 'bg-blue-100 text-blue-800', icon: Loader2 },
-    failed: { className: 'bg-red-100 text-red-800', icon: AlertTriangle },
-    refunded: { className: 'bg-gray-100 text-gray-800', icon: RotateCcw },
-    cancelled: { className: 'bg-gray-100 text-gray-800', icon: AlertTriangle },
-  };
-  const { className, icon: Icon } =
-    statusStyles[status] || statusStyles.pending;
-  return (
-    <Badge className={`gap-1 ${className}`}>
-      <Icon className="h-3 w-3" aria-hidden="true" />
-      {status.toUpperCase()}
-    </Badge>
-  );
-};
 
 export function TenantDashboard() {
   const navigate = useNavigate();
@@ -494,69 +448,8 @@ export function TenantDashboard() {
           </CardContent>
         </Card>
 
-        {/* Recent Payments (Demo — no backend) */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <CardTitle>Recent Payments</CardTitle>
-                  <DemoBadge />
-                </div>
-                <CardDescription>Your payment history</CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('/tenant/payments')}
-              >
-                View All
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {MOCK_PAYMENTS.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 p-4 border rounded-lg"
-                >
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
-                      aria-hidden="true"
-                    >
-                      <DollarSign className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-medium">
-                        {formatCurrency(payment.amount)}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {formatDate(payment.paymentDate)} •{' '}
-                        {payment.paymentMethod.replace('_', ' ')}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 pl-14 sm:pl-0">
-                    {getPaymentStatusBadge(payment.paymentStatus)}
-                    {payment.paymentStatus === 'completed' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          navigate(`/tenant/payments/${payment.id}`)
-                        }
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Payments — real invoice summary (§3.5b P-3.2) */}
+        <TenantPaymentsSummary />
       </div>
     </ErrorBoundary>
   );

@@ -9,38 +9,38 @@ Tasks 17–26 were captured on **2026-05-26** after Anthony shared
 Task 30 was captured at the **2026-05-28** recurring meeting after a
 CSPR.click account lockout exposed the identity/wallet coupling problem.
 
-| #  | Task                                                       | Status            |
-|----|------------------------------------------------------------|-------------------|
-| 1  | Extended search filters (bedrooms, bathrooms, sqft, type)  | ✅ shipped        |
-| 2  | My Properties — current + past lease agreements            | ✅ shipped        |
-| 3  | Nested Property Detail tabs (Leases / Payments / …)        | ✅ shipped        |
-| 4  | 6-month lease-extension intent banner                      | ✅ demo¹          |
-| 5  | T-91 decision banner + landlord listing actions            | ✅ demo¹          |
-| 6  | Property recommendations 6 months before lease ends        | 🔲 pending        |
-| 7  | Tenant Score System                                        | 🔲 pending        |
-| 8  | User Onboarding Tour (post-registration tooltips)          | 🔲 pending        |
-| 9  | Extended search — in-home + surrounding-area filters       | 🔲 pending        |
-| 10 | Property page verification disclaimer                      | 🔲 pending        |
-| 11 | Landlord-owned surrounding-area data entry                 | 🔲 pending²       |
-| 12 | Terminology pass — "Tokens" → "Equity" in user-facing copy | 🔲 pending        |
-| 13 | Equity gating — tenant–landlord lease option only          | 🔲 pending        |
-| 14 | Bidirectional tenant ↔ landlord reviews (Uber-style)       | 🕓 phase 2        |
-| 15 | Admin moderation panel for reviews                         | 🕓 phase 2        |
-| 16 | Equities marketplace UI (public buy-in, secondary market)  | 🚫 blocked³       |
-| 17 | Design-reference scope decision (header / wallet-invisible)| ✅ confirmed⁴     |
-| 18 | Tenant home alignment with design reference §1             | 🔲 pending        |
-| 19 | Landlord / PM dashboard alignment with §2                  | 🔲 pending        |
-| 20 | Pay rent + `<FeeDisplay/>` canonical breakdown (§3)        | 🔲 pending        |
-| 21 | `<PreSignatureConfirmation/>` shared modal (§4)            | 🔲 pending        |
-| 22 | Lease invitation landing — pre-auth, anti-phishing (§5)    | 🔲 pending        |
-| 23 | Lease signing journey — wizard + counter-sign (§6)         | 🔲 pending        |
-| 24 | Dispute filing UI (§7)                                     | 🔲 pending⁵       |
-| 25 | `<TransactionStatus/>` shared state-machine (§8)           | 🔲 pending        |
-| 26 | `<KYCGate/>` around Sumsub WebSDK  (§10)                   | 🔲 pending        |
-| 27 | ICO page rebrand — Token Sale → Big Token Dashboard        | 🚧 partial⁶       |
-| 28 | Apply Now duplicate on tenant Property Detail              | ✅ shipped        |
-| 29 | MVP role narrowing — purge buyer/seller/agent/broker UI    | 🔲 pending⁷       |
-| 30 | Auth/wallet decoupling — backend identity + sign-time wallet| 🔲 pending⁸       |
+| #   | Task                                                         | Status        |
+| --- | ------------------------------------------------------------ | ------------- |
+| 1   | Extended search filters (bedrooms, bathrooms, sqft, type)    | ✅ shipped    |
+| 2   | My Properties — current + past lease agreements              | ✅ shipped    |
+| 3   | Nested Property Detail tabs (Leases / Payments / …)          | ✅ shipped    |
+| 4   | 6-month lease-extension intent banner                        | ✅ demo¹      |
+| 5   | T-91 decision banner + landlord listing actions              | ✅ demo¹      |
+| 6   | Property recommendations 6 months before lease ends          | 🔲 pending    |
+| 7   | Tenant Score System                                          | 🔲 pending    |
+| 8   | User Onboarding Tour (post-registration tooltips)            | 🔲 pending    |
+| 9   | Extended search — in-home + surrounding-area filters         | 🔲 pending    |
+| 10  | Property page verification disclaimer                        | 🔲 pending    |
+| 11  | Landlord-owned surrounding-area data entry                   | 🔲 pending²   |
+| 12  | Terminology pass — "Tokens" → "Equity" in user-facing copy   | 🔲 pending    |
+| 13  | Equity gating — tenant–landlord lease option only            | 🔲 pending    |
+| 14  | Bidirectional tenant ↔ landlord reviews (Uber-style)         | 🕓 phase 2    |
+| 15  | Admin moderation panel for reviews                           | 🕓 phase 2    |
+| 16  | Equities marketplace UI (public buy-in, secondary market)    | 🚫 blocked³   |
+| 17  | Design-reference scope decision (header / wallet-invisible)  | ✅ confirmed⁴ |
+| 18  | Tenant home alignment with design reference §1               | 🔲 pending    |
+| 19  | Landlord / PM dashboard alignment with §2                    | 🔲 pending    |
+| 20  | Pay rent + `<FeeDisplay/>` canonical breakdown (§3)          | 🔲 pending    |
+| 21  | `<PreSignatureConfirmation/>` shared modal (§4)              | 🔲 pending    |
+| 22  | Lease invitation landing — pre-auth, anti-phishing (§5)      | 🔲 pending    |
+| 23  | Lease signing journey — wizard + counter-sign (§6)           | 🔲 pending    |
+| 24  | Dispute filing UI (§7)                                       | 🔲 pending⁵   |
+| 25  | `<TransactionStatus/>` shared state-machine (§8)             | 🔲 pending    |
+| 26  | `<KYCGate/>` around Sumsub WebSDK (§10)                      | 🔲 pending    |
+| 27  | ICO page rebrand — Token Sale → Big Token Dashboard          | 🚧 partial⁶   |
+| 28  | Apply Now duplicate on tenant Property Detail                | ✅ shipped    |
+| 29  | MVP role narrowing — purge buyer/seller/agent/broker UI      | 🔲 pending⁷   |
+| 30  | Auth/wallet decoupling — backend identity + sign-time wallet | 🔲 pending⁸   |
 
 ¹ Demo = UI is final, but the backend integration is mocked. Open product
 questions and required endpoints are documented at the top of
@@ -78,7 +78,7 @@ unmounted from MVP routing and hidden from MVP navigation. See Task 29.
 CSPR.click lockout (forgot the wallet password → account inaccessible).
 **Amends Task 17's invisible-wallet decision:** identity moves to a
 backend-owned auth layer (own login, independent of any wallet); the
-wallet becomes a separate, on-demand *signing* concern attached to the
+wallet becomes a separate, on-demand _signing_ concern attached to the
 profile. Backend login rewrite required (Ivan confirmed on the call).
 Confirm final scope with Anthony before implementation; the CSPR.click
 team question (Web3Auth factor mode per appId) is still open.
@@ -90,9 +90,9 @@ team question (Web3Auth factor mode per appId) is still open.
 ### Client request (verbatim)
 
 > "Additionally, 6 months from lease expiration the tenant will be able to see
->  other properties for rent that meet their predefined requirements (should be
->  a part of their profile) with move-in dates starting the same month that
->  their current is expiring."
+> other properties for rent that meet their predefined requirements (should be
+> a part of their profile) with move-in dates starting the same month that
+> their current is expiring."
 
 ### Goal
 
@@ -117,7 +117,7 @@ current lease ends.
     OR within multi-select).
   - Filters `availableDate ≥ first day of the month the current lease ends`.
   - Sorts by a simple match score (e.g. count of preference categories matched
-    + budget tightness) — final scoring algorithm TBD.
+    - budget tightness) — final scoring algorithm TBD.
 - A `<RecommendedProperties>` component:
   - Renders only when at least one active lease has `daysUntil(endDate) ≤ 180`.
   - Reuses `PropertyCard` from `@/components/property/PropertyCard`.
@@ -132,6 +132,18 @@ current lease ends.
   - Add a new card to `TenantProfile.tsx` with the form fields above
   - On save, persist via `PUT /api/v1/users/me/preferences` (mock for demo)
 
+### Status (2026-06-19)
+
+The `<RecommendedProperties>` widget was **removed** from `TenantDashboard` and
+`MyProperties` when those pages were wired to the real backend (`listLeases` +
+`getProperty`). The widget required a mock `Property` object (`FEATURED_PROPERTIES`
+/ `getMockRecommendations`), and there is still **no recommendations endpoint**, so
+it was dropped rather than left coupled to mock data. To restore: re-mount it once
+`GET /api/v1/properties/recommended?leaseId=…` exists, OR re-add it sooner as a
+clearly-labelled **Demo** widget (orange `Demo` badge, same convention now used for
+the demo payments/activity sections on the dashboards). `MyPropertyDetail` still
+renders mock recommendations and is itself still fully mock.
+
 ### Open product questions
 
 1. **Match logic strictness.**
@@ -140,7 +152,7 @@ current lease ends.
    their predefined requirements" which sounds strict. Confirm.
 2. **Move-in date interpretation.**
    "Starting the same month that their current is expiring" — does this mean
-   *exactly* that month, or *that month or later*? The latter is more useful
+   _exactly_ that month, or _that month or later_? The latter is more useful
    (tenant might want a flexible buffer); the former is what the words say.
 3. **Multiple active leases.**
    If the tenant rents two units (e.g. our `lease-current-1` + `lease-current-2`
@@ -197,12 +209,12 @@ existing `SearchContext` / `SavedSearches`.
 ### Client request (verbatim)
 
 > "I would like to create a tenant score system based on time rent payments,
->  maintenance documentation (changing out air filters, mowing grass, home
->  repairs or improvements), renting long term (longer the tenant stays in one
->  property the higher the score). The idea behind this scoring system would be
->  two fold; one used this system of human behavior over credit scores to
->  determine preferred tenants. Two this system can be a gate to prevent
->  landlords from renting to unfavorable tenants."
+> maintenance documentation (changing out air filters, mowing grass, home
+> repairs or improvements), renting long term (longer the tenant stays in one
+> property the higher the score). The idea behind this scoring system would be
+> two fold; one used this system of human behavior over credit scores to
+> determine preferred tenants. Two this system can be a gate to prevent
+> landlords from renting to unfavorable tenants."
 
 ### Goal
 
@@ -236,7 +248,7 @@ Future components likely (not in spec, recommend asking):
    - 0–100 (FICO-shaped from 300–850 is alternative)
    - 5-star
    - A–F letter grades
-   The choice impacts every UI surface. Recommend discussing this first.
+     The choice impacts every UI surface. Recommend discussing this first.
 2. **Component weights.**
    What % does each factor contribute?
    - Initial proposal: 50% on-time payments, 30% tenancy duration, 20%
@@ -246,7 +258,7 @@ Future components likely (not in spec, recommend asking):
    - "Unscored" badge until N events accumulate?
    - Neutral starting score (e.g. 70/100) that drifts based on behavior?
    - Inherit from external KYC / credit when available?
-   Pick a policy.
+     Pick a policy.
 4. **Maintenance documentation verification.**
    Tenant uploads a photo of a replaced air filter. Trust-based, or does
    landlord need to acknowledge ("Yes, I verified this")? Trust-based is
@@ -281,8 +293,8 @@ Future components likely (not in spec, recommend asking):
 11. **Threshold semantics for landlord gate.**
     - Soft gate: applications below threshold are flagged but still visible.
     - Hard gate: applications below threshold are auto-rejected / hidden.
-    Hard gate is closer to the spec ("prevent landlords from renting"); soft
-    gate is safer legally. Pick or make it configurable per landlord.
+      Hard gate is closer to the spec ("prevent landlords from renting"); soft
+      gate is safer legally. Pick or make it configurable per landlord.
 12. **What about new properties / new landlords?**
     The threshold gate is only useful when the tenant has a score. For a new
     tenant + new landlord both, the gate is no-op. Default behavior?
@@ -359,8 +371,8 @@ the user to read documentation.
 - Tour activates automatically on the **first authenticated session after
   registration**, per role.
 - Step-by-step tooltips / modals attached to key interface elements:
-  - Each step explains: *what* the section is, *what action* the user can
-    perform, *why* it matters
+  - Each step explains: _what_ the section is, _what action_ the user can
+    perform, _why_ it matters
   - Active element is highlighted (spotlight / dimmed background)
   - Keyboard navigation: `Esc` skips, `Enter` / arrows advance
 - "Skip tour" and "Don't show again" persist per user (backend flag).
@@ -449,7 +461,7 @@ surrounding-area filters.
 ### Open product questions
 
 1. **Match strictness for surrounding area.** AND across categories
-   (must satisfy *all*) or rank by how many are satisfied?
+   (must satisfy _all_) or rank by how many are satisfied?
 2. **Mile-range presets.** Show preset buttons (5 / 10 / 20 / 50 mi) or
    a free slider only? Presets are faster on mobile.
 3. **Imperial vs metric.** US-only for MVP, or allow km for international
@@ -497,9 +509,9 @@ tenants to verify independently before signing a lease.
 
 - A persistent disclaimer block on every property detail page, near the
   amenities and surrounding-area sections.
-- Copy: short, plain English — *"Amenities and proximity information are
+- Copy: short, plain English — _"Amenities and proximity information are
   provided by the landlord. Please verify independently before signing a
-  lease."*
+  lease."_
 - Always visible (not dismissible) so a first-time visitor cannot miss it.
 - Styled as an **informational notice** (neutral / blue), not a warning
   or error state.
@@ -563,7 +575,7 @@ edit time, so the tenant filter (Task 9) has structured data to query.
 
 ### Open product questions
 
-1. **Source of truth — confirm with Anthony.** Is the landlord the *only*
+1. **Source of truth — confirm with Anthony.** Is the landlord the _only_
    data source for v1, or do we also let agents/admins edit on the
    landlord's behalf? Default: landlord + admin.
 2. **Cap on entries per category.** Limit to e.g. 5 hospitals per property
@@ -601,7 +613,7 @@ component; type plumbing through services.
 
 > Anthony: "Could we — and I know that you guys are like coding development
 > world — either we kind of swap that word out when we're communicating and
-> say *equity*. So that kind of makes sense versus *tokens*… we're not
+> say _equity_. So that kind of makes sense versus _tokens_… we're not
 > talking tokens and splitting property into tokens and how many things, but
 > it's just more so of asking the property owner: what percentage of equity
 > are you willing to release to the public?"
@@ -1118,7 +1130,7 @@ once for six EIP-712 ceremonies, not six variants.
 - Mandatory orange-callout copy (verbatim, do not reword, do not collapse
   into a tooltip):
   > "Your Casper wallet will show the same details on the next screen.
-  >  If anything looks different, cancel and contact support."
+  > If anything looks different, cancel and contact support."
 - Footer: `Verifying contract · {canonical-mainnet-address}` — canonical
   string, never user-supplied.
 - Buttons: `Cancel` (returns to `idle` — **no toast, no Sentry, no error
@@ -1272,24 +1284,30 @@ in the FE scope.
 - Step 7: Share invite link (handoff to `/invite/:token`, see Task 22)
 
 **C · Share / handoff after landlord signs**
+
 - Surfaces the invite URL with copy-link, email-share, expiry info.
 
 **D · Waiting for tenant**
+
 - Status panel showing days since send + last-visited timestamp.
 
 **E · Lease active (both signed, on-chain finalized)**
+
 - Success state with links to lease detail + tx-explorer.
 
 **F · Failure-states triad**
+
 - Tenant declined / Tx reverted / Document hash mismatch — three distinct
   copies + recovery CTAs each.
 
 **G · Draft lifecycle state machine**
+
 - States: `draft → landlord_signed → tenant_signed → on_chain_finalized
-  → active`. Failure branches: `declined`, `expired`, `failed`.
+→ active`. Failure branches: `declined`, `expired`, `failed`.
 - Encoded as a TS discriminated union in `src/types/lease.ts`.
 
 **H · PM-on-behalf callout**
+
 - When the signer is a PM-role wallet acting for a landlord, both the
   PreSignature modal and the lease-detail page display
   "Signed on behalf of {LandlordName}".
@@ -1730,7 +1748,7 @@ purely visual.
 ### Open product questions
 
 1. **Cost-card placement on small screens.** On mobile, the `Move-in
-   Costs` card currently stacks below the action column. With the
+Costs` card currently stacks below the action column. With the
    button removed from the action column, mobile tenants must scroll
    to apply. Acceptable, or do we hoist the cost card above the
    action column on mobile only?
@@ -1841,8 +1859,8 @@ Type files that may carry vestigial role enums:
    - Narrow the union and exclude unmounted pages from `tsconfig.json`
      compilation (`exclude: ['src/pages/dashboard/buyer/**', …]`).
      Cleaner long term; more upfront work.
-   Recommend option B if the unmounted set is large enough; confirm
-   with Anastasia before committing.
+     Recommend option B if the unmounted set is large enough; confirm
+     with Anastasia before committing.
 3. **`AIAgents.tsx`.** Filename suggests AI assistants, not real-estate
    agents. Read content before unmounting — may be MVP-relevant.
 4. **`MaintenanceMarketplace.tsx` / `dashboard/maintenance/`.**
@@ -1890,7 +1908,7 @@ None — pure FE unmount + nav cleanup.
 
 LeaseFi recurring meeting **2026-05-28**. Triggered by a real lockout:
 a forgotten CSPR.click embedded-wallet password cost access to the whole
-account, because today the **wallet public key *is* the backend
+account, because today the **wallet public key _is_ the backend
 identity** (`nonce → signMessage → login`, see
 `src/services/ico/backendAuthService.ts`).
 
@@ -1928,12 +1946,12 @@ them behind a sign-time "Add wallet" step.
 
 **Scenario 1 — user already has a wallet (connect existing)**
 
-| Option | Provider key | Recovery owner |
-|--------|--------------|----------------|
-| Casper Wallet (extension) | `casper-wallet` | user (seed phrase) |
-| Ledger | `ledger` | user (hardware seed) |
-| MetaMask Casper Snap | `metamask-snap` | user (MM seed) |
-| WalletConnect (mobile) | `walletConnect` init opt | wallet-side |
+| Option                    | Provider key             | Recovery owner       |
+| ------------------------- | ------------------------ | -------------------- |
+| Casper Wallet (extension) | `casper-wallet`          | user (seed phrase)   |
+| Ledger                    | `ledger`                 | user (hardware seed) |
+| MetaMask Casper Snap      | `metamask-snap`          | user (MM seed)       |
+| WalletConnect (mobile)    | `walletConnect` init opt | wallet-side          |
 
 All connect via the same `clickRef.connect(providerKey, options)` path
 already implemented in `src/hooks/auth/useWalletConnect.ts`. Recovery is
@@ -1943,16 +1961,16 @@ already implemented in `src/hooks/auth/useWalletConnect.ts`. Recovery is
 
 - `clickRef.connect('csprclick-w3a-google' | 'csprclick-w3a-apple')`
   provisions an embedded Casper wallet via CSPR.click (Web3Auth).
-- ⚠️ The embedded-wallet *funds* still carry the recovery caveat — the
+- ⚠️ The embedded-wallet _funds_ still carry the recovery caveat — the
   Web3Auth factor mode is configured server-side per appId by CSPR.click
   and is **not** exposed in `CsprClickInitOptions` (verified: only
   `appName, appId, contentMode, casperNode?, chainName?, providers[],
-  walletConnect?`). But the **profile** is now safe regardless, since
+walletConnect?`). But the **profile** is now safe regardless, since
   identity is backend-owned.
 
 **Binding (proof-of-ownership)**
 
-Reuse the existing nonce flow, repurposed from *login* to *attach*:
+Reuse the existing nonce flow, repurposed from _login_ to _attach_:
 backend issues a nonce → `clickRef.signMessage(message, publicKey)` →
 backend verifies the signature → inserts the address into the profile's
 `user ↔ wallet[]` set. Same primitive already in
@@ -1973,8 +1991,8 @@ backend verifies the signature → inserts the address into the profile's
   proof-of-ownership before any signing proceeds.
 - A profile can hold **multiple** wallets; the user can mark one
   **active for signing** and swap it (`switchAccount` / `forgetAccount`
-  + the backend `user ↔ wallet[]` table). Swapping does **not** affect
-  the profile or past on-chain records.
+  - the backend `user ↔ wallet[]` table). Swapping does **not** affect
+    the profile or past on-chain records.
 - Losing a wallet never locks the profile. The user reconnects/creates a
   new wallet and the binding updates. (Funds in a lost embedded wallet
   may still be unrecoverable — surfaced via `SecurityRecoveryCard`.)

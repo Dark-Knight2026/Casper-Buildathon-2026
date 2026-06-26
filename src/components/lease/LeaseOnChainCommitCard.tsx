@@ -22,8 +22,8 @@
  * after the landlord starts.
  */
 
-import { useCallback, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, ShieldCheck } from 'lucide-react';
 
 import {
@@ -44,6 +44,7 @@ import {
   type LeaseCommitIds,
 } from '@/lib/casper/leaseAgreementEvents';
 import { commitLease } from '@/services/leaseService';
+import { getProperty } from '@/services/propertyAssetService';
 import { LEASE_CURRENCY, scaleToSmallestUnit } from '@/lib/leaseCurrency';
 import {
   LeaseOnChainForm,
@@ -69,6 +70,27 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const [form, setForm] = useState<LeaseOnChainFormState>(() =>
     initialLeaseOnChainForm(lease)
   );
+
+  // The on-chain `create_lease_agreement` needs the property's PropertyRegistry
+  // id (a U256), which lives on the property record, not the lease. Fetch it and
+  // prefill the form so the landlord doesn't type it by hand. `onchainPropertyId`
+  // is null until the property is registered + indexed on-chain.
+  const { data: property } = useQuery({
+    queryKey: ['property-asset', lease.propertyId],
+    queryFn: () => getProperty(lease.propertyId),
+    enabled: Boolean(lease.propertyId),
+    staleTime: 60_000,
+  });
+  const onchainPropertyId = property?.onchainPropertyId ?? null;
+  // Fill once, and only while the landlord hasn't entered their own value.
+  const prefilledPropertyId = useRef(false);
+  useEffect(() => {
+    if (prefilledPropertyId.current) return;
+    if (onchainPropertyId && form.equityPropertyId.trim() === '') {
+      prefilledPropertyId.current = true;
+      setForm((f) => ({ ...f, equityPropertyId: onchainPropertyId }));
+    }
+  }, [onchainPropertyId, form.equityPropertyId]);
   // Recording can fail after the deploy already succeeded on-chain — either the
   // id read or the `/commit` push — and must be retryable WITHOUT re-signing (a
   // second deploy = duplicate lease/NFT).
@@ -179,7 +201,6 @@ function CommitFlow({ lease }: { lease: Lease }) {
   const { step, txHash } = state;
   const busy = step === 'signing' || step === 'pending';
   const hasWalletSession = Boolean(account?.publicKey && clickRef);
-  const hasEquity = Boolean(lease.equityPropertyId);
   // The deploy hash already recorded on the lease (set before the indexer
   // finalizes). Present => we're recovering a stalled "finalizing" lease.
   const committedHash = lease.commitTxHash;
@@ -200,7 +221,7 @@ function CommitFlow({ lease }: { lease: Lease }) {
     invoiceValidityDurationRef.current = invoiceValiditySecs;
     create({
       tenantUserId: form.tenantUserId.trim(),
-      equityPropertyId: form.equityPropertyId.trim() || null,
+      propertyId: form.equityPropertyId.trim(),
       monthlyRent: {
         currency: LEASE_CURRENCY.address,
         amount: scaleToSmallestUnit(
@@ -292,7 +313,6 @@ function CommitFlow({ lease }: { lease: Lease }) {
 
       <LeaseOnChainForm
         form={form}
-        hasEquity={hasEquity}
         equityPropertyId={lease.equityPropertyId}
         onFieldChange={onFieldChange}
       />
@@ -334,7 +354,7 @@ function CommitFlow({ lease }: { lease: Lease }) {
           duplicate on-chain lease. */}
       {step !== 'confirmed' && (
         <Button
-          disabled={busy || !isLeaseOnChainFormValid(form, hasEquity)}
+          disabled={busy || !isLeaseOnChainFormValid(form)}
           onClick={submit}
         >
           {step === 'signing' && (

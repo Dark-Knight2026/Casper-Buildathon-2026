@@ -22,7 +22,7 @@ const makeLease = (over: Partial<Lease> = {}): Lease =>
 
 const validForm: LeaseOnChainFormState = {
   tenantUserId: '5',
-  equityPropertyId: '',
+  equityPropertyId: '7',
   monthlyRentAmount: '2500',
   securityDepositAmount: '3000',
   startDateTime: '2026-07-01T00:00',
@@ -79,31 +79,32 @@ describe('initialLeaseOnChainForm', () => {
 });
 
 describe('isLeaseOnChainFormValid', () => {
-  it('accepts a fully numeric form (no equity)', () => {
-    expect(isLeaseOnChainFormValid(validForm, false)).toBe(true);
+  it('accepts a fully numeric form', () => {
+    expect(isLeaseOnChainFormValid(validForm)).toBe(true);
   });
 
   it('rejects a missing tenant id', () => {
-    expect(
-      isLeaseOnChainFormValid({ ...validForm, tenantUserId: '' }, false)
-    ).toBe(false);
+    expect(isLeaseOnChainFormValid({ ...validForm, tenantUserId: '' })).toBe(
+      false
+    );
   });
 
   it('rejects a non-numeric amount', () => {
     expect(
-      isLeaseOnChainFormValid({ ...validForm, monthlyRentAmount: '12a' }, false)
+      isLeaseOnChainFormValid({ ...validForm, monthlyRentAmount: '12a' })
     ).toBe(false);
   });
 
-  it('requires the equity id only when the lease has equity', () => {
-    const noEquityId = { ...validForm, equityPropertyId: '' };
-    // hasEquity=false → empty equity id is fine.
-    expect(isLeaseOnChainFormValid(noEquityId, false)).toBe(true);
-    // hasEquity=true → empty equity id fails…
-    expect(isLeaseOnChainFormValid(noEquityId, true)).toBe(false);
-    // …and a numeric one passes.
+  it('always requires a numeric property id', () => {
+    // The deployed contract binds every lease to a property → required.
     expect(
-      isLeaseOnChainFormValid({ ...validForm, equityPropertyId: '9' }, true)
+      isLeaseOnChainFormValid({ ...validForm, equityPropertyId: '' })
+    ).toBe(false);
+    expect(
+      isLeaseOnChainFormValid({ ...validForm, equityPropertyId: '12a' })
+    ).toBe(false);
+    expect(
+      isLeaseOnChainFormValid({ ...validForm, equityPropertyId: '9' })
     ).toBe(true);
   });
 });

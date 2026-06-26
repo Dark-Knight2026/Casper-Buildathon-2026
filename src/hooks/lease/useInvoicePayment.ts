@@ -58,8 +58,14 @@ export interface InvoicePaymentState {
 }
 
 export interface PayInvoiceArgs {
-  /** The invoice to settle (needs `id`, `onchainInvoiceId`, `amountDue`). */
+  /** The invoice to settle (needs `id`, `amountDue`). */
   invoice: Invoice;
+  /**
+   * The escrow on-chain invoice id (`pay_invoice` target). Resolved by the
+   * caller — the backend `onchainInvoiceId` when bound, otherwise derived from
+   * the chain (see `useResolvedOnchainInvoiceId`).
+   */
+  onchainInvoiceId: string;
   /** Human USDC amount to pay (decimal string) — full `amountDue` for a deposit. */
   amount: string;
 }
@@ -154,7 +160,7 @@ export function useInvoicePayment(
   );
 
   const pay = useCallback(
-    async ({ invoice, amount }: PayInvoiceArgs) => {
+    async ({ invoice, onchainInvoiceId, amount }: PayInvoiceArgs) => {
       if (!isEscrowEnabled || !LEASE_CURRENCY.address) {
         const error = 'On-chain payments aren’t configured yet.';
         setState({ ...initialState, step: 'failed', error });
@@ -167,7 +173,7 @@ export function useInvoicePayment(
         optionsRef.current.onError?.(error);
         return;
       }
-      if (!invoice.onchainInvoiceId) {
+      if (!onchainInvoiceId) {
         const error =
           'This invoice isn’t ready to pay yet — it hasn’t been recorded on-chain.';
         setState({ ...initialState, step: 'failed', error });
@@ -197,7 +203,7 @@ export function useInvoicePayment(
 
         // 2. Pay on-chain.
         setState((s) => ({ ...s, step: 'paying' }));
-        const payTxHash = await runPay(invoice.onchainInvoiceId, amountRaw);
+        const payTxHash = await runPay(onchainInvoiceId, amountRaw);
         setState((s) => ({ ...s, payTxHash }));
 
         // 3. Record off-chain (best-effort — the indexer reconciles regardless).

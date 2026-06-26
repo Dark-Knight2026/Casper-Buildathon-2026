@@ -93,10 +93,7 @@ export function initialLeaseOnChainForm(lease: Lease): LeaseOnChainFormState {
 }
 
 /** Every required field is present and well-formed (equity id only when applicable). */
-export function isLeaseOnChainFormValid(
-  form: LeaseOnChainFormState,
-  hasEquity: boolean
-): boolean {
+export function isLeaseOnChainFormValid(form: LeaseOnChainFormState): boolean {
   return (
     isDigits(form.tenantUserId) &&
     isAmount(form.monthlyRentAmount) &&
@@ -104,15 +101,15 @@ export function isLeaseOnChainFormValid(
     isDateTime(form.startDateTime) &&
     isDateTime(form.endDateTime) &&
     isDigits(form.invoiceValidityDays) &&
-    (hasEquity ? isDigits(form.equityPropertyId) : true)
+    // The deployed contract requires an on-chain property id (plain U256) for
+    // every lease — always required, must be digits.
+    isDigits(form.equityPropertyId)
   );
 }
 
 interface LeaseOnChainFormProps {
   form: LeaseOnChainFormState;
-  /** Whether the lease is lease-to-own and so needs an equity property id. */
-  hasEquity: boolean;
-  /** The off-chain equity property UUID, shown as a hint when `hasEquity`. */
+  /** The off-chain property UUID, shown as a hint next to the on-chain id. */
   equityPropertyId?: string | null;
   onFieldChange: <K extends keyof LeaseOnChainFormState>(
     key: K,
@@ -122,7 +119,6 @@ interface LeaseOnChainFormProps {
 
 export function LeaseOnChainForm({
   form,
-  hasEquity,
   equityPropertyId,
   onFieldChange,
 }: LeaseOnChainFormProps) {
@@ -174,26 +170,29 @@ export function LeaseOnChainForm({
           </p>
         </div>
 
-        {hasEquity && (
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <Label htmlFor="equityPropertyId" className="text-xs">
-              Equity property on-chain id (lease-to-own) *
-            </Label>
-            <Input
-              id="equityPropertyId"
-              value={form.equityPropertyId}
-              onChange={(e) =>
-                onFieldChange('equityPropertyId', e.target.value)
-              }
-              className="font-mono text-sm"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Lease-to-own for property{' '}
-              <span className="font-mono">{equityPropertyId}</span> — enter its
-              on-chain id.
-            </p>
-          </div>
-        )}
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <Label htmlFor="equityPropertyId" className="text-xs">
+            Property on-chain id *
+          </Label>
+          <Input
+            id="equityPropertyId"
+            value={form.equityPropertyId}
+            placeholder="e.g. 7"
+            onChange={(e) => onFieldChange('equityPropertyId', e.target.value)}
+            className="font-mono text-sm"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            The property’s on-chain id (a whole number) in PropertyRegistry. The
+            contract binds the lease to it and requires it to be Active and
+            issued by you{equityPropertyId ? ' — ' : '.'}
+            {equityPropertyId ? (
+              <>
+                off-chain property{' '}
+                <span className="font-mono">{equityPropertyId}</span>.
+              </>
+            ) : null}
+          </p>
+        </div>
 
         {field('monthlyRentAmount', 'Monthly rent (tUSDC) *', {
           type: 'number',

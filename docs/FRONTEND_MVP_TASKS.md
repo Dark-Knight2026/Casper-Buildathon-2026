@@ -1,9 +1,9 @@
 ---
 author: Anastasia
-version: 0.6.0
+version: 0.7.0
 created: 2026-05-18T08:08:02Z
-last-modified: 2026-06-05T00:00:00Z
-version-updated: 2026-06-05T00:00:00Z
+last-modified: 2026-06-24T00:00:00Z
+version-updated: 2026-06-24T00:00:00Z
 ---
 
 # LeaseFi — Frontend MVP Task Tracker
@@ -16,16 +16,18 @@ version-updated: 2026-06-05T00:00:00Z
 - **`[x]` = done** — UI is wired to the **real Rust backend** (`backendClient` / `backendAuthService` / `userProfileService`) and works.
 - **`[ ]` = NOT done** — even if a UI exists. Each item carries a reason tag:
 
-| Tag | Meaning |
-|---|---|
-| 🟢 REAL | Works against the real backend |
-| 🟡 SUPABASE→REWIRE | UI exists but talks to the **dead** Supabase layer — must be rewired to the Rust backend |
-| 🟠 MOCK | UI exists but runs on hardcoded mocks |
-| 🔴 MISSING | UI/component absent — build from scratch |
-| ⛔ BE-BLOCKED | FE cannot be completed: the matching backend endpoint is not ready (only auth + profile exist today) |
-| ⏸ SPEC-OPEN | Blocked by an open spec question (§6) — decision is not on FE |
+| Tag                | Meaning                                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| 🟢 REAL            | Works against the real backend                                                                       |
+| 🟡 SUPABASE→REWIRE | UI exists but talks to the **dead** Supabase layer — must be rewired to the Rust backend             |
+| 🟠 MOCK            | UI exists but runs on hardcoded mocks                                                                |
+| 🔴 MISSING         | UI/component absent — build from scratch                                                             |
+| ⛔ BE-BLOCKED      | FE cannot be completed: the matching backend endpoint is not ready (only auth + profile exist today) |
+| ⏸ SPEC-OPEN        | Blocked by an open spec question (§6) — decision is not on FE                                        |
 
 > **Integration reality as of 2026-05-18:** the backend serves **only** `/api/v1/auth/*` and `/api/v1/users/me*`. Everything else (properties, leases, payments, KYC, termination, dashboard data) is ⛔ BE-BLOCKED until a contract exists.
+>
+> **Update 2026-06-18:** the **property-listing block is no longer BE-blocked** — the `feat/properties` backend ships `/api/v1/properties` + `/api/v1/listings` (+ favorites / applications / viewings, re-homed onto `listingId`) and the FE is wired to it. See [`PROPERTY_LISTING_IMPLEMENTATION_TASKS.md`](./PROPERTY_LISTING_IMPLEMENTATION_TASKS.md) for the detailed status. Leases, payments, KYC, termination and dashboard data remain ⛔ BE-BLOCKED.
 
 > **Design-reference alignment (2026-05-26):** Anthony confirmed via Slack that we take **information / flow / copy** from `docs/client-doc/leasefi-design-reference.html` and keep our existing **header layout, palette, fonts, icons, and invisible-wallet UX**. Implementation work derived from the reference is tracked as **Tasks 17–26** in [`CLIENT_FEEDBACK_BACKLOG.md`](./CLIENT_FEEDBACK_BACKLOG.md). Cross-references appear inline in the relevant §3.x sections below.
 
@@ -37,16 +39,17 @@ version-updated: 2026-06-05T00:00:00Z
 > **"Done" here ≠ the MVP bar.** Phase-0 done = the **on-chain flow works in the demo** against testnet contracts, not "wired to the Rust backend". Only the **frontend** H-tasks are tracked here; the full cross-team H-list (contracts/backend/AI/demo) lives in spec §0.4.
 > 🚫 **No Supabase — anywhere.** All off-chain data goes through the **Rust backend** (`backendClient` / `backendAuthService` / `userProfileService`); on-chain via **Casper** (wallet-submitted tx, read back through the backend/indexer). The legacy Supabase services are **dead** — reuse the UI shells but **do not call or extend Supabase**.
 
-| H | Frontend task | Must/Nice | Status |
-|---|---|---|---|
-| H-11 | Email + password auth UI (sign-up / sign-in / reset) | MUST | 🔴 MISSING + ⛔ BE — current auth is CSPR.click social; needs backend H-7 (email+pass) |
-| H-12 | Wallet connect — simple Casper wallet, testnet CSPR / cUSD | MUST | 🟡 PARTIAL — CSPR.click invisible-wallet provisioning exists (§3.1); add explicit connect + testnet-token transacting |
-| H-13 | Landlord: list property → on-chain **NFT mint** | MUST | 🔴 reuse `PropertyCreate.tsx` **UI shell** → wire to **Rust backend + Casper mint** (drop Supabase) · ⛔ contract |
-| H-14 | Lease create + **sign** → on-chain record | MUST | 🔴 reuse `LeaseCreationWizard.tsx` **UI shell** → wire to **Rust backend + Casper sign/record** (drop Supabase) · ⛔ contract |
-| H-15 | Deposit + rent-payment flows (escrow / treasury) | NICE | 🔴 MISSING + ⛔ contract |
-| H-16 | Hide out-of-scope features behind feature flags | — | 🟢 **can start now (pure FE)** — flag off PM role, lease option, termination, dashboards/accounting without deleting code (`src/lib/featureFlags.ts`) |
+| H    | Frontend task                                              | Must/Nice | Status                                                                                                                                                |
+| ---- | ---------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H-11 | Email + password auth UI (sign-up / sign-in / reset)       | MUST      | 🔴 MISSING + ⛔ BE — current auth is CSPR.click social; needs backend H-7 (email+pass)                                                                |
+| H-12 | Wallet connect — simple Casper wallet, testnet CSPR / cUSD | MUST      | 🟡 PARTIAL — CSPR.click invisible-wallet provisioning exists (§3.1); add explicit connect + testnet-token transacting                                 |
+| H-13 | Landlord: list property → on-chain **NFT mint**            | MUST      | 🔴 reuse `PropertyCreate.tsx` **UI shell** → wire to **Rust backend + Casper mint** (drop Supabase) · ⛔ contract                                     |
+| H-14 | Lease create + **sign** → on-chain record                  | MUST      | 🔴 reuse `LeaseCreationWizard.tsx` **UI shell** → wire to **Rust backend + Casper sign/record** (drop Supabase) · ⛔ contract                         |
+| H-15 | Deposit + rent-payment flows (escrow / treasury)           | NICE      | 🟠 IN PROGRESS — **BE unblocked** (`feat/payment`: `/invoices` + escrow indexer); FE tasks tracked in §3.5b (P-0…P-4)                                 |
+| H-16 | Hide out-of-scope features behind feature flags            | —         | 🟢 **can start now (pure FE)** — flag off PM role, lease option, termination, dashboards/accounting without deleting code (`src/lib/featureFlags.ts`) |
 
 **Notes**
+
 - **H-16 is the only no-dependency FE task** — start here; it de-clutters the demo to the must-have spine (list property → sign lease).
 - **H-13 / H-14** reuse only the **UI shell** of property-create + lease-wizard — data integration is **Rust backend + Casper, never Supabase**.
 - **H-12** keeps the invisible-wallet UX from §3.1; Phase 0 adds explicit testnet **CSPR / cUSD** transacting (no on-ramp / conversion).
@@ -57,21 +60,22 @@ version-updated: 2026-06-05T00:00:00Z
 
 ## Summary
 
-> Below this line: the **MVP** tracker (§3 DoD) — the *next* stage after Phase 0.
+> Below this line: the **MVP** tracker (§3 DoD) — the _next_ stage after Phase 0.
 
-| Section | Done | Total | Main blocker |
-|---|---|---|---|
-| 3.1 Auth & Onboarding | 4 | 5 | KYC |
-| 3.2 Profiles (3 roles) | 0 | 4 | role data ⛔, no PM role |
-| 3.3 Properties | 1 | 6 | propertyService on Supabase |
-| 3.4 Lease Agreement | 0 | 6 | lease option / cap / signing absent |
-| 3.5 Payments & Disbursement | 0 | 5 | Stripe gated, ⛔ BE |
-| 3.6 Termination | 0 | 4 | no UI flow, ⛔ BE |
-| 3.7 Dashboards & Accounting | 0 | 4 | mocks + Supabase, no PM |
-| 3.8 Compliance & Privacy (FE part) | 2 | 6 | KYC / audit ⛔ BE, PII access |
-| 3.9 Production deploy (FE part) | 0 | 3 | CI/CD to chosen host |
-| 3.10 Geographic Pilot | 0 | 8 | state gating ⛔ BE re-validation |
-| **Total** | **7** | **51** | |
+| Section                               | Done   | Total  | Main blocker                                                                                  |
+| ------------------------------------- | ------ | ------ | --------------------------------------------------------------------------------------------- |
+| 3.1 Auth & Onboarding                 | 4      | 5      | KYC                                                                                           |
+| 3.2 Profiles (3 roles)                | 0      | 4      | role data ⛔, no PM role                                                                      |
+| 3.3 Properties                        | 6      | 6      | ✅ wired to Rust backend (`feat/properties`) — see PROPERTY_LISTING tracker                   |
+| 3.4 Lease Agreement                   | 0      | 6      | lease option / cap / signing absent                                                           |
+| 3.5 Payments & Disbursement           | 0      | 5      | fiat/Stripe still gated; **crypto invoice/escrow now UNBLOCKED** (`feat/payment`) — see §3.5b |
+| 3.5b Crypto Payments (invoice/escrow) | 11     | 13     | 🟢 BE ready; Phases 0–3 + on-chain id fallback done — only polish (P-4.1/4.2) left            |
+| 3.6 Termination                       | 0      | 4      | no UI flow, ⛔ BE                                                                             |
+| 3.7 Dashboards & Accounting           | 0      | 4      | mocks + Supabase, no PM                                                                       |
+| 3.8 Compliance & Privacy (FE part)    | 2      | 6      | KYC / audit ⛔ BE, PII access                                                                 |
+| 3.9 Production deploy (FE part)       | 0      | 3      | CI/CD to chosen host                                                                          |
+| 3.10 Geographic Pilot                 | 0      | 8      | state gating ⛔ BE re-validation                                                              |
+| **Total**                             | **12** | **51** | (3.3 Properties: 1→6 done after the `feat/properties` wiring)                                 |
 
 ---
 
@@ -112,16 +116,16 @@ version-updated: 2026-06-05T00:00:00Z
 
 ## §3.3 Properties
 
-- [ ] **Property CRUD (landlord/PM)** — 🟡 SUPABASE→REWIRE + ⛔ BE-BLOCKED
-  - Full UI: `src/pages/landlord/properties/{PropertyCreate,PropertyEdit,PropertyDetail,PropertyList}.tsx` via `src/services/propertyService.ts` (imports `supabase`). Rewire to Rust API once the contract exists.
+- [x] **Property CRUD (landlord/PM)** — 🟢 REAL (wired to `feat/properties`)
+  - `src/pages/landlord/properties/{PropertyCreate,PropertyEdit,PropertyDetail,PropertyList}.tsx` now run on `propertyAssetService` + `listingService` against the Rust backend (Property/Listing split); Supabase `propertyService` dropped. Create/edit (incl. `PUT /properties/{id}`), lifecycle, media, withdraw all wired. See PROPERTY_LISTING tracker (PL-9…16, PL-38, PL-40).
 - [ ] **Numeric `declared_mortgage_value` field on property** — 🔴 MISSING
   - Absent from `src/types/property.ts` and forms. Add input + validation (groundwork for cap §3.4).
 - [ ] **Mortgage documentation upload (prerequisite for lease option)** — 🔴 MISSING + ⛔ BE-BLOCKED
   - Storage resolved (2026-05-21): IPFS pin via BE-proxied `/api/v1/ipfs/pin` with mandatory client-side encryption for PII-bearing files (spec §5.2 / §5.5 / §6 Resolved). FE: upload widget that encrypts client-side, posts the blob to the pin endpoint, keeps the lease-option toggle disabled without a document. Blocked until the BE pin endpoint ships.
-- [ ] **Property search + filtering** — 🟠 MOCK + ⛔ BE-BLOCKED
-  - `src/pages/tenant/PropertySearch.tsx` filters `FEATURED_PROPERTIES` (`src/data/featuredProperties.ts`) in memory. Rewire to backend search/pagination.
-- [ ] **Property detail page + Google Maps link** — 🟠 MOCK (Maps link 🟢)
-  - Maps link works keyless: `src/components/property/VerificationDisclaimer.tsx` builds the URL from lat/lng or address. Property data is mock (`FEATURED_PROPERTIES` fallback in `src/pages/tenant/PropertyDetail.tsx`). Closes when data comes from backend.
+- [x] **Property search + filtering** — 🟢 REAL (wired to `GET /listings`)
+  - `src/pages/tenant/PropertySearch.tsx` runs on real `GET /listings` (`useInfiniteQuery`), with backend filters: text, rent, bedrooms/bathrooms, living-area, amenities, pets/furnished, geo "near me", and sort (incl. views). No more in-memory `FEATURED_PROPERTIES`. See PROPERTY_LISTING tracker (PL-17/18/39).
+- [x] **Property detail page + Google Maps link** — 🟢 REAL
+  - `src/pages/tenant/PropertyDetail.tsx` runs on `getListing(id)` (router-state hydrate + fetch), with Property+Listing data, badges, view tracking and apply. Maps link still keyless via `VerificationDisclaimer`. See PROPERTY_LISTING tracker (PL-20).
 - [x] **Disclaimer block** — 🟢 REAL (no backend needed)
   - `src/components/property/VerificationDisclaimer.tsx` — static component on the detail page. Ensure it is mounted on all MVP property screens.
 
@@ -156,6 +160,49 @@ version-updated: 2026-06-05T00:00:00Z
   - FE part: transparent payment breakdown (rent vs mortgage) from backend calc — uses shared component (see §3.7).
 
 > _Design-reference cross-cut:_ **Task 20** (`<FeeDisplay/>` canonical breakdown — also reused in late fee, buyout, deposit funding, dispute filing), **Task 21** (`<PreSignatureConfirmation/>` before submit), **Task 25** (`<TransactionStatus/>` confirming pill). USDC only — not USDT.
+
+## §3.5b Crypto Payments — Invoice / Escrow (`feat/payment`)
+
+> **Goal:** the tenant pays the **security deposit** and **rent** on-chain with a convenient UX. Replaces the fiat-first §3.5 for the crypto MVP (Stripe stays flagged off).
+> **BE reality (verified vs `origin/feat/payment`, not the stale local branch):** invoices are seeded at `POST /leases/{id}/commit` (1 deposit + N rent rows, `scheduled`); the indexer upgrades them to `pending` on `InvoiceCreated` and reconciles `partial`/`paid`/`released`/`refunded`. FE is **read + settle only**.
+> **REST:** `GET /invoices` (filters: `tenantId=me`/`landlordId=me`/`leaseId`/`kind`/`status`/`propertyId`/`dueFrom`/`dueTo`/`sortBy`), `GET /invoices/{id}`, `POST /invoices/{id}/settlement` `{ amount, txHash }` (tenant-only), `GET /invoices/{id}/receipt`, `GET /invoices/summary?tenantId=me|landlordId=me`.
+>
+> **⚠️ On-chain reality the BE summary omits:** `escrow.pay_invoice(invoice_id, amount)` moves USDC via CEP-18 `transfer_from`, so **each payment = TWO deploys**: `approve(spender=escrow package, amount)` on the USDC token **then** `pay_invoice`. Contract reverts on: caller ≠ tenant's active wallet, `block_time > deadline` (expired), `amount == 0`, deposit `amount != amountDue`. `pay_invoice` needs `onchainInvoiceId` (U256) — **null until the indexer binds `InvoiceCreated`**, so the Pay button only lights up at `status ∈ {pending, partial, overdue}`.
+>
+> **Product decisions (2026-06-24, Anastasia):** (1) **rent** defaults to **full** amount with a _hidden_ partial-payment option (contract allows `≤ remaining`); (2) **deposit and rent are separate payments** (not bundled), shown together as "due before move-in".
+>
+> **Reuse (don't reinvent):** `createApproveTransaction` + `getBalance`/`getAllowance` (`src/services/ico/{icoPurchaseService,cep18Service}.ts`), `createContractCallTransaction` (`services/ico/casperClient.ts`), `useBlockchainTransaction` (sign→submit→poll), `lib/casper/leaseAgreement.ts` (encoder/error-map/gas pattern), `scaleToSmallestUnit` + `LEASE_CURRENCY`. CSPR.click is **not app-wide** — the payment surface must mount its own `ClickProvider`/hidden host.
+
+**Phase 0 — config + data layer (blockers)**
+
+- [x] **P-0.1** Add `VITE_ESCROW_PACKAGE_HASH` to env (`.env` + `.env.example` + `.env.production.example`), following the lease-agreement convention (read directly in `lib/casper/escrow.ts` with an `isEnabled` gate — kept out of the ICO bootstrap-validation list). casper-test hash set: `122d1083…f806dd8d`.
+- [x] **P-0.2** `src/types/invoiceContract.ts` (wire types: `Invoice`, `InvoiceStatus`, `InvoiceKind`, `InvoiceSortBy`, `InvoiceListParams`, `SettlementRequest`, `ReceiptResponse`, `LandlordSummary`/`TenantSummary`) + `src/services/invoiceService.ts` (`listInvoices`/`getInvoice`/`settleInvoice`/`getReceipt`/`getTenantSummary`/`getLandlordSummary` on `backendClient`) + `src/hooks/useInvoices.ts` (`useInvoices`, `useInvoice`, `useTenantInvoiceSummary`, `useLandlordInvoiceSummary`, `useSettleInvoice`). 🟢 REAL — typechecks clean.
+
+**Phase 1 — on-chain payment core**
+
+- [x] **P-1.1** `lib/casper/cep18.ts` — standalone CEP-18 module: `buildApproveTransaction({ senderPublicKey, tokenHash, spenderPackageHash, amount, gas? })` + `isApproveNeeded({ tokenInstanceHash, ownerAccountHash, spenderPackageHash, requiredRaw })` (reuses `getAllowance` to skip a redundant approve). **ICO intentionally left untouched** (decision 2026-06-24): the module only read-reuses `createContractCallTransaction`/`getAllowance` (same pattern as `leaseAgreement.ts`); the ICO `createApproveTransaction` is NOT refactored, so a small approve-build duplication is accepted to avoid touching the working purchase flow. 🟢 typechecks clean.
+- [x] **P-1.2** `lib/casper/escrow.ts` — `payInvoiceTransaction(pk, { onchainInvoiceId, amount })` (named `invoice_id`/`amount` U256 args — no struct encoder needed), `isEscrowEnabled` + exported `escrowPackageHash` (the approve spender), env-overridable `GAS_PAY_INVOICE` (default 10 CSPR), and `parseEscrowError` mapping escrow revert codes 303/305/306/307/308/311/312 (+ allowance / insufficient-funds hints). 🟢 typechecks clean.
+- [x] **P-1.3** `hooks/lease/useInvoicePayment.ts` — orchestrates the **two-deploy** flow as one linear `async` over two `useBlockchainTransaction` machines joined by a promise bridge: `isApproveNeeded → (approve) → pay_invoice → POST /invoices/{id}/settlement`. States `idle → checking → approving → paying → recording → done/failed`; the approve is skipped when the allowance already covers, and the settlement POST is best-effort (`recordError`, non-fatal — the indexer reconciles). `reset()` aborts both deploys. 🟢 typechecks clean.
+
+**Phase 2 — payment UX**
+
+- [x] **P-2.1** `src/components/payments/PayInvoiceDialog.tsx` — summary (due / already-paid / you-pay / est. gas), 2-step "1. Approve USDC → 2. Pay" stepper, honest errors via `parseEscrowError`, success + cspr.live link, best-effort `recordError` note. Deposit = fixed `amountDue`; rent = full remaining by default with a collapsed "pay a partial amount" field (validated `0 < amount ≤ remaining`). Added paired `formatFromSmallestUnit` to `leaseCurrency.ts` for exact (no-float) remaining math. 🟢 typechecks clean.
+- [x] **P-2.2** Pay-button gating + balance pre-flight. Gating (status ∈ {pending,partial,overdue} **and** `onchainInvoiceId != null`) is in `PayInvoiceDialog`. Balance: ⚠️ the ICO `cep18Service.getBalance` is **wrong for this Odra token** — it passes the raw account hash, but Odra's `balances` mapping keys items by `blake2b(key.to_bytes())` (verified: same derivation the proven allowance read uses). So I added a correct self-contained `getCep18Balance` in `lib/casper/cep18.ts` (blake2b of the tagged account Key bytes; **ICO untouched**) + `useUsdcBalance` hook. The dialog shows the wallet balance, warns + disables Pay when `balance < amount`, and **fails open** (read error → `undefined` → no block; on-chain revert stays authoritative). 🟢 typechecks clean. _Caveat: the read mirrors the working allowance path but wasn't live-tested against testnet — worth one real read to confirm._
+- [x] **P-2.3** `PayInvoiceDialog` self-mounts `OnChainSdkHost` around its interactive flow (lazy — `DialogContent` unmounts when closed), so the payment surface has a working `clickRef` without app-wide `ClickProvider`. ✅ covered for the dialog; the list/dashboard CTAs (P-3) just open the dialog, so no extra host needed there.
+
+**Phase 3 — tenant screens**
+
+- [x] **P-3.1** `/tenant/payments` — rewrote the legacy fiat/Stripe `TenantPayments.tsx` mock to the invoice model: `useInvoices({tenantId:'me'})` grouped **Overdue / Due / Paid** (cancelled hidden), reusable `InvoiceStatusBadge`, deadline + amount + partial progress, **Pay** CTA → `PayInvoiceDialog`, receipt link, "Preparing…" for not-yet-on-chain rows. Loading / error / empty states. 🟢 typechecks clean.
+- [x] **P-3.2** `src/components/payments/TenantPaymentsSummary.tsx` — KPI cards from `useTenantInvoiceSummary` (`summary?tenantId=me`): next-due row with a **Pay now** CTA → `PayInvoiceDialog`, plus Balance due / Paid this year / Deposit held stats; "View all" → `/tenant/payments`. Wired into `TenantDashboard.tsx`, **removing** the legacy `MOCK_PAYMENTS` block + its now-dead helpers/imports (`getPaymentStatusBadge`, `Payment`, `Download`, `Clock`, `Loader2`, `RotateCcw`, `AlertTriangle`). 🟢 my files typecheck clean (pre-existing `Enhanced*`/`AutopaySetup` errors are unrelated).
+
+**On-chain id fallback (added 2026-06-25 — works around the indexer binding gap)**
+
+- [x] **P-3.3** When the backend `onchainInvoiceId` is null (indexer not run, or its CES backfill can't match the synthetic deploy hash — see backend `ces.rs` / `bind_invoice_onchain_id_by_commit_tx_hash`), the FE reads the id **straight from the chain**: `leaseAgreementEvents.ts` now also parses every `InvoiceCreated.invoice_id` from the lease's `create_lease_agreement` deploy (→ `LeaseCommitIds.invoiceIds`); `useResolvedOnchainInvoiceId` maps them positionally to the lease's invoices (deposit-first, deadline ASC) and prefers the backend value when present. `PayInvoiceDialog`/`useInvoicePayment` pay against the resolved id; the list/dashboard offer **Pay** for any non-settled invoice (the dialog resolves the id, showing "Checking on-chain…" / "not on-chain yet" as needed). ⚠️ Settlement still POSTs by invoice UUID and the contract reverts back-stop correctness, but the backend won't reconcile final paid-state until the indexer binding is fixed (the real fix is backend-side). 🟢 my code typechecks clean; parser test 5/5.
+
+**Phase 4 — polish / fast-follow**
+
+- [ ] **P-4.1** Optimistic React Query invalidation after `/settlement`; auto-refresh until indexer flips to `paid`. Empty/loading/error states; money + address formatting (truncation rules).
+- [ ] **P-4.2** (fast-follow) Landlord read-only payments view + `summary?landlordId=me` cards on the same hooks.
 
 ## §3.6 Termination
 
@@ -269,6 +316,7 @@ Spec §6 still lists two genuinely open questions, but neither blocks FE MVP wor
 > Distilled from [`docs/client-doc/leasefi-design-reference.html`](./client-doc/leasefi-design-reference.html) (Phase 1 "Critical 6" visual spine). **Authority:** the HTML is authoritative for **visual** implementation, but **the specs under `/docs/` win on any conflict.** Confidential — do not share externally. Tags: ⭐ = Phase-0-relevant, otherwise MVP/later.
 
 **Cross-cutting (every surface)**
+
 - **One primary CTA per surface.** ⭐
 - **Never signal status with color alone** (WCAG 2.1 AA). Status = color **+** icon/label. **Never red for "outstanding"** — red = escalation; outstanding = amber, collected = green, dispute = blue (informational).
 - **Money amounts in JetBrains Mono** (decimal alignment; sans-serif numerals shift). ⭐
@@ -279,6 +327,7 @@ Spec §6 still lists two genuinely open questions, but neither blocks FE MVP wor
 - **Tx state in `sessionStorage` only** (must not survive a browser session) — distinct from drafts (server). ⭐
 
 **FeeDisplay (regulatory — PRD FR-1.4.3.12)**
+
 - Format is **regulatory-mandated**: don't reformat the layout, don't drop the percentage, don't rename "Total" → "Subtotal". Fee must be **inline and visible**, never in a tooltip/modal.
 - **Button label includes the exact total** — never "Submit" / "Pay now". ⭐
 - Pre-flight **"Balance OK" pill** is the result of an on-chain read — don't open a wallet popup just to fail on balance.
@@ -287,6 +336,7 @@ Spec §6 still lists two genuinely open questions, but neither blocks FE MVP wor
 - One component reused across rent / late fee / buyout / deposit funding / dispute.
 
 **PreSignatureConfirmation (the highest-stakes surface)**
+
 - **Build once, parameterize for all six EIP-712 ceremonies** (LeaseAgreement, TerminationNotice, BuyoutAgreement, DepositRelease, PMAuthorization, Authentication). **Do not build six variants.** ⭐ (Authentication ceremony is Phase-0-relevant.)
 - Fires **before any wallet popup**; **three-stage confirmation is the trust spine — never collapse it.**
 - **"Cross-check before signing" copy is mandatory** — don't reword, move, or hide it.
@@ -294,12 +344,14 @@ Spec §6 still lists two genuinely open questions, but neither blocks FE MVP wor
 - **Cancel/reject = silent return to idle.** Rejected ≠ failed: no toast, no Sentry, no error UI. ⭐
 
 **TransactionStatus / state machine**
+
 - **Three stages, never collapsed:** submitted → in-block (~16s) → finalized (8 blocks, ~2 min). ⭐
 - **GlobalTxIndicator persists across navigation** (header badge, click-to-return).
 - **Pre-flight order is deliberate:** build-args → KYC → OFAC → velocity → balance → allowance → sign (reordering leaks compliance state via timing).
 - Reorg: roll back in-block → pending; orphan timeout 32 blocks → failed.
 
 **Lease invitation & signing**
+
 - **Render full lease terms before any wallet popup** (anti-phishing) + show the canonical `lease.fi` domain pill. ⭐
 - **Lease activation = two on-chain tx:** Tx A `LeaseFactory.create_lease` (verifies both EIP-712 sigs inline, mints NFTs, takes 2% fee) + Tx B `DepositVault.deposit_funds` (separate, no sigs). **Track independently**; render an explicit **"lease created · awaiting deposit"** transitional state. ⭐ (stranded-lease risk — confirm a `cancel_unfunded` path with the SC team.)
 - **EIP-712:** use `@leasefi/types` builders only (no inline typed-data); `verifyingContract` = `LeaseFactory`. ⭐
@@ -308,15 +360,18 @@ Spec §6 still lists two genuinely open questions, but neither blocks FE MVP wor
 - **FL security-deposit cap = 2× monthly rent** (validate client + contract + submission).
 
 **KYC / compliance**
+
 - Consume **`useKYCStatus(address)` only** — never the KYC source directly (default `APIKYCSource`). ⭐
 - **Pending-attestation state is mandatory** (skipping it → "I verified but the app says I'm not" tickets).
 - Compliance-failure surface: **no retry button** (single CTA "Contact support"); all compliance reverts collapse to one `ofac-restricted` class; **CO sign-off required** to change copy/layout; **no Sentry with specifics**. **Tier insufficiency ≠ compliance failure** (surface the real "Tier 1 required").
 
 **Dashboards (landlord/PM)**
+
 - **Auto-detect by ownership:** 0–1 leases → tenant-style layout; 2+ → PM-style table. **No user-facing mode toggle.**
 - **PMs work in tables** (sort / filter / multi-select), not cards.
 
 **Architecture baked in (do not invent alternatives)**
+
 - Listings off-chain (PostgreSQL + IPFS photos) — **no on-chain footprint until counter-sign** (Phase 2 marketplace).
 - **Tenant signs first** (acceptance = application); **landlord counter-signs to commit** — don't invert.
 - **Privacy gate:** pre-counter-sign = pseudonymous (badges + criteria-match boolean only); full identity **only** post-counter-sign. Never expose tenant PII before commit.

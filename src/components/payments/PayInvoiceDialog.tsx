@@ -22,11 +22,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useQueryClient } from '@tanstack/react-query';
 import { OnChainSdkHost } from '@/components/blockchain/OnChainSdkHost';
 import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useInvoicePayment } from '@/hooks/lease/useInvoicePayment';
 import { useUsdcBalance } from '@/hooks/useUsdcBalance';
+import { useResolvedOnchainInvoiceId } from '@/hooks/useResolvedOnchainInvoiceId';
 import {
   LEASE_CURRENCY,
   scaleToSmallestUnit,
@@ -101,6 +103,7 @@ function PayFlow({
 }) {
   const { account, clickRef, connect } = useICOWallet();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const isDeposit = invoice.kind === 'security-deposit';
   const remaining = useMemo(() => remainingDue(invoice), [invoice]);
@@ -112,7 +115,12 @@ function PayFlow({
     account?.accountHash,
     clickRef,
     {
-      onPaid: () => toast({ title: 'Payment confirmed on-chain' }),
+      onPaid: () => {
+        toast({ title: 'Payment confirmed on-chain' });
+        // Refresh the payments list/summaries even if the best-effort
+        // `/settlement` record didn't post — the on-chain pay still happened.
+        void queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      },
       onError: (message) =>
         toast({
           title: 'Payment failed',
@@ -138,26 +146,49 @@ function PayFlow({
   const remainingRaw = BigInt(scaleToSmallestUnit(remaining, dec));
   const amountValid = amountRaw > 0n && amountRaw <= remainingRaw;
 
-  // Pre-flight balance (advisory — fails open: undefined while loading/on error).
+  // Pre-flight balance — advisory ONLY, never blocks. The balances dictionary
+  // isn't readable for every CEP-18 layout (a failed read returns 0n), so we
+  // only *warn* on a confident shortfall: a positive balance that's genuinely
+  // too small. The on-chain transfer reverts with a clear message if funds are
+  // actually short, so paying is always allowed.
   const { data: balance, refetch: refetchBalance } = useUsdcBalance(
     account?.accountHash
   );
-  const insufficient = balance !== undefined && balance < amountRaw;
+  const lowBalance =
+    balance !== undefined && balance > 0n && balance < amountRaw;
 
-  const payable =
-    Boolean(invoice.onchainInvoiceId) &&
-    ['pending', 'partial', 'overdue'].includes(invoice.status);
+  // The escrow id to pay against: the backend value, or derived from the chain
+  // when the indexer hasn't bound it yet.
+  const { data: onchainInvoiceId, isLoading: resolvingId } =
+    useResolvedOnchainInvoiceId(invoice);
+
+  const settled = ['paid', 'released', 'refunded', 'cancelled'].includes(
+    invoice.status
+  );
+  const payable = Boolean(onchainInvoiceId) && !settled;
 
   const busy = ['checking', 'approving', 'paying', 'recording'].includes(
     state.step
   );
 
-  // Not yet bound on-chain (indexer pending) — nothing to pay against.
-  if (!payable) {
+  // Still resolving the on-chain id (the number we pay against) — show a loader
+  // until the payment details are ready, rather than a bare line of text.
+  if (resolvingId && state.step !== 'done') {
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>Loading payment details…</span>
+      </div>
+    );
+  }
+
+  // Resolved, but the invoice genuinely isn't payable on-chain yet (or settled).
+  if (!payable && state.step !== 'done') {
     return (
       <p className="text-sm text-muted-foreground">
-        This invoice isn’t ready to pay yet — it’s still being recorded
-        on-chain. Check back shortly.
+        {settled
+          ? 'This invoice is already settled.'
+          : 'This invoice isn’t on-chain yet — it’s still being recorded. Check back shortly.'}
       </p>
     );
   }
@@ -219,7 +250,7 @@ function PayFlow({
           <Row label="Already paid" value={fmt(invoice.rentPaid)} />
         )}
         <Row label="You pay now" value={fmt(amount)} strong />
-        {balance !== undefined && (
+        {balance !== undefined && balance > 0n && (
           <Row
             label="Wallet balance"
             value={fmt(formatFromSmallestUnit(balance, dec))}
@@ -233,12 +264,12 @@ function PayFlow({
         />
       </div>
 
-      {insufficient && (
-        <div className="flex items-start gap-2 text-sm text-destructive">
+      {lowBalance && (
+        <div className="flex items-start gap-2 text-sm text-amber-600">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Your {LEASE_CURRENCY.symbol} balance is less than this payment. Add
-            funds, then{' '}
+            Heads up: your {LEASE_CURRENCY.symbol} balance looks lower than this
+            payment. You can still try — add funds and{' '}
             <button
               type="button"
               className="underline"
@@ -312,8 +343,10 @@ function PayFlow({
       ) : (
         <Button
           className="w-full"
-          disabled={busy || !amountValid || insufficient}
-          onClick={() => pay({ invoice, amount })}
+          disabled={busy || !amountValid}
+          onClick={() =>
+            pay({ invoice, onchainInvoiceId: onchainInvoiceId!, amount })
+          }
         >
           {busy ? (
             <>

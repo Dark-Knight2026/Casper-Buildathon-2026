@@ -65,11 +65,20 @@ export function payInvoiceTransaction(
 
 // ── Revert-reason mapping ────────────────────────────────────────────
 
-// `pay_invoice` user-error discriminants from the escrow contract
-// (`2025_anthony_leasefi/src/escrow.rs`, range 300–318). Only the codes
-// reachable on the payment path are surfaced with friendly copy; anything else
-// falls through to the raw message.
-const ESCROW_ERROR_MAP: Record<string, string> = {
+// User-error discriminants reachable on the `pay_invoice` path, surfaced with
+// friendly copy; anything else falls through to the raw message.
+//
+//  • Escrow contract (`2025_anthony_leasefi/src/escrow.rs`, range 300–318).
+//  • UserRegistry (`src/user_registry.rs`, range 1200–1205): paying resolves
+//    every party's wallet via `user_registry.get_active_wallet(user_id)`, which
+//    reverts `InvalidUserId` (1203) for any party with no on-chain user record.
+//    A deposit only resolves the tenant (the payer); a rent payment also
+//    distributes to the landlord (and property manager), so it additionally
+//    resolves THOSE wallets — which is why rent can hit 1203 while the deposit
+//    went through. The unregistered party is often the counterparty, not the
+//    payer, so the copy must not blame the tenant.
+const PAYMENT_ERROR_MAP: Record<string, string> = {
+  // ── Escrow ────────────────────────────────────────────────────────
   '303': 'The payment amount can’t be zero.',
   '305':
     'Unknown on-chain invoice id — this invoice isn’t recorded on-chain yet.',
@@ -80,6 +89,15 @@ const ESCROW_ERROR_MAP: Record<string, string> = {
   '311':
     'A deposit must be paid in full — the amount must equal the amount due.',
   '312': 'That’s more than the rent still due on this invoice.',
+  '313': 'This invoice can’t be settled this way.',
+  '314':
+    'The security deposit must be paid in the lease’s settlement currency.',
+  '318':
+    'On-chain payments aren’t fully configured yet (user registry not set). Contact support.',
+  // ── UserRegistry ──────────────────────────────────────────────────
+  '1200': 'Your wallet isn’t authorized to make this payment.',
+  '1203':
+    'This payment can’t be completed yet because one of the parties on this lease isn’t fully registered on-chain. For rent, that’s usually the landlord (or property manager) receiving the payment. On-chain registration finishes a few minutes after sign-up — try again shortly, and if it keeps failing, contact support.',
 };
 
 /** Maps a Casper `User error: <n>` (or a token/funds revert) to friendly copy. */
@@ -88,7 +106,7 @@ export function parseEscrowError(rawMessage?: string): string {
 
   const match = rawMessage.match(/User error: (\d+)/);
   if (match) {
-    return ESCROW_ERROR_MAP[match[1]] ?? rawMessage;
+    return PAYMENT_ERROR_MAP[match[1]] ?? rawMessage;
   }
 
   const lowered = rawMessage.toLowerCase();

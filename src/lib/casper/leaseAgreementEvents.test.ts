@@ -48,7 +48,11 @@ describe('extractLeaseCommitIds', () => {
 
     const ids = await extractLeaseCommitIds('d89816e4');
 
-    expect(ids).toEqual({ onchainLeaseId: '1', nftTokenId: '1' });
+    expect(ids).toEqual({
+      onchainLeaseId: '1',
+      nftTokenId: '1',
+      invoiceIds: [],
+    });
     // Calls the node RPC proxy with info_get_deploy.
     const body = JSON.parse(
       (mockFetch.mock.calls[0][1] as RequestInit).body as string
@@ -65,6 +69,7 @@ describe('extractLeaseCommitIds', () => {
     await expect(extractLeaseCommitIds('h')).resolves.toEqual({
       onchainLeaseId: '1',
       nftTokenId: null,
+      invoiceIds: [],
     });
   });
 
@@ -74,6 +79,7 @@ describe('extractLeaseCommitIds', () => {
     await expect(extractLeaseCommitIds('h')).resolves.toEqual({
       onchainLeaseId: null,
       nftTokenId: null,
+      invoiceIds: [],
     });
   });
 
@@ -86,6 +92,7 @@ describe('extractLeaseCommitIds', () => {
     await expect(extractLeaseCommitIds('h')).resolves.toEqual({
       onchainLeaseId: null,
       nftTokenId: null,
+      invoiceIds: [],
     });
   });
 
@@ -95,6 +102,7 @@ describe('extractLeaseCommitIds', () => {
     await expect(extractLeaseCommitIds('h')).resolves.toEqual({
       onchainLeaseId: null,
       nftTokenId: null,
+      invoiceIds: [],
     });
   });
 });

@@ -148,6 +148,9 @@ export default function ApplicationDetail() {
       reviewApplication(id as string, status),
     onSuccess: (updated, status) => {
       queryClient.setQueryData(['application', id], updated);
+      // Refetch the detail too, so the approved status (and the "Create lease"
+      // button it gates) is authoritative even if the response is partial.
+      queryClient.invalidateQueries({ queryKey: ['application', id] });
       queryClient.invalidateQueries({ queryKey: ['landlord-applications'] });
       toast({ title: `Application ${PAST_TENSE[status]}` });
     },
