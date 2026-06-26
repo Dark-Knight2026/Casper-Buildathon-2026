@@ -254,14 +254,16 @@ A high-performance **Rust** workspace (edition 2024) with two crates.
 | Layer | Choice |
 |---|---|
 | Framework | **Axum 0.8** (+ multipart, macros) on **Tokio** |
-| Database | **PostgreSQL** via **sqlx 0.9** (Supabase-managed; 89 migrations) |
+| Database | **PostgreSQL** via **sqlx 0.9** (Supabase-managed; 112 migrations) |
 | Cache / sessions | **Redis** |
 | Blob storage | **S3 / MinIO** (`rust-s3`) for avatars & documents |
 | Auth | **JWT** (`jsonwebtoken`) — Casper wallet signature challenge-response, 15-min access + 14-day rotating refresh, per-session revoke |
 | Docs | **utoipa** OpenAPI + Swagger UI at `/swagger-ui` |
 | Hardening | `tower_governor` rate limiting, CORS, structured tracing |
 
-**API surface** (`/api/v1/*`): `auth` (nonce / login / refresh / sessions / email-verify), `users` (profile / avatar / role / email-change), `transactions` (account & BIG-token history), `ico` (balance / progress), `vesting`, `staking` (portfolio / earnings / rewards / unbonding), `tax` (liability), `analytics` (property performance), `health`.
+**API surface** (`/api/v1/*`) — the full rental lifecycle plus the BIG token economy: `auth` (nonce / wallet & password login / refresh / sessions / email-verify), `users` (profile / avatar / role / on-chain registration), `properties` (dedup upsert / geo search / registration hash), `listings` (search / lifecycle / media / provenance / Fair Housing screen), `applications` (submit / review / scoring / background checks), `viewings`, `favorites`, `leases` (draft / Casper-consent signing / on-chain commit / document), `renewals` (offer / respond / negotiation), `invoices` (list / settlement / receipt / dashboard summary), plus `transactions`, `ico`, `vesting`, `staking`, `tax`, `analytics`, `health`.
+
+External dependencies sit behind swappable provider traits (KYC, IPFS pinning, Fair Housing screen, lease-document renderer, on-chain lease reader): fake/stub impls for local dev, real backends in production via one config line — handlers never change.
 
 ### `crates/indexer` — blockchain event indexer
 
@@ -270,7 +272,7 @@ Two concurrent pipelines keep Postgres in lockstep with the chain:
 1. **Backfill** — historical sync via **CSPR.cloud REST** (`/ft-token-actions` for CEP-18) and **Casper Node RPC** (`state_get_dictionary_item` for CES events).
 2. **Streaming** — real-time **WebSocket** subscription to the **CSPR.cloud Streaming API**, with per-contract event cursors persisted for crash-safe resumption.
 
-Indexed events span the BIG economy: ICO (`TokensPurchased`), CEP-18 (`Transfer` / `Mint` / `SetAllowance`), Vesting (`ScheduleCreated` / `TokensClaimed`), Staking (`Staked` / `UnstakedInitiated` / `UnbondedWithdrawn` / `RewardsDeposited` / `RewardsClaimed`). `Lease` / `Escrow` event ingestion plugs into the same trait-based dispatch (`IndexableEvent`) as contracts come online.
+Indexed events span the full protocol: ICO (`TokensPurchased`), CEP-18 (`Transfer` / `Mint` / `SetAllowance`), Vesting (`ScheduleCreated` / `TokensClaimed`), Staking (`Staked` / `UnstakedInitiated` / `UnbondedWithdrawn` / `RewardsDeposited` / `RewardsClaimed`), UserRegistry (`UserCreated`), Property (`PropertyCreated`), Lease (`LeaseAgreementCreated` / `LeaseAgreementFinished` / `LeaseAgreementProlonged` + equity-eligibility), and Escrow (`InvoiceCreated` / `InvoicePaymentApplied` / `InvoicePaid` / `SecurityDepositReleased`) — all routed through the same trait-based dispatch (`IndexableEvent`).
 
 > This indexer is exactly the substrate the **MCP server** ([roadmap](#-the-agentic-ai-layer-the-buildathon-thesis)) reads from — agents get a fast, queryable, finality-aware view of on-chain state instead of polling nodes directly.
 
