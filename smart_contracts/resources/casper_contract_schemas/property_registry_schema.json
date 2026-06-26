@@ -645,6 +645,50 @@
       "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
+    },
+    {
+      "name": "contract_name",
+      "description": "Delegated. See `self.metadata.contract_name()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "contract_description",
+      "description": "Delegated. See `self.metadata.contract_description()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "contract_icon_uri",
+      "description": "Delegated. See `self.metadata.contract_icon_uri()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "contract_project_uri",
+      "description": "Delegated. See `self.metadata.contract_project_uri()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
+      "is_contract_context": true,
+      "access": "public"
     }
   ],
   "events": [

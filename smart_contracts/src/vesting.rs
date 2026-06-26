@@ -1,5 +1,8 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::access::Ownable;
+use odra_modules::{
+    access::Ownable,
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::staking::StakingContractRef;
 use crate::vesting::{errors::*, events::*};
@@ -127,6 +130,9 @@ pub struct Vesting {
     /// Maps (beneficiary, index) to schedule IDs for per-user lookup.
     /// Use with `user_schedules_counts` to iterate a user's schedules.
     user_schedules: Mapping<Address, Vec<VestingId>>,
+
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -137,6 +143,12 @@ impl Vesting {
 
     pub fn init(&mut self, owner: Address) {
         self.ownable.init(owner);
+        self.metadata.init(
+            Some("BIG LeaseFi Vesting".into()),
+            Some("Time-based BIG token vesting schedules.".into()),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -366,6 +378,14 @@ impl Vesting {
         fn transfer_ownership(&mut self, new_owner: &Address);
         fn get_owner(&self) -> Address;
       }
+
+      to self.metadata {
+          fn contract_name(&self) -> Option<String>;
+          fn contract_description(&self) -> Option<String>;
+          fn contract_icon_uri(&self) -> Option<String>;
+          fn contract_project_uri(&self) -> Option<String>;
+      }
+
     }
 }
 

@@ -161,6 +161,14 @@ Specify a file with environmental variables to use during deploy via `ODRA_CASPE
 ODRA_CASPER_LIVENET_ENV=env/casper-testnet cargo run --bin leasefi_contracts_cli deploy
 ```
 
+## CEP-96 Contract Metadata
+
+All 14 LeaseFi contracts expose [CEP-96](https://github.com/casper-network/ceps/blob/master/text/0096-contract-metadata.md) on-chain discoverability. Each contract stores a human-readable `contract_name` and `contract_description` (prefixed with `BIG LeaseFi`) as immutable named keys set during `init()`.
+
+Explorers and indexers can read metadata via the `contract_name` and `contract_description` entry points, or by querying the `contract_name` and `contract_description` named keys on the contract root hash.
+
+Smoke tests live in `tests/contract_metadata.rs`. See `odra.rulebook.md` for the wiring pattern when adding new contracts.
+
 ## Use CLI
 
 Specify a file with environmental variables to use during deploy via `ODRA_CASPER_LIVENET_ENV` variable.

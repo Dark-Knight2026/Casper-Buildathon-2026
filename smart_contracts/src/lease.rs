@@ -1,5 +1,8 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::access::Ownable;
+use odra_modules::{
+    access::Ownable,
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::{
     constants::{LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS},
@@ -168,6 +171,8 @@ pub struct Lease {
     leases: Mapping<U256, LeaseAgreement>,
     /// Number of lease agreements created.
     leases_count: Var<U256>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -189,6 +194,12 @@ impl Lease {
         self.nft.set(nft);
         self.property_registry.set(property_registry);
         self.user_registry.set(user_registry);
+        self.metadata.init(
+            Some("BIG LeaseFi Lease".into()),
+            Some("Property lease lifecycle, invoicing, and equity eligibility.".into()),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -324,11 +335,13 @@ impl Lease {
         }
 
         let block_timestamp = self.env().get_block_time();
+        let lease_agreement_id = self.get_lease_agreements_count();
         let mut invoices_ids = vec![self.escrow.create_security_deposit_invoice(
             params.tenant,
             landlord,
             params.security_deposit,
             block_timestamp + params.invoice_validity_duration,
+            lease_agreement_id,
         )];
 
         for i in 0..(lease_duration / ONE_MONTH_IN_MILLISECONDS) {
@@ -341,10 +354,9 @@ impl Lease {
                 deadline: block_timestamp
                     + (ONE_MONTH_IN_MILLISECONDS * i)
                     + params.invoice_validity_duration,
+                lease_id: lease_agreement_id,
             }));
         }
-
-        let lease_agreement_id = self.get_lease_agreements_count();
 
         // Mint a lease NFT to the tenant and freeze it.
         // Invariant: The NFT remains frozen for the entire lease lifecycle to prevent
@@ -482,6 +494,7 @@ impl Lease {
                     deadline: block_timestamp
                         + (ONE_MONTH_IN_MILLISECONDS * i)
                         + invoice_validity_duration,
+                    lease_id: *lease_agreement_id,
                 }));
         }
 
@@ -534,7 +547,7 @@ impl Lease {
     }
 
     // =========================================================================
-    // Ownable delegation
+    // Delegation
     // =========================================================================
 
     delegate! {
@@ -543,6 +556,14 @@ impl Lease {
             fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
+        }
+
     }
 }
 

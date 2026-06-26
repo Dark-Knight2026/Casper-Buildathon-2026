@@ -1,5 +1,8 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
+use odra_modules::{
+    access::{AccessControl, Role, DEFAULT_ADMIN_ROLE},
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::{
     property_registry::{
@@ -145,6 +148,8 @@ pub struct PropertyRegistry {
     properties_count: Sequence<U256>,
     /// Reverse lookup from property token address to property ID.
     token_to_property_id: Mapping<Address, Option<U256>>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -158,6 +163,12 @@ impl PropertyRegistry {
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
         self.user_registry.set(user_registry);
+        self.metadata.init(
+            Some("BIG LeaseFi Property Registry".into()),
+            Some("Tokenized property records and lifecycle management.".into()),
+            None,
+            None,
+        );
     }
 
     // =============================================================================
@@ -365,6 +376,13 @@ impl PropertyRegistry {
             fn grant_role(&mut self, role: &Role, address: &Address);
             fn revoke_role(&mut self, role: &Role, address: &Address);
             fn renounce_role(&mut self, role: &Role, address: &Address);
+        }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
         }
     }
 }

@@ -69,6 +69,7 @@ Most rules in this document follow a consistent structure for clarity:
 |                           | [Unique Error Discriminants](#error-handling--unique-error-discriminants)                               | Error discriminants must be unique across the entire project, not just within a single enum.                           |
 | **Module Composition**    | [SubModule for Composition](#module-composition--submodule-for-composition)                             | Use `SubModule<T>` to compose modules. Never attempt inheritance patterns.                                             |
 |                           | [Delegate Macro for Forwarding](#module-composition--delegate-macro-for-forwarding)                     | Use the `delegate!` macro to forward entry points to child submodules and reduce boilerplate.                          |
+|                           | [CEP-96 Contract Metadata](#module-composition--cep-96-contract-metadata)                               | Add `SubModule<Cep96>` to deployable contracts for on-chain discoverability via `contract_name` and `contract_description`. |
 |                           | [External for Cross-Contract Calls](#module-composition--external-for-cross-contract-calls)             | Use `External<ContractRef>` for cross-contract calls to known Odra contracts.                                          |
 |                           | [External Contract Trait for Third-Party](#module-composition--external-contract-trait-for-third-party) | Use `#[odra::external_contract]` trait definitions for interacting with non-Odra or third-party contracts.             |
 | **Security**              | [Payable Annotation](#security--payable-annotation)                                                     | Only functions annotated with `#[odra(payable)]` may receive native tokens. Never use on constructors.                 |
@@ -1136,6 +1137,66 @@ impl OwnedToken {
   }
 }
 ```
+
+### Module Composition : CEP-96 Contract Metadata
+
+**Description:** All deployable LeaseFi contracts expose [CEP-96](https://github.com/casper-network/ceps/blob/master/text/0096-contract-metadata.md) on-chain discoverability via `odra_modules::cep96::Cep96`. Add a `metadata: SubModule<Cep96>` field, set name and description at the end of `init()`, and delegate the four read entry points. Metadata strings are hardcoded inline per contract using the `BIG LeaseFi` branding prefix.
+
+**Rationale:**
+
+- **Explorer discoverability:** Casper explorers and indexers can read `contract_name` and `contract_description` from named keys or entry points without off-chain registries.
+- **Immutable by design:** Odra's `Cep96` storage only writes each named key if absent. Strings must be correct before deploy; there is no post-deploy update path.
+- **No deploy-arg changes:** Metadata is set internally in `init()`, not passed from the CLI or deploy scripts.
+
+**Required pattern for new contracts:**
+
+1. Import `Cep96` and `Cep96ContractMetadata` from `odra_modules::cep96`.
+2. Add `metadata: SubModule<Cep96>` to the contract struct with a field doc comment.
+3. Call `self.metadata.init(Some(name), Some(description), None, None)` as the last step in `init()`.
+4. Delegate all four CEP-96 read entry points in `delegate!`.
+5. Add a smoke test in `tests/contract_metadata.rs` asserting the expected name, description, and `None` URIs.
+
+`icon_uri` and `project_uri` are intentionally omitted (`None`). Do not set them unless product requirements change.
+
+> ✅ **Good** (CEP-96 wiring in a deployable contract)
+
+```rust
+use odra_modules::cep96::{Cep96, Cep96ContractMetadata};
+
+#[odra::module]
+pub struct Treasury {
+    ownable: SubModule<Ownable>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
+}
+
+#[odra::module]
+impl Treasury {
+    pub fn init(&mut self, owner: Address) {
+        self.ownable.init(owner);
+        self.metadata.init(
+            Some("BIG LeaseFi Treasury".into()),
+            Some("Protocol treasury for BIG token reserves and reward distribution.".into()),
+            None,
+            None,
+        );
+    }
+
+    delegate! {
+        to self.ownable {
+            fn get_owner(&self) -> Address;
+        }
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
+        }
+    }
+}
+```
+
+**Post-deploy verification:** Call `contract_name()` / `contract_description()` via the CLI or `casper-client`, or query `contract_name` and `contract_description` named keys on the contract root hash with `query_global_state`.
 
 ### Module Composition : External for Cross-Contract Calls
 

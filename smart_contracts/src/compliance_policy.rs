@@ -1,5 +1,8 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
+use odra_modules::{
+    access::{AccessControl, Role, DEFAULT_ADMIN_ROLE},
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::{
     common,
@@ -130,6 +133,8 @@ pub struct CompliancePolicy {
     configs: Mapping<U256, ComplianceConfig>,
     /// Accounts that are exempt from investor verification checks (e.g. issuance escrows).
     transfer_exempt_accounts: Mapping<Address, bool>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -152,6 +157,12 @@ impl CompliancePolicy {
         self.property_registry.set(property_registry);
         self.lease.set(lease);
         self.user_registry.set(user_registry);
+        self.metadata.init(
+            Some("BIG LeaseFi Compliance Policy".into()),
+            Some("Transfer compliance gate for property ownership tokens.".into()),
+            None,
+            None,
+        );
     }
 
     // =============================================================================
@@ -314,6 +325,14 @@ impl CompliancePolicy {
             fn revoke_role(&mut self, role: &Role, address: &Address);
             fn renounce_role(&mut self, role: &Role, address: &Address);
         }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
+        }
+
     }
 }
 

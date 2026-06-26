@@ -30,3 +30,6 @@ mod property_registry;
 
 #[path = "../tests/user_registry.rs"]
 mod user_registry;
+
+#[path = "../tests/contract_metadata.rs"]
+mod contract_metadata;

@@ -43,6 +43,7 @@ struct InvoiceParams {
     landlord: U256,
     amount_due: CurrencyAmount,
     deadline: u64,
+    lease_id: U256,
 }
 
 fn setup(env: HostEnv) -> TestData {
@@ -106,6 +107,7 @@ fn generate_invoice_params(test_data: &TestData) -> InvoiceParams {
         landlord: test_data.landlord_id,
         amount_due: CurrencyAmount::new(None, U256::from_dec_str("1000000000000000000").unwrap()),
         deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
+        lease_id: U256::from(7),
     }
 }
 
@@ -123,6 +125,7 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
             property_manager: None,
             property_manager_bps: 0,
             deadline: params.deadline,
+            lease_id: params.lease_id,
         });
 
     test_data.env.set_caller(test_data.env.get_account(0));
@@ -132,6 +135,7 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
         InvoiceCreated {
             invoice_id,
             created_at: test_data.env.block_time(),
+            lease_id: params.lease_id,
         }
     ));
 
@@ -148,7 +152,8 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
             property_manager: None,
             property_manager_bps: 0,
             deadline: params.deadline,
-            is_paid: false
+            is_paid: false,
+            lease_id: params.lease_id,
         },
         "Invalid invoice"
     );
@@ -176,6 +181,7 @@ fn create_security_deposit_invoice(test_data: &mut TestData, params: &mut Invoic
         params.landlord,
         amount_due,
         params.deadline,
+        params.lease_id,
     );
 
     test_data.env.set_caller(test_data.env.get_account(0));
@@ -394,6 +400,7 @@ fn test_create_lease_invoice_should_fail_if_not_lease_contract_is_calling() {
                 property_manager: None,
                 property_manager_bps: 0,
                 deadline: 0,
+                lease_id: U256::from(7),
             })
             .unwrap_err(),
         Error::CallerNotLeaseContract.into(),
@@ -419,6 +426,7 @@ fn test_create_lease_invoice_should_fail_if_buyer_is_equal_to_seller() {
                 property_manager: None,
                 property_manager_bps: 0,
                 deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline() + 100,
+                lease_id: U256::from(7),
             })
             .unwrap_err(),
         Error::EqualBuyerAndSeller.into(),
@@ -444,6 +452,7 @@ fn test_create_lease_invoice_should_fail_if_amount_is_zero() {
                 property_manager: None,
                 property_manager_bps: 0,
                 deadline: 0,
+                lease_id: U256::from(7),
             })
             .unwrap_err(),
         Error::ZeroAmount.into(),
@@ -469,6 +478,7 @@ fn test_create_lease_invoice_should_fail_if_deadline_is_sooner_than_min_deadline
                 property_manager: None,
                 property_manager_bps: 0,
                 deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline() - 1,
+                lease_id: U256::from(7),
             })
             .unwrap_err(),
         Error::InvalidDeadline.into(),
@@ -927,6 +937,7 @@ fn test_create_security_deposit_invoice_should_revert_if_not_lease_contract_is_c
                 params.landlord,
                 amount_due,
                 params.deadline,
+                params.lease_id,
             )
             .unwrap_err(),
         Error::CallerNotLeaseContract.into(),
@@ -951,6 +962,7 @@ fn test_create_security_deposit_invoice_should_revert_if_currency_is_not_securit
                 params.landlord,
                 params.amount_due,
                 params.deadline,
+                params.lease_id,
             )
             .unwrap_err(),
         Error::InvalidSecurityDepositCurrency.into(),
@@ -977,6 +989,7 @@ fn test_create_security_deposit_invoice_should_create_invoice_properly() {
         params.landlord,
         amount_due,
         params.deadline,
+        params.lease_id,
     );
 
     assert_eq!(
@@ -992,6 +1005,7 @@ fn test_create_security_deposit_invoice_should_create_invoice_properly() {
             property_manager_bps: 0,
             deadline: params.deadline,
             is_paid: false,
+            lease_id: params.lease_id,
         },
         "Invalid security deposit invoice"
     );

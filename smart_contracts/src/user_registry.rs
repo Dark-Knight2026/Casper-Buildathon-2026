@@ -1,5 +1,8 @@
 use odra::{casper_types::U256, prelude::*};
-use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
+use odra_modules::{
+    access::{AccessControl, Role, DEFAULT_ADMIN_ROLE},
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::common;
 use crate::user_registry::types::UserStatus;
@@ -130,6 +133,8 @@ pub struct UserRegistry {
     identity_to_user_id: Mapping<[u8; 32], Option<U256>>,
     /// Number of users created.
     users_count: Var<U256>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -141,6 +146,15 @@ impl UserRegistry {
     pub fn init(&mut self, owner: Address) {
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+        self.metadata.init(
+            Some("BIG LeaseFi User Registry".into()),
+            Some(
+                "On-chain user identity, wallets, and capability flags for LeaseFi participants."
+                    .into(),
+            ),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -357,6 +371,14 @@ impl UserRegistry {
             fn revoke_role(&mut self, role: &Role, address: &Address);
             fn renounce_role(&mut self, role: &Role, address: &Address);
         }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
+        }
+
     }
 }
 

@@ -43,6 +43,11 @@
             "name": "deadline",
             "description": null,
             "ty": "U64"
+          },
+          {
+            "name": "lease_id",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
@@ -123,6 +128,11 @@
             "name": "is_paid",
             "description": null,
             "ty": "Bool"
+          },
+          {
+            "name": "lease_id",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
@@ -141,6 +151,11 @@
             "name": "created_at",
             "description": null,
             "ty": "U64"
+          },
+          {
+            "name": "lease_id",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
@@ -692,6 +707,12 @@
           "description": null,
           "ty": "U64",
           "optional": false
+        },
+        {
+          "name": "lease_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
         }
       ],
       "return_ty": "U256",
@@ -785,6 +806,50 @@
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "contract_name",
+      "description": "Delegated. See `self.metadata.contract_name()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "contract_description",
+      "description": "Delegated. See `self.metadata.contract_description()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "contract_icon_uri",
+      "description": "Delegated. See `self.metadata.contract_icon_uri()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "contract_project_uri",
+      "description": "Delegated. See `self.metadata.contract_project_uri()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": "String"
+      },
       "is_contract_context": true,
       "access": "public"
     }

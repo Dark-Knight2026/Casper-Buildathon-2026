@@ -1,5 +1,9 @@
 use odra::{casper_types::U256, prelude::*, uints::ToU512, ContractRef};
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use odra_modules::{
+    access::Ownable,
+    cep18_token::Cep18ContractRef,
+    cep96::{Cep96, Cep96ContractMetadata},
+};
 
 use crate::constants::{INCENTIVES_REWARDS_BPS, ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS};
 use crate::staking::StakingContractRef;
@@ -78,6 +82,8 @@ pub struct Treasury {
     ownable: SubModule<Ownable>,
     staking: Var<Address>,
     big_coin: Var<Address>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -88,6 +94,14 @@ impl Treasury {
 
     pub fn init(&mut self, owner: Address) {
         self.ownable.init(owner);
+        self.metadata.init(
+            Some("BIG LeaseFi Treasury".into()),
+            Some(
+                "Protocol treasury for BIG token reserves and reward distribution.".into(),
+            ),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -258,6 +272,13 @@ impl Treasury {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
             fn get_owner(&self) -> Address;
+        }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
         }
     }
 }

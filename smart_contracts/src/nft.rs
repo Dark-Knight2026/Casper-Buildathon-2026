@@ -5,6 +5,7 @@ use odra::{
 use odra_modules::{
     access::{AccessControl, Role, DEFAULT_ADMIN_ROLE},
     cep95::{CEP95Interface, Cep95},
+    cep96::{Cep96, Cep96ContractMetadata},
 };
 
 use crate::common;
@@ -171,6 +172,8 @@ pub struct NFT {
     tokens_count: Var<U256>,
     whitelist: Mapping<Address, bool>,
     frozen_tokens: Mapping<U256, bool>,
+    /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
+    metadata: SubModule<Cep96>,
 }
 
 #[odra::module]
@@ -217,6 +220,13 @@ impl NFT {
             self.env()
                 .emit_event(ForceTransfererAdded { address: *address });
         });
+
+        self.metadata.init(
+            Some("BIG LeaseFi NFT".into()),
+            Some("CEP-95 token for lease certificates and on-chain assets.".into()),
+            None,
+            None,
+        );
     }
 
     // =========================================================================
@@ -583,6 +593,13 @@ impl NFT {
             fn revoke_approval_for_all(&mut self, operator: Address);
             fn is_approved_for_all(&self, owner: Address, operator: Address) -> bool;
             fn token_metadata(&self, token_id: U256) -> Vec<(String, String)>;
+        }
+
+        to self.metadata {
+            fn contract_name(&self) -> Option<String>;
+            fn contract_description(&self) -> Option<String>;
+            fn contract_icon_uri(&self) -> Option<String>;
+            fn contract_project_uri(&self) -> Option<String>;
         }
     }
 }
