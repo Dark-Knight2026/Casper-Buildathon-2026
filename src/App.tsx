@@ -237,11 +237,6 @@ const AccessibilityTestPage = lazy(
   () => import('@/pages/accessibility/AccessibilityTestPage')
 );
 
-// Lazy load ICO pages
-const ICOPage = lazy(() => import('@/pages/ico/ICOPage'));
-const ICOWhitepaperPage = lazy(() => import('@/pages/ico/ICOWhitepaperPage'));
-const ICOLayout = lazy(() => import('@/pages/ico/ICOLayout'));
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -282,34 +277,6 @@ function App() {
                   element={<TenantPropertyDetail />}
                 />
               </Route>
-
-              {/* ICO Pages - Public access for token sale, wrapped with Casper wallet provider */}
-              <Route
-                path="/big-token"
-                element={
-                  <ICOLayout>
-                    <ICOPage />
-                  </ICOLayout>
-                }
-              />
-              <Route
-                path="/big-token/whitepaper"
-                element={
-                  <ICOLayout>
-                    <ICOWhitepaperPage />
-                  </ICOLayout>
-                }
-              />
-              {/* Preserve old /ico bookmarks & external links after the big-token
-                  rebrand — redirect instead of letting the wildcard bounce them to "/". */}
-              <Route
-                path="/ico"
-                element={<Navigate to="/big-token" replace />}
-              />
-              <Route
-                path="/ico/whitepaper"
-                element={<Navigate to="/big-token/whitepaper" replace />}
-              />
 
               {/* 
                 AUTHENTICATION ROUTES
