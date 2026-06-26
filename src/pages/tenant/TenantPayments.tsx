@@ -27,19 +27,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { InvoiceStatusBadge } from '@/components/payments/InvoiceStatusBadge';
 import { PayInvoiceDialog } from '@/components/payments/PayInvoiceDialog';
-import { LEASE_CURRENCY } from '@/lib/leaseCurrency';
+import { LEASE_CURRENCY, formatLeaseAmount as fmt } from '@/lib/leaseCurrency';
 import { formatLeaseDate, formatLeaseMoney } from '@/lib/leaseDisplay';
+import { isSettled } from '@/types/invoiceContract';
 import type { Invoice, InvoiceStatus } from '@/types/invoiceContract';
 import type { Lease } from '@/types/leaseContract';
 
-const fmt = (amount: string) =>
-  `${Number(amount).toLocaleString('en-US', { maximumFractionDigits: 6 })} ${LEASE_CURRENCY.symbol}`;
-
 const PAID: InvoiceStatus[] = ['paid', 'released', 'refunded'];
-// Already settled/closed — no payment possible. Everything else is offered for
-// payment (the dialog resolves the on-chain id, deriving it when the indexer
-// hasn't bound it yet).
-const SETTLED: InvoiceStatus[] = [...PAID, 'cancelled'];
 
 const kindLabel = (invoice: Invoice) =>
   invoice.kind === 'security-deposit' ? 'Security deposit' : 'Rent';
@@ -237,7 +231,7 @@ function InvoiceRow({
   invoice: Invoice;
   onPay: (invoice: Invoice) => void;
 }) {
-  const payable = !SETTLED.includes(invoice.status);
+  const payable = !isSettled(invoice.status);
 
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">

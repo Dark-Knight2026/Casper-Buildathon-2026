@@ -33,9 +33,11 @@ import {
   LEASE_CURRENCY,
   scaleToSmallestUnit,
   formatFromSmallestUnit,
+  formatLeaseAmount as fmt,
 } from '@/lib/leaseCurrency';
 import { ICO_CONFIG } from '@/constants/ico';
 import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { isSettled } from '@/types/invoiceContract';
 import type { Invoice } from '@/types/invoiceContract';
 
 const explorerDeployUrl = (txHash: string) =>
@@ -48,9 +50,6 @@ function remainingDue(invoice: Invoice): string {
   const paid = BigInt(scaleToSmallestUnit(invoice.rentPaid, dec));
   return formatFromSmallestUnit(due > paid ? due - paid : 0n, dec);
 }
-
-const fmt = (amount: string) =>
-  `${Number(amount).toLocaleString('en-US', { maximumFractionDigits: 6 })} ${LEASE_CURRENCY.symbol}`;
 
 const fmtDate = (date: string) =>
   new Intl.DateTimeFormat('en-US', {
@@ -162,9 +161,7 @@ function PayFlow({
   const { data: onchainInvoiceId, isLoading: resolvingId } =
     useResolvedOnchainInvoiceId(invoice);
 
-  const settled = ['paid', 'released', 'refunded', 'cancelled'].includes(
-    invoice.status
-  );
+  const settled = isSettled(invoice.status);
   const payable = Boolean(onchainInvoiceId) && !settled;
 
   const busy = ['checking', 'approving', 'paying', 'recording'].includes(

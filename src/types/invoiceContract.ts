@@ -31,6 +31,22 @@ export type InvoiceStatus =
   | 'refunded'
   | 'cancelled';
 
+/**
+ * Terminal invoice statuses — settled/closed, so no further payment is possible.
+ * Single source of truth shared by the payment views (was duplicated per file).
+ */
+export const SETTLED_STATUSES: readonly InvoiceStatus[] = [
+  'paid',
+  'released',
+  'refunded',
+  'cancelled',
+];
+
+/** Whether an invoice status is settled/closed (no payment possible). */
+export function isSettled(status: InvoiceStatus): boolean {
+  return SETTLED_STATUSES.includes(status);
+}
+
 /** Sort key for `GET /invoices` (default `deadline`, soonest first). */
 export type InvoiceSortBy = 'deadline' | 'amountDue' | 'status';
 

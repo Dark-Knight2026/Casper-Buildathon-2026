@@ -19,16 +19,10 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InvoiceStatusBadge } from '@/components/payments/InvoiceStatusBadge';
 import { PayInvoiceDialog } from '@/components/payments/PayInvoiceDialog';
-import { LEASE_CURRENCY } from '@/lib/leaseCurrency';
+import { LEASE_CURRENCY, formatLeaseAmount as fmt } from '@/lib/leaseCurrency';
 import { formatLeaseDate } from '@/lib/leaseDisplay';
-import type { Invoice, InvoiceStatus } from '@/types/invoiceContract';
-
-const fmt = (amount: string) =>
-  `${Number(amount).toLocaleString('en-US', { maximumFractionDigits: 6 })} ${LEASE_CURRENCY.symbol}`;
-
-// Already settled/closed — no payment possible; everything else is offered
-// (the dialog resolves the on-chain id, deriving it if the indexer is behind).
-const SETTLED: InvoiceStatus[] = ['paid', 'released', 'refunded', 'cancelled'];
+import { isSettled } from '@/types/invoiceContract';
+import type { Invoice } from '@/types/invoiceContract';
 
 export function TenantPaymentsSummary() {
   const navigate = useNavigate();
@@ -108,7 +102,7 @@ function NextDueRow({
   invoice: Invoice;
   onPay: () => void;
 }) {
-  const canPay = !SETTLED.includes(invoice.status);
+  const canPay = !isSettled(invoice.status);
   const kind =
     invoice.kind === 'security-deposit' ? 'Security deposit' : 'Rent';
 

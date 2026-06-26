@@ -104,3 +104,14 @@ export function formatFromSmallestUnit(
   const result = fracPart ? `${intPart}.${fracPart}` : intPart;
   return negative ? `-${result}` : result;
 }
+
+/**
+ * A decimal amount string rendered with the lease currency symbol, up to 6
+ * fractional digits (matches the token's precision). Shared by the payment
+ * views so the formatting can't drift between them.
+ */
+export function formatLeaseAmount(amount: string): string {
+  return `${Number(amount).toLocaleString('en-US', {
+    maximumFractionDigits: 6,
+  })} ${LEASE_CURRENCY.symbol}`;
+}

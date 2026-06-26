@@ -20,6 +20,11 @@ import { listInvoices } from '@/services/invoiceService';
 import { extractLeaseCommitIds } from '@/lib/casper/leaseAgreementEvents';
 import type { Invoice } from '@/types/invoiceContract';
 
+// Page size for the lease's invoice list. A 1-year lease has ≤13 invoices, so
+// this is never hit in practice — but if it ever were, the list would be
+// truncated and the positional mapping below would be wrong.
+const INVOICE_PAGE_SIZE = 100;
+
 /** Contract invoice-creation order: security deposit first, then rent by deadline. */
 function orderForChain(invoices: Invoice[]): Invoice[] {
   return [...invoices].sort((a, b) => {
@@ -46,8 +51,11 @@ async function resolveOnchainInvoiceId(
   // created them, then read the id at that index.
   const { data: leaseInvoices } = await listInvoices({
     leaseId: invoice.leaseId,
-    pageSize: 100,
+    pageSize: INVOICE_PAGE_SIZE,
   });
+  // If we hit the page cap the list is truncated, so positions no longer map
+  // 1:1 to the on-chain ids — refuse to guess rather than pay a wrong escrow id.
+  if (leaseInvoices.length >= INVOICE_PAGE_SIZE) return null;
   const index = orderForChain(leaseInvoices).findIndex(
     (i) => i.id === invoice.id
   );
