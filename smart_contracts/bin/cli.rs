@@ -9,7 +9,9 @@ use odra_modules::access::DEFAULT_ADMIN_ROLE;
 
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
-    constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
+    constants::{
+        MIN_DEADLINE_IN_MS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
+    },
     escrow::{Escrow, EscrowInitArgs},
     ico::{
         types::{Currency, ICOScheduleCreateParams},
