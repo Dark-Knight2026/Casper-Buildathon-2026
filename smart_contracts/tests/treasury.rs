@@ -7,22 +7,13 @@ use odra::{
 use odra_modules::access::errors::Error as AccessError;
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
-use leasefi_contracts::constants::{ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS};
-use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
 use leasefi_contracts::treasury::{
     errors::Error,
-    events::{BigCoinSet, ReservesWithdrawn, RewardsDeposited, StakingSet, TokenWithdrawn},
+    events::{BigCoinSet, ReservesWithdrawn, RewardsDeposited, TokenWithdrawn},
     Treasury, TreasuryHostRef, TreasuryInitArgs,
 };
 
-fn setup(
-    env: &HostEnv,
-) -> (
-    TreasuryHostRef,
-    StakingHostRef,
-    BigCoinHostRef,
-    BigCoinHostRef,
-) {
+fn setup(env: &HostEnv) -> (TreasuryHostRef, BigCoinHostRef, BigCoinHostRef) {
     let mut treasury = Treasury::deploy(
         env,
         TreasuryInitArgs {
@@ -47,19 +38,10 @@ fn setup(
             initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
         },
     );
-    let mut staking = Staking::deploy(
-        env,
-        StakingInitArgs {
-            owner: env.get_account(0),
-        },
-    );
 
     treasury.set_big_coin(big_coin.address());
-    treasury.set_staking(staking.address());
 
-    staking.set_big_coin(big_coin.address());
-
-    (treasury, staking, big_coin, mock_cep18)
+    (treasury, big_coin, mock_cep18)
 }
 
 fn deposit_rewards(
@@ -71,32 +53,12 @@ fn deposit_rewards(
     treasury.deposit_rewards(*rewards_amount);
 }
 
-fn create_active_stake(
-    env: &HostEnv,
-    big_coin: &mut BigCoinHostRef,
-    staking: &mut StakingHostRef,
-    staker: Address,
-    amount: U256,
-) {
-    big_coin.transfer(&staker, &amount);
-
-    env.set_caller(staker);
-    big_coin.approve(&staking.address(), &amount);
-    staking.stake_for(staker, amount);
-    env.set_caller(env.get_account(0));
-}
-
 #[test]
 fn test_init_should_initialize_contract_properly() {
     let env = odra_test::env();
-    let (treasury, staking, big_coin, _) = setup(&env);
+    let (treasury, big_coin, _) = setup(&env);
 
     assert_eq!(treasury.get_owner(), env.get_account(0), "Invalid owner");
-    assert_eq!(
-        treasury.get_staking_contract_address(),
-        staking.address(),
-        "Invalid Staking contract address"
-    );
     assert_eq!(
         treasury.get_big_coin_contract_address(),
         big_coin.address(),
@@ -105,43 +67,9 @@ fn test_init_should_initialize_contract_properly() {
 }
 
 #[test]
-fn test_set_staking_should_revert_if_not_owner_is_calling() {
-    let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
-
-    env.set_caller(env.get_account(1));
-
-    assert_eq!(
-        treasury.try_set_staking(env.get_account(1)).unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
-        "Should revert when is called by not the owner"
-    );
-}
-
-#[test]
-fn test_set_staking_should_set_staking_properly() {
-    let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
-    let staking = env.get_account(10);
-
-    treasury.set_staking(staking);
-
-    assert_eq!(
-        treasury.get_staking_contract_address(),
-        staking,
-        "Invalid Staking contract address"
-    );
-
-    assert!(env.emitted_event(
-        &treasury,
-        StakingSet { staking }
-    ));
-}
-
-#[test]
 fn test_set_big_coin_should_revert_if_not_owner_is_calling() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
 
     env.set_caller(env.get_account(1));
 
@@ -155,7 +83,7 @@ fn test_set_big_coin_should_revert_if_not_owner_is_calling() {
 #[test]
 fn test_set_big_coin_should_set_big_coin_properly() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
     let big_coin = env.get_account(10);
 
     treasury.set_big_coin(big_coin);
@@ -175,71 +103,16 @@ fn test_set_big_coin_should_set_big_coin_properly() {
 #[test]
 fn test_deposit_rewards_should_deposit_rewards_properly() {
     let env = odra_test::env();
-    let (mut treasury, mut staking, mut big_coin, _) = setup(&env);
-    let stake_amount = U256::from_dec_str("1000000000000000000").unwrap();
+    let (mut treasury, mut big_coin, _) = setup(&env);
     let rewards_amount = U256::from_dec_str("5000000000000000000").unwrap();
-    let expected_staking_rewards = rewards_amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
-
-    create_active_stake(
-        &env,
-        &mut big_coin,
-        &mut staking,
-        env.get_account(1),
-        stake_amount,
-    );
 
     let prev_user_balance = big_coin.balance_of(&env.caller());
     let prev_treasury_balance = big_coin.balance_of(&treasury.address());
-    let prev_staking_balance = big_coin.balance_of(&staking.address());
 
     deposit_rewards(&rewards_amount, &mut big_coin, &mut treasury);
 
     let curr_user_balance = big_coin.balance_of(&env.caller());
     let curr_treasury_balance = big_coin.balance_of(&treasury.address());
-    let curr_staking_balance = big_coin.balance_of(&staking.address());
-
-    assert!(env.emitted_event(
-        &treasury,
-        RewardsDeposited {
-            amount: rewards_amount
-        }
-    ));
-    assert_eq!(
-        treasury.get_reserves(),
-        rewards_amount - expected_staking_rewards,
-        "Invalid reserves balance"
-    );
-    assert_eq!(
-        curr_user_balance,
-        prev_user_balance - rewards_amount,
-        "Invalid current user balance"
-    );
-    assert_eq!(
-        curr_treasury_balance,
-        prev_treasury_balance + rewards_amount - expected_staking_rewards,
-        "Invalid current Treasury balance"
-    );
-    assert_eq!(
-        curr_staking_balance,
-        prev_staking_balance + expected_staking_rewards,
-        "Invalid current Staking balance"
-    );
-}
-
-#[test]
-fn test_deposit_rewards_should_keep_all_rewards_as_reserves_if_no_active_stake() {
-    let env = odra_test::env();
-    let (mut treasury, staking, mut big_coin, _) = setup(&env);
-    let rewards_amount = U256::from_dec_str("5000000000000000000").unwrap();
-    let prev_user_balance = big_coin.balance_of(&env.caller());
-    let prev_treasury_balance = big_coin.balance_of(&treasury.address());
-    let prev_staking_balance = big_coin.balance_of(&staking.address());
-
-    deposit_rewards(&rewards_amount, &mut big_coin, &mut treasury);
-
-    let curr_user_balance = big_coin.balance_of(&env.caller());
-    let curr_treasury_balance = big_coin.balance_of(&treasury.address());
-    let curr_staking_balance = big_coin.balance_of(&staking.address());
 
     assert!(env.emitted_event(
         &treasury,
@@ -250,7 +123,7 @@ fn test_deposit_rewards_should_keep_all_rewards_as_reserves_if_no_active_stake()
     assert_eq!(
         treasury.get_reserves(),
         rewards_amount,
-        "All rewards should remain as reserves when no stake is active"
+        "Full deposit should remain as reserves"
     );
     assert_eq!(
         curr_user_balance,
@@ -262,16 +135,12 @@ fn test_deposit_rewards_should_keep_all_rewards_as_reserves_if_no_active_stake()
         prev_treasury_balance + rewards_amount,
         "Invalid current Treasury balance"
     );
-    assert_eq!(
-        curr_staking_balance, prev_staking_balance,
-        "Staking balance should not change when no stake is active"
-    );
 }
 
 #[test]
 fn test_withdraw_reserves_should_revert_if_not_owner_is_calling() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
 
     env.set_caller(env.get_account(1));
 
@@ -287,7 +156,7 @@ fn test_withdraw_reserves_should_revert_if_not_owner_is_calling() {
 #[test]
 fn test_withdraw_reserves_should_fail_if_not_enough_reserves() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
 
     assert_eq!(
         treasury
@@ -301,7 +170,7 @@ fn test_withdraw_reserves_should_fail_if_not_enough_reserves() {
 #[test]
 fn test_withdraw_reserves_should_withdraw_part_of_reserves_properly() {
     let env = odra_test::env();
-    let (mut treasury, _, mut big_coin, _) = setup(&env);
+    let (mut treasury, mut big_coin, _) = setup(&env);
 
     deposit_rewards(
         &U256::from_dec_str("10000000000000000000").unwrap(),
@@ -347,7 +216,7 @@ fn test_withdraw_reserves_should_withdraw_part_of_reserves_properly() {
 #[test]
 fn test_withdraw_reserves_should_withdraw_all_reserves_properly() {
     let env = odra_test::env();
-    let (mut treasury, _, mut big_coin, _) = setup(&env);
+    let (mut treasury, mut big_coin, _) = setup(&env);
 
     deposit_rewards(
         &U256::from_dec_str("20000000000000000000").unwrap(),
@@ -392,7 +261,7 @@ fn test_withdraw_reserves_should_withdraw_all_reserves_properly() {
 #[test]
 fn test_withdraw_token_should_revert_if_not_owner_is_calling() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
 
     env.set_caller(env.get_account(1));
 
@@ -408,7 +277,7 @@ fn test_withdraw_token_should_revert_if_not_owner_is_calling() {
 #[test]
 fn test_withdraw_token_should_revert_if_withdrawal_amount_is_zero() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
 
     assert_eq!(
         treasury
@@ -422,7 +291,7 @@ fn test_withdraw_token_should_revert_if_withdrawal_amount_is_zero() {
 #[test]
 fn test_withdraw_token_should_revert_if_withdrawal_cspr_token_amount_is_gt_available_balance() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
 
     assert_eq!(
         treasury
@@ -436,7 +305,7 @@ fn test_withdraw_token_should_revert_if_withdrawal_cspr_token_amount_is_gt_avail
 #[test]
 fn test_withdraw_token_should_revert_if_withdrawal_cep18_token_is_reserves_token() {
     let env = odra_test::env();
-    let (mut treasury, _, big_coin, _) = setup(&env);
+    let (mut treasury, big_coin, _) = setup(&env);
 
     assert_eq!(
         treasury
@@ -450,7 +319,7 @@ fn test_withdraw_token_should_revert_if_withdrawal_cep18_token_is_reserves_token
 #[test]
 fn test_withdraw_token_should_revert_if_withdrawal_cep18_token_amount_is_gt_available_balance() {
     let env = odra_test::env();
-    let (mut treasury, _, _, mock_cep18) = setup(&env);
+    let (mut treasury, _, mock_cep18) = setup(&env);
 
     assert_eq!(
         treasury
@@ -464,7 +333,7 @@ fn test_withdraw_token_should_revert_if_withdrawal_cep18_token_amount_is_gt_avai
 #[test]
 fn test_withdraw_token_should_should_withdraw_cspr_token_properly() {
     let env = odra_test::env();
-    let (mut treasury, _, _, _) = setup(&env);
+    let (mut treasury, _, _) = setup(&env);
     let amount = U512::from(10u32.pow(9));
     let withdrawal_amount = amount / 2;
     let recipient = env.get_account(1);
@@ -502,7 +371,7 @@ fn test_withdraw_token_should_should_withdraw_cspr_token_properly() {
 #[test]
 fn test_withdraw_token_should_should_withdraw_cep18_token_properly() {
     let env = odra_test::env();
-    let (mut treasury, _, _, mut mock_cep18) = setup(&env);
+    let (mut treasury, _, mut mock_cep18) = setup(&env);
     let amount = U256::from_dec_str("10000000000000000000").unwrap();
     let withdrawal_amount = amount / 2;
     let recipient = env.get_account(1);

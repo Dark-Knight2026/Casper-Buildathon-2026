@@ -5,11 +5,9 @@ use odra_modules::{
     cep96::{Cep96, Cep96ContractMetadata},
 };
 
-use crate::constants::{INCENTIVES_REWARDS_BPS, ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS};
-use crate::staking::StakingContractRef;
 use crate::treasury::{
     errors::Error,
-    events::{BigCoinSet, ReservesWithdrawn, RewardsDeposited, StakingSet, TokenWithdrawn},
+    events::{BigCoinSet, ReservesWithdrawn, RewardsDeposited, TokenWithdrawn},
 };
 
 // =============================================================================
@@ -38,11 +36,6 @@ pub mod events {
     }
 
     #[odra::event]
-    pub struct StakingSet {
-        pub staking: Address,
-    }
-
-    #[odra::event]
     pub struct BigCoinSet {
         pub big_coin: Address,
     }
@@ -58,7 +51,6 @@ pub mod errors {
     #[odra::odra_error]
     pub enum Error {
         BigCoinContractIsNotSet = 200,
-        StakingContractIsNotSet = 201,
         NotEnoughReserves = 202,
         InvalidWithdrawalAmount = 203,
         DirectReservesTokenWithdrawalIsNotAllowed = 204,
@@ -75,12 +67,10 @@ pub mod errors {
   RewardsDeposited,
   ReservesWithdrawn,
   TokenWithdrawn,
-  StakingSet,
   BigCoinSet,
 ])]
 pub struct Treasury {
     ownable: SubModule<Ownable>,
-    staking: Var<Address>,
     big_coin: Var<Address>,
     /// CEP-96 on-chain discoverability metadata. Immutable after deploy.
     metadata: SubModule<Cep96>,
@@ -97,7 +87,7 @@ impl Treasury {
         self.metadata.init(
             Some("BIG LeaseFi Treasury".into()),
             Some(
-                "Protocol treasury for BIG token reserves and reward distribution.".into(),
+                "Protocol treasury for BIG token reserves and protocol fee revenue.".into(),
             ),
             None,
             None,
@@ -107,14 +97,6 @@ impl Treasury {
     // =========================================================================
     // Owner-only configuration
     // =========================================================================
-
-    /// Sets the Staking contract address by the owner
-    pub fn set_staking(&mut self, staking: Address) {
-        self.assert_owner();
-        self.staking.set(staking);
-
-        self.env().emit_event(StakingSet { staking });
-    }
 
     /// Sets the BIG token contract address by the owner
     pub fn set_big_coin(&mut self, big_coin: Address) {
@@ -134,12 +116,6 @@ impl Treasury {
             .balance_of(&self.env().self_address())
     }
 
-    /// Returns the Staking contract address
-    pub fn get_staking_contract_address(&self) -> Address {
-        self.staking
-            .get_or_revert_with(Error::StakingContractIsNotSet)
-    }
-
     /// Returns the BIG token contract address
     pub fn get_big_coin_contract_address(&self) -> Address {
         self.big_coin
@@ -150,39 +126,21 @@ impl Treasury {
     // Deposit
     // =========================================================================
 
-    /// Allows to deposit any rewards amount in the BIG token by anyone, then distributes these rewards
-    /// between the Staking contract and internal reserves.
+    /// Allows anyone to deposit BIG token rewards into Treasury reserves.
     ///
-    /// This is the mechanism by which protocol fee revenue (e.g. the 2% rent fee collected
-    /// by Escrow and held in the Treasury as CSPR/USDC/USDT) reaches stakers:
+    /// This is the on-chain step after protocol fee revenue (e.g. the 2% rent fee collected
+    /// by Escrow as CSPR/USDC/USDT) is converted to BIG off-chain:
     /// 1. Fees accumulate in the Treasury (as non-BIG tokens).
     /// 2. The Treasury owner withdraws them (via withdraw_token / self-balance).
     /// 3. Off-chain, the fee revenue is converted to BIG.
-    /// 4. The owner (or any provider of the BIG) calls this function with the BIG amount
-    ///    (after approve), routing 60% (STAKING_REWARDS_BPS) to stakers via Staking.deposit_rewards
-    ///    (when stake > 0) and keeping 40% (INCENTIVES_REWARDS_BPS) as BIG reserves for future
-    ///    incentives.
-    ///
-    /// If there is no active stake yet, the full deposit remains in Treasury reserves instead of reverting.
+    /// 4. The caller approves and deposits the full BIG amount here; 100% stays as reserves.
     #[odra(non_reentrant)]
     pub fn deposit_rewards(&mut self, amount: U256) {
         if amount > U256::zero() {
             let mut big_coin =
                 Cep18ContractRef::new(self.env(), self.get_big_coin_contract_address());
-            let staking_rewards = amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
-            let _incentive_reserves = amount * INCENTIVES_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
-            let staking_address = self.get_staking_contract_address();
-            let mut staking = StakingContractRef::new(self.env(), staking_address);
 
             big_coin.transfer_from(&self.env().caller(), &self.env().self_address(), &amount);
-
-            // _incentive_reserves (40%) stay in Treasury as reserves (the amount not forwarded to staking);
-            // explicit reference to INCENTIVES_REWARDS_BPS eliminates the previous dead code.
-
-            if !staking_rewards.is_zero() && !staking.get_total_staked().is_zero() {
-                big_coin.approve(&staking_address, &staking_rewards);
-                staking.deposit_rewards(staking_rewards);
-            }
 
             self.env().emit_event(RewardsDeposited { amount });
         }
