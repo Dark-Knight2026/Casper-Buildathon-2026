@@ -9,16 +9,12 @@ use odra_modules::access::DEFAULT_ADMIN_ROLE;
 
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
-    compliance_policy::{types::ComplianceConfig, CompliancePolicy, CompliancePolicyInitArgs},
-    constants::{
-        MIN_DEADLINE_IN_MS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
-    },
+    constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
     escrow::{Escrow, EscrowInitArgs},
     ico::{
         types::{Currency, ICOScheduleCreateParams},
         ICOInitArgs, ICO,
     },
-    investor_registry::{InvestorRegistry, InvestorRegistryInitArgs},
     lease::{Lease, LeaseInitArgs},
     nft::{types::NFTInitParams, NFTInitArgs, NFT},
     property_fraction_token::{
@@ -162,17 +158,7 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
-        let mut investor_registry = InvestorRegistry::load_or_deploy_with_cfg(
-            env,
-            None,
-            InvestorRegistryInitArgs {
-                owner: env.caller(),
-            },
-            InstallConfig::upgradable::<InvestorRegistry>(),
-            container,
-            400_000_000_000,
-        )?;
-        let lease = Lease::load_or_deploy_with_cfg(
+        let mut lease = Lease::load_or_deploy_with_cfg(
             env,
             None,
             LeaseInitArgs {
@@ -183,20 +169,6 @@ impl DeployScript for LeasefiDeployScript {
                 user_registry: user_registry.address(),
             },
             InstallConfig::upgradable::<Lease>(),
-            container,
-            400_000_000_000,
-        )?;
-        let mut compliance = CompliancePolicy::load_or_deploy_with_cfg(
-            env,
-            None,
-            CompliancePolicyInitArgs {
-                owner: env.caller(),
-                investor_registry: investor_registry.address(),
-                property_registry: property_registry.address(),
-                lease: lease.address(),
-                user_registry: user_registry.address(),
-            },
-            InstallConfig::upgradable::<CompliancePolicy>(),
             container,
             400_000_000_000,
         )?;
@@ -358,21 +330,7 @@ impl DeployScript for LeasefiDeployScript {
         // initialized with the deployer as owner.
         nft.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
         property_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-
-        // (no revoke of DEFAULT_ADMIN from final owner)
-        investor_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        // Grant VERIFICATION_MANAGER so that set_investor_record (KYC updates) works after handoff.
-        investor_registry.grant_role(&investor_registry.verification_manager_role(), &new_owner);
-        // (no revoke of DEFAULT_ADMIN from final owner)
-        compliance.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        // Grant COMPLIANCE_MANAGER so that set_compliance_config / set_transfer_exempt work after handoff.
-        compliance.grant_role(&compliance.compliance_manager_role(), &new_owner);
-        // (no revoke of DEFAULT_ADMIN from final owner)
-
-        // Hand off PFT admin role (DEFAULT_ADMIN_ROLE) to new_owner, consistent with other
-        // contracts. TOKEN_MANAGER was already granted to new_owner during bootstrap above.
-        property_fraction_token.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        // (no revoke of DEFAULT_ADMIN from final owner)
+        property_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
 
         Ok(())
     }
@@ -393,9 +351,6 @@ pub fn main() {
         .contract::<Vesting>()
         .contract::<ICO>()
         .contract::<PropertyRegistry>()
-        .contract::<InvestorRegistry>()
-        .contract::<CompliancePolicy>()
-        .contract::<PropertyFractionToken>()
         .build()
         .run();
 }

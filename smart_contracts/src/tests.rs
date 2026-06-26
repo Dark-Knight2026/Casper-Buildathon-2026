@@ -25,17 +25,8 @@ mod treasury;
 #[path = "../tests/vesting.rs"]
 mod vesting;
 
-#[path = "../tests/investor_registry.rs"]
-mod investor_registry;
-
 #[path = "../tests/property_registry.rs"]
 mod property_registry;
-
-#[path = "../tests/compliance_policy.rs"]
-mod compliance_policy;
-
-#[path = "../tests/property_fraction_token.rs"]
-mod property_fraction_token;
 
 #[path = "../tests/user_registry.rs"]
 mod user_registry;
