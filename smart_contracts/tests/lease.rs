@@ -16,8 +16,8 @@ use leasefi_contracts::escrow::{
 use leasefi_contracts::lease::{
     errors::Error,
     events::{
-        EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
-        LeaseAgreementFinished, LeaseAgreementProlonged, LeaseNftRecovered,
+        LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged,
+        LeaseNftRecovered,
     },
     types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     Lease, LeaseHostRef, LeaseInitArgs,
@@ -32,10 +32,7 @@ use leasefi_contracts::user_registry::{
     ROLE_FLAG_PROPERTY_MANAGER, ROLE_FLAG_TENANT,
 };
 
-use crate::{
-    lease::types::LeaseEquityOption,
-    nft::{NFTHostRef, NFTInitArgs, NFT},
-};
+use crate::nft::{NFTHostRef, NFTInitArgs, NFT};
 
 // =============================================================================
 // Test Context
@@ -53,6 +50,7 @@ struct TestData {
     landlord_id: U256,
     tenant_id: U256,
     unwhitelisted_tenant_id: U256,
+    default_property_id: U256,
 }
 
 fn setup(env: HostEnv) -> TestData {
@@ -82,7 +80,7 @@ fn setup(env: HostEnv) -> TestData {
         },
     );
 
-    let property_registry = PropertyRegistry::deploy(
+    let mut property_registry = PropertyRegistry::deploy(
         &env,
         PropertyRegistryInitArgs {
             owner: env.get_account(0),
@@ -151,6 +149,16 @@ fn setup(env: HostEnv) -> TestData {
     nft.add_to_whitelist(&tenant_wallet);
     // Note: unwhitelisted_tenant_wallet is intentionally not whitelisted for nft mint test
 
+    // Register a default active property owned by the landlord so always-on property validation passes.
+    env.set_caller(env.get_account(0));
+    let default_property_id = property_registry.create_property(CreatePropertyParams {
+        issuer: landlord_id,
+        total_supply: U256::from(1_000_000),
+        metadata_uri: String::from("ipfs://property-default"),
+    });
+    property_registry.set_property_token(default_property_id, env.get_account(2));
+    property_registry.set_property_status(default_property_id, PropertyStatus::Active);
+
     // Default to landlord wallet so create_lease_agreement tests (and similar) have correct caller
     // for get_caller_landlord() without every test having to set it. Negative tests override as needed.
     env.set_caller(landlord);
@@ -167,6 +175,7 @@ fn setup(env: HostEnv) -> TestData {
         landlord_id,
         tenant_id,
         unwhitelisted_tenant_id,
+        default_property_id,
     }
 }
 
@@ -181,7 +190,7 @@ fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLease
             property_manager: None,
             property_manager_bps: 0,
         },
-        equity_option: None,
+        property_id: test_data.default_property_id,
         monthly_rent: CurrencyAmount::new(None, U256::from_dec_str("250000000000000000").unwrap()),
         security_deposit: CurrencyAmount::new(
             Some(test_data.security_deposit_token.address()),
@@ -237,7 +246,11 @@ fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id
     );
 }
 
-fn create_active_property(test_data: &mut TestData, issuer: U256) -> U256 {
+fn create_active_property(
+    test_data: &mut TestData,
+    issuer: U256,
+    token_account_index: usize,
+) -> U256 {
     test_data.env.set_caller(test_data.env.get_account(0));
     let property_id = test_data
         .property_registry
@@ -247,9 +260,10 @@ fn create_active_property(test_data: &mut TestData, issuer: U256) -> U256 {
             metadata_uri: String::from("ipfs://property-1"),
         });
 
-    test_data
-        .property_registry
-        .set_property_token(property_id, test_data.env.get_account(2));
+    test_data.property_registry.set_property_token(
+        property_id,
+        test_data.env.get_account(token_account_index),
+    );
     test_data
         .property_registry
         .set_property_status(property_id, PropertyStatus::Active);
@@ -605,7 +619,7 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
             tenant: params.tenant,
             landlord: test_data.landlord_id,
             rent_distribution_terms: params.rent_distribution_terms,
-            equity_option: None,
+            property_id: params.property_id,
             monthly_rent: params.monthly_rent,
             security_deposit: params.security_deposit,
             invoices_ids: (0..=12).map(U256::from).collect(),
@@ -665,83 +679,6 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
 }
 
 #[test]
-fn test_create_lease_agreement_with_equity_option_should_mark_tenant_equity_eligible() {
-    let mut test_data = setup(odra_test::env());
-    let mut params = generate_lease_agreement_creation_params(&test_data);
-    let landlord_id = test_data.landlord_id;
-    let property_id = create_active_property(&mut test_data, landlord_id);
-
-    params.equity_option = Some(LeaseEquityOption { property_id });
-
-    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
-    let lease_agreement = test_data
-        .lease
-        .get_lease_agreement_by_id(&lease_agreement_id);
-
-    assert_eq!(
-        lease_agreement.equity_option, params.equity_option,
-        "Lease should store the equity option",
-    );
-
-    assert!(
-        test_data
-            .lease
-            .is_equity_eligible(property_id, params.tenant),
-        "Tenant should be equity eligible for the property",
-    );
-
-    assert!(test_data.env.emitted_event(
-        &test_data.lease,
-        EquityEligibilityGranted {
-            property_id,
-            account: params.tenant,
-        }
-    ));
-
-    assert!(
-        !test_data
-            .lease
-            .is_equity_eligible(property_id + U256::one(), params.tenant),
-        "Tenant should not be equity eligible for a different property",
-    );
-
-    assert!(
-        !test_data
-            .lease
-            .is_equity_eligible(property_id, U256::from(999u64)),
-        "A different account should not be equity eligible",
-    );
-}
-
-#[test]
-fn test_create_two_equity_leases_same_property_same_tenant_should_revert() {
-    let mut test_data = setup(odra_test::env());
-    let mut params = generate_lease_agreement_creation_params(&test_data);
-    let landlord_id = test_data.landlord_id;
-    let property_id = create_active_property(&mut test_data, landlord_id);
-    params.equity_option = Some(LeaseEquityOption { property_id });
-
-    // First equity lease succeeds
-    let _lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
-    assert!(
-        test_data
-            .lease
-            .is_equity_eligible(property_id, params.tenant),
-        "Tenant should be equity eligible after first lease"
-    );
-
-    // Second equity lease for the same (property, tenant) should revert
-    assert_eq!(
-        test_data
-            .lease
-            .try_create_lease_agreement(params.clone())
-            .unwrap_err(),
-        Error::TenantAlreadyEquityEligible.into(),
-        "Should revert when tenant already has an active equity lease for this property"
-    );
-}
-
-#[test]
 fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
     let mut test_data = setup(odra_test::env());
 
@@ -757,9 +694,7 @@ fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
         });
 
     test_data.env.set_caller(test_data.landlord);
-    params.equity_option = Some(LeaseEquityOption {
-        property_id: draft_property_id,
-    });
+    params.property_id = draft_property_id;
 
     assert_eq!(
         test_data
@@ -782,15 +717,13 @@ fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
         });
     test_data
         .property_registry
-        .set_property_token(paused_property_id, test_data.env.get_account(2));
+        .set_property_token(paused_property_id, test_data.env.get_account(3));
     test_data
         .property_registry
         .set_property_status(paused_property_id, PropertyStatus::Paused);
 
     test_data.env.set_caller(test_data.landlord);
-    params.equity_option = Some(LeaseEquityOption {
-        property_id: paused_property_id,
-    });
+    params.property_id = paused_property_id;
 
     assert_eq!(
         test_data
@@ -820,9 +753,7 @@ fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
         .set_property_status(sold_property_id, PropertyStatus::Sold);
 
     test_data.env.set_caller(test_data.landlord);
-    params.equity_option = Some(LeaseEquityOption {
-        property_id: sold_property_id,
-    });
+    params.property_id = sold_property_id;
     assert_eq!(
         test_data
             .lease
@@ -851,9 +782,7 @@ fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
         .set_property_status(liquidating_property_id, PropertyStatus::Liquidating);
 
     test_data.env.set_caller(test_data.landlord);
-    params.equity_option = Some(LeaseEquityOption {
-        property_id: liquidating_property_id,
-    });
+    params.property_id = liquidating_property_id;
     assert_eq!(
         test_data
             .lease
@@ -881,9 +810,7 @@ fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
         .set_property_status(closed_property_id, PropertyStatus::Closed);
 
     test_data.env.set_caller(test_data.landlord);
-    params.equity_option = Some(LeaseEquityOption {
-        property_id: closed_property_id,
-    });
+    params.property_id = closed_property_id;
     assert_eq!(
         test_data
             .lease
@@ -906,9 +833,9 @@ fn test_create_lease_agreement_should_fail_if_landlord_is_not_issuer() {
         test_data
             .user_registry
             .create_user([99u8; 32], other_issuer_wallet, ROLE_FLAG_LANDLORD);
-    let property_id = create_active_property(&mut test_data, other_issuer_id);
+    let property_id = create_active_property(&mut test_data, other_issuer_id, 3);
 
-    params.equity_option = Some(LeaseEquityOption { property_id });
+    params.property_id = property_id;
 
     assert_eq!(
         test_data
@@ -917,32 +844,6 @@ fn test_create_lease_agreement_should_fail_if_landlord_is_not_issuer() {
             .unwrap_err(),
         Error::InvalidPropertyIssuer.into(),
         "Should revert if landlord is not property issuer"
-    );
-}
-
-#[test]
-fn test_create_lease_agreement_without_equity_option_should_not_mark_tenant_equity_eligible() {
-    let mut test_data = setup(odra_test::env());
-    let params = generate_lease_agreement_creation_params(&test_data);
-    let landlord_id = test_data.landlord_id;
-    let property_id = create_active_property(&mut test_data, landlord_id);
-
-    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
-    let lease_agreement = test_data
-        .lease
-        .get_lease_agreement_by_id(&lease_agreement_id);
-
-    assert_eq!(
-        lease_agreement.equity_option, None,
-        "Lease should not store an equity options",
-    );
-
-    let is_eligible = test_data
-        .lease
-        .is_equity_eligible(property_id, params.tenant);
-    assert!(
-        !is_eligible,
-        "Tenant should not be equity eligible without an equity options",
     );
 }
 
@@ -1051,50 +952,6 @@ fn test_finalize_lease_agreement_should_finalize_properly_when_all_invoices_paid
 }
 
 #[test]
-fn test_equity_eligibility_is_revoked_after_lease_finalization() {
-    let mut test_data = setup(odra_test::env());
-    let mut params = generate_lease_agreement_creation_params(&test_data);
-    let landlord_id = test_data.landlord_id;
-    let property_id = create_active_property(&mut test_data, landlord_id);
-    params.equity_option = Some(LeaseEquityOption { property_id });
-
-    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
-
-    // Verify initial eligibility
-    assert!(
-        test_data
-            .lease
-            .is_equity_eligible(property_id, params.tenant),
-        "Tenant should be equity eligible initially"
-    );
-
-    pay_all_lease_agreement_invoices(&mut test_data, &lease_agreement_id);
-
-    test_data
-        .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
-    test_data
-        .lease
-        .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
-
-    // Verify revocation
-    assert!(
-        !test_data
-            .lease
-            .is_equity_eligible(property_id, params.tenant),
-        "Tenant equity eligibility should be revoked after finalization"
-    );
-
-    assert!(test_data.env.emitted_event(
-        &test_data.lease,
-        EquityEligibilityRevoked {
-            property_id,
-            account: params.tenant,
-        }
-    ));
-}
-
-#[test]
 fn test_finalize_already_finalized_lease_should_revert() {
     let mut test_data = setup(odra_test::env());
     let params = generate_lease_agreement_creation_params(&test_data);
@@ -1123,46 +980,6 @@ fn test_finalize_already_finalized_lease_should_revert() {
 // =============================================================================
 // prolong_lease_agreement()
 // =============================================================================
-
-#[test]
-fn test_prolong_lease_with_equity_option_preserves_eligibility() {
-    let mut test_data = setup(odra_test::env());
-    let mut params = generate_lease_agreement_creation_params(&test_data);
-    let landlord_id = test_data.landlord_id;
-    let property_id = create_active_property(&mut test_data, landlord_id);
-    params.equity_option = Some(LeaseEquityOption { property_id });
-
-    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
-
-    // Verify initial eligibility
-    assert!(
-        test_data
-            .lease
-            .is_equity_eligible(property_id, params.tenant),
-        "Tenant should be equity eligible initially"
-    );
-
-    pay_all_lease_agreement_invoices(&mut test_data, &lease_agreement_id);
-
-    test_data
-        .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
-
-    let new_end = params.end + (ONE_MONTH_IN_MILLISECONDS * 6);
-    test_data.lease.prolong_lease_agreement(
-        &lease_agreement_id,
-        new_end,
-        test_data.escrow.get_min_deadline(),
-    );
-
-    // Eligibility should be preserved after prolongation
-    assert!(
-        test_data
-            .lease
-            .is_equity_eligible(property_id, params.tenant),
-        "Tenant equity eligibility should be preserved after lease prolongation"
-    );
-}
 
 #[test]
 fn test_prolong_lease_agreement_should_fail_if_lease_agreement_does_not_exist() {
