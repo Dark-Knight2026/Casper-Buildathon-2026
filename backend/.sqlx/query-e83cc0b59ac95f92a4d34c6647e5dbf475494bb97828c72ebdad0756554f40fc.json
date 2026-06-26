@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                (\n                    SELECT COUNT(*) FROM listing_view_events v\n                    WHERE v.listing_id = l.id\n                ) AS \"total_views!\",\n                (\n                    SELECT COUNT(*) FROM leases le\n                    WHERE le.property_id = l.property_id\n                      AND le.status = 'active' AND le.deleted_at IS NULL\n                ) AS \"active_leases!\",\n                (\n                    SELECT COALESCE(SUM(le.monthly_rent), 0) FROM leases le\n                    WHERE le.property_id = l.property_id\n                      AND le.status = 'active' AND le.deleted_at IS NULL\n                )::float8 AS \"monthly_revenue!\",\n                calculate_occupancy_rate(l.listed_by)::float8 AS \"occupancy_rate!\"\n            FROM listings l\n            WHERE l.id = $1 AND l.listed_by = $2 AND l.deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_views!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "active_leases!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "monthly_revenue!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "occupancy_rate!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "e83cc0b59ac95f92a4d34c6647e5dbf475494bb97828c72ebdad0756554f40fc"
+}

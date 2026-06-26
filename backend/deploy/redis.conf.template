@@ -1,0 +1,11 @@
+requirepass ${REDIS_PASSWORD}
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+
+rename-command FLUSHALL ""
+rename-command FLUSHDB  ""
+rename-command CONFIG   ""
+rename-command SHUTDOWN ""
+rename-command DEBUG    ""
+rename-command MONITOR  ""
+rename-command KEYS     ""

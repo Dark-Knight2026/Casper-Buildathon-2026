@@ -1,0 +1,256 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                registration_tx_hash,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE deleted_at IS NULL\n              AND ($3::float8 IS NULL OR ST_DWithin(\n                    geog,\n                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,\n                    $3::float8 * 1609.34\n                  ))\n              AND ($4::float8 IS NULL OR ST_Intersects(\n                    geog,\n                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography\n                  ))\n            ORDER BY\n                CASE\n                    WHEN $1::float8 IS NOT NULL AND $2::float8 IS NOT NULL\n                    THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography)\n                    ELSE NULL\n                END ASC NULLS LAST,\n                created_at DESC\n            LIMIT $8 OFFSET $9\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "normalized_address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "normalized_address"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "parcel_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "parcel_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "address_line1",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "address_line1"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "address_line2",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "address_line2"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "city",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "city"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "state",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "zip_code",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "zip_code"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "latitude?",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "longitude?",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "property_type",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "property_type"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "bedrooms",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "bedrooms"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "bathrooms?",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "square_feet",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "square_feet"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "year_built",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "year_built"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "parking_features",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "parking_features"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "metadata_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "metadata_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "onchain_property_id?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "registration_tx_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "registration_tx_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "created_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "updated_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false,
+      true,
+      null,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "ff60fb334977e17a7e935bc1f438cbc1c6a9c1f08676bad187489f4e4a809a2d"
+}

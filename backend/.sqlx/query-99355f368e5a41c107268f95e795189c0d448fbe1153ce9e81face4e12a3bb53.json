@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO users ( email, role, first_name, last_name, status, email_verified, verification_level, primary_auth_method, password_hash, wallet_address, auth_id )\n            VALUES ($1, 'admin', $2, $3, 'active', true, 'email', 'password', NULL, NULL, NULL)\n            ON CONFLICT (email) WHERE email IS NOT NULL AND deleted_at IS NULL\n            DO UPDATE SET\n                role = 'admin',\n                email_verified = true,\n                verification_level = 'email',\n                primary_auth_method = 'password',\n                updated_at = NOW()\n            RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "99355f368e5a41c107268f95e795189c0d448fbe1153ce9e81face4e12a3bb53"
+}

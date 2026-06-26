@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO contract_registry (contract_type, contract_hash, is_active)\n                VALUES ($1, $2, TRUE)\n                ON CONFLICT (contract_type) DO UPDATE SET\n                    contract_hash = EXCLUDED.contract_hash,\n                    is_active     = TRUE\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb6803a02f6cc2e3883b973d4f568f7ae731f7bba335e866a8bebf4a1964efc3"
+}

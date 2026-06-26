@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE leases\n            SET status = 'terminated'\n            WHERE onchain_lease_id = $1::TEXT::NUMERIC\n              AND status IN ('active', 'expiring_soon')\n              AND deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba2b6eee52d1010d663d14c3263737df3b4c01c2887361b38c3d19706a35327a"
+}

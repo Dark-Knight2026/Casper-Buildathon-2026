@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET role = $2,\n                jwt_invalidate_before = NOW(),\n                updated_at = NOW()\n            WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8a1e0e9d5c3e40faad3485905fd37d6ae3802379dd986706871b1256e405ad70"
+}

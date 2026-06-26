@@ -1,0 +1,66 @@
+//! ICO contract events.
+
+pub mod ico_schedule_added;
+pub mod tokens_purchased;
+
+pub use ico_schedule_added::IcoScheduleAdded;
+pub use tokens_purchased::TokensPurchased;
+
+use core::str::FromStr;
+
+use crate::{
+    backfill::parser::{CesEvent, EventSchema},
+    error::{IndexerError, IndexerResult},
+};
+
+/// CES binary schemas for all indexed ICO events.
+pub static CES_SCHEMAS: &[EventSchema] = &[
+    <TokensPurchased as CesEvent>::SCHEMA,
+    <IcoScheduleAdded as CesEvent>::SCHEMA,
+];
+
+/// All possible ICO contract events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IcoEventType {
+    /// Emitted when a user purchases tokens during the ICO.
+    TokensPurchased,
+    /// Emitted when a new vesting schedule is added.
+    IcoScheduleAdded,
+    /// Emitted when a new payment currency is enabled.
+    CurrencyAdded,
+    /// Emitted when a payment currency is disabled.
+    CurrencyRemoved,
+    /// Emitted when unsold tokens are withdrawn after ICO ends.
+    UnsoldTokensWithdrawn,
+}
+
+impl IcoEventType {
+    /// Returns the CES event name for this variant.
+    #[inline]
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::TokensPurchased => "TokensPurchased",
+            Self::IcoScheduleAdded => "ICOScheduleAdded",
+            Self::CurrencyAdded => "CurrencyAdded",
+            Self::CurrencyRemoved => "CurrencyRemoved",
+            Self::UnsoldTokensWithdrawn => "UnsoldTokensWithdrawn",
+        }
+    }
+}
+
+impl FromStr for IcoEventType {
+    type Err = IndexerError;
+
+    #[inline]
+    fn from_str(s: &str) -> IndexerResult<Self> {
+        match s {
+            "TokensPurchased" => Ok(Self::TokensPurchased),
+            "ICOScheduleAdded" => Ok(Self::IcoScheduleAdded),
+            "CurrencyAdded" => Ok(Self::CurrencyAdded),
+            "CurrencyRemoved" => Ok(Self::CurrencyRemoved),
+            "UnsoldTokensWithdrawn" => Ok(Self::UnsoldTokensWithdrawn),
+            _ => Err(IndexerError::InvalidEventName(s.to_owned())),
+        }
+    }
+}

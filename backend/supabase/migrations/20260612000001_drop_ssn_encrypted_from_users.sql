@@ -1,0 +1,23 @@
+-- Drop the ssn_encrypted column from users.
+--
+-- The original migration (20230103000002_create_users_table.sql)
+-- provisioned `ssn_encrypted TEXT` as "Encrypted SSN for tenant
+-- screening - use Supabase Vault". Nothing ever wrote or read it: no
+-- INSERT, UPDATE, or SELECT in the codebase touches the column, so every
+-- row holds NULL.
+--
+-- An empty, never-populated SSN column is not space-cheap - it is a
+-- liability. The field advertises that we collect Social Security
+-- Numbers, which drags every compliance audit and incident-response
+-- exercise into scoping PII we do not actually hold. Under the listing
+-- foundation direction, identity is established through KYC vendors who
+-- are the PII holders of record; we keep only the verification *result*
+-- (users.identity_verified + users.verification_documents), never the
+-- raw SSN.
+--
+-- Drop the column now as a precondition for the listing/provenance work.
+-- Its COMMENT is removed automatically together with the column.
+--
+-- This supersedes the "ssn_encrypted" line of migration 20230103000002.
+
+ALTER TABLE users DROP COLUMN IF EXISTS ssn_encrypted;

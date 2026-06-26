@@ -1,0 +1,288 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE listings\n            SET\n                title = COALESCE($2, title),\n                description = COALESCE($3, description),\n                amenities = COALESCE($4, amenities),\n                utilities_included = COALESCE($5, utilities_included),\n                pet_policy = COALESCE($6, pet_policy),\n                available_date = COALESCE($7, available_date),\n                surrounding_area = COALESCE($8, surrounding_area),\n                terms = COALESCE($9, terms)\n            WHERE id = $1\n            RETURNING\n                id, property_id, listed_by, intent, state, days_on_market,\n                expires_at, title, description, amenities, utilities_included,\n                pet_policy, available_date,\n                surrounding_area AS \"surrounding_area: Json<Value>\",\n                terms AS \"terms: Json<Value>\",\n                views, identity_verified, authority_tier, fair_housing_cleared,\n                managed_by_pm,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "property_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "property_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "listed_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "listed_by"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "intent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "intent"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "days_on_market",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "days_on_market"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "amenities",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "amenities"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "utilities_included",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "utilities_included"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "pet_policy",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "pet_policy"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "available_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "available_date"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "surrounding_area: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "surrounding_area"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "terms: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "terms"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "views",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "views"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "identity_verified",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "identity_verified"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "authority_tier",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "authority_tier"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "fair_housing_cleared",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "fair_housing_cleared"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "managed_by_pm",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "managed_by_pm"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "created_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "updated_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "TextArray",
+        "TextArray",
+        "Text",
+        "Date",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "cbcafdab7c327cf2d3d7befb0016987495a23df71a43fd8291af51130879a75c"
+}

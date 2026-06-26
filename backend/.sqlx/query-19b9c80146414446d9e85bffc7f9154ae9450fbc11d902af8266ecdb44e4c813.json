@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE listings\n            SET state = 'expired'\n            WHERE state = 'active'\n              AND deleted_at IS NULL\n              AND expires_at IS NOT NULL\n              AND expires_at <= now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "19b9c80146414446d9e85bffc7f9154ae9450fbc11d902af8266ecdb44e4c813"
+}

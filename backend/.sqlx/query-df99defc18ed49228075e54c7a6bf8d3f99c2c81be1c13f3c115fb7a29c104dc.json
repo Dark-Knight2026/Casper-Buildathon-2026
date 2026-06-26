@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE email_send_retries\n            SET status = 'completed', completed_at = NOW()\n            WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df99defc18ed49228075e54c7a6bf8d3f99c2c81be1c13f3c115fb7a29c104dc"
+}

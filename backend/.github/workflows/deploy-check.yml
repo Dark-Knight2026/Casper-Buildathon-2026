@@ -1,0 +1,70 @@
+name: Deployment CI
+
+on:
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - 'deploy/**'
+      - 'Dockerfile'
+      - 'Dockerfile.indexer'
+      - 'docker-compose.dev.yml'
+      - '.github/workflows/deploy-check.yml'
+
+env:
+  TERRAFORM_VERSION: "1.14.4"
+
+jobs:
+  deploy-tests:
+    name: Run deploy/tests/redeploy.bats
+    runs-on: ${{ vars.GH_RUNNER_DEPLOY_CHECK }}
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Bats testing framework (v1.11.0)
+      run: |
+        curl -Lo /tmp/bats.tar.gz https://github.com/bats-core/bats-core/archive/refs/tags/v1.11.0.tar.gz
+        echo "aeff09fdc8b0c88b3087c99de00cf549356d7a2f6a69e3fcec5e0e861d2f9063  /tmp/bats.tar.gz" | sha256sum -c -
+        tar -xf /tmp/bats.tar.gz -C /tmp
+        sudo /tmp/bats-core-1.11.0/install.sh /usr/local
+
+    - name: Run Bats tests
+      run: |
+        bats deploy/tests/redeploy.bats
+
+  terraform-validate:
+    name: Validate deploy/${{ matrix.module }}
+    runs-on: ${{ vars.GH_RUNNER_DEPLOY_CHECK }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [gar, hetzner_dev]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Terraform validate in Docker
+      run: |
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/deploy/${{ matrix.module }} \
+          hashicorp/terraform:${{ env.TERRAFORM_VERSION }} \
+          init -backend=false -input=false
+
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/deploy/${{ matrix.module }} \
+          hashicorp/terraform:${{ env.TERRAFORM_VERSION }} \
+          fmt -check -recursive
+
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/deploy/${{ matrix.module }} \
+          hashicorp/terraform:${{ env.TERRAFORM_VERSION }} \
+          validate

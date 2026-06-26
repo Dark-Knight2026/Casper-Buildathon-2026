@@ -1,0 +1,39 @@
+services:
+  postgres-test:
+    image: postgis/postgis:16-3.4
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  # Shared MinIO for `users_avatar_s3.rs` (feature `integration`).
+  # Each test creates its own bucket with a UUID suffix, so parallel
+  # `nextest` workers stay isolated without per-test container startup.
+  # `/data` is tmpfs - `make env-down` wipes accumulated buckets.
+  # Host port 9100 avoids colliding with the dev-compose minio on 9000
+  # if both stacks happen to run side-by-side.
+  minio-test:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data
+    ports:
+      - "9100:9000"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 10

@@ -1,0 +1,323 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE leases SET\n                status = 'active',\n                onchain_lease_id = $2::TEXT::NUMERIC,\n                nft_token_id = $3,\n                commit_tx_hash = $4\n            WHERE id = $1 AND status = 'pending_signatures' AND deleted_at IS NULL\n            RETURNING\n                id, property_id, landlord_id, tenant_ids,\n                type AS \"lease_type!\",\n                status AS \"status!\",\n                start_date, end_date,\n                monthly_rent::float8 AS \"monthly_rent!\",\n                security_deposit::float8 AS \"security_deposit!\",\n                currency,\n                clauses AS \"clauses: Json<Value>\",\n                property_manager_id, property_manager_bps, equity_property_id,\n                signature_progress AS \"signature_progress: Json<Value>\",\n                consent_signatures AS \"consent_signatures: Json<Value>\",\n                lease_document_url, signed_document_url,\n                document_hash, ipfs_cid,\n                onchain_lease_id::text AS onchain_lease_id,\n                nft_token_id, commit_tx_hash,\n                (SELECT onchain_user_id::TEXT FROM users WHERE id = primary_tenant_id) AS tenant_onchain_user_id,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "property_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "property_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "landlord_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "landlord_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "tenant_ids",
+        "type_info": "UuidArray",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "tenant_ids"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "lease_type!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "status!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "start_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "start_date"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "end_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "end_date"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "monthly_rent!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "security_deposit!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "currency",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "clauses: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "clauses"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "property_manager_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "property_manager_id"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "property_manager_bps",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "property_manager_bps"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "equity_property_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "equity_property_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "signature_progress: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "signature_progress"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "consent_signatures: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "consent_signatures"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "lease_document_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "lease_document_url"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "signed_document_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "signed_document_url"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "document_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "document_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "ipfs_cid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "ipfs_cid"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "onchain_lease_id",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 22,
+        "name": "nft_token_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "nft_token_id"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "commit_tx_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "commit_tx_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "tenant_onchain_user_id",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 25,
+        "name": "created_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 26,
+        "name": "updated_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      true,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "8361bb2029fc9ffbc18ebb1480cc79dd31e1bf1c86de5954e0651586302edbca"
+}

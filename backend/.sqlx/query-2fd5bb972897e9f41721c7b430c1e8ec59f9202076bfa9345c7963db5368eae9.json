@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                TO_CHAR(event_timestamp, 'YYYY-MM') AS \"month!\",\n                SUM(amount::NUMERIC)::TEXT AS \"total_amount!\"\n            FROM staking_events\n            WHERE staker_address = $1\n              AND event_type = 'reward_claim'\n              AND event_timestamp >= $2\n            GROUP BY TO_CHAR(event_timestamp, 'YYYY-MM')\n            ORDER BY \"month!\"\n            LIMIT 120\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "month!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "total_amount!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "2fd5bb972897e9f41721c7b430c1e8ec59f9202076bfa9345c7963db5368eae9"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO wallet_connections (user_id, wallet_address, account_hash, provider, is_primary, is_custodial)\n            VALUES ($1, $2, $3, 'casper_wallet', $4, false)\n            ON CONFLICT (user_id, wallet_address)\n            DO UPDATE SET account_hash = EXCLUDED.account_hash, is_primary = EXCLUDED.is_primary, last_used_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4317fe6e7dd3acb3cf3633d843d93645c0c2d808a7ad35a8316ba30ccc1c5558"
+}

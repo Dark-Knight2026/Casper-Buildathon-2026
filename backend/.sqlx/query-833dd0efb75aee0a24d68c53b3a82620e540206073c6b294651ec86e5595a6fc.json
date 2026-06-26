@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                (\n                    SELECT COUNT(*) FROM leases le\n                    WHERE le.property_id = l.property_id AND le.deleted_at IS NULL\n                ) AS \"total_leases!\",\n                (\n                    SELECT COUNT(*) FROM listing_view_events v\n                    WHERE v.listing_id = l.id\n                ) AS \"total_views!\"\n            FROM listings l\n            WHERE l.id = $1 AND l.listed_by = $2 AND l.deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_leases!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "total_views!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "833dd0efb75aee0a24d68c53b3a82620e540206073c6b294651ec86e5595a6fc"
+}
