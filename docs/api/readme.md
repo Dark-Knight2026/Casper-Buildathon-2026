@@ -11,6 +11,7 @@
 | favorites.md      | Favorites: list, ids, idempotent save, remove (tenant)                                                |
 | health.md         | GET /health liveness probe                                                                            |
 | ico.md            | ICO endpoints: balance lookup, progress reporting                                                     |
+| invoices.md       | Invoices: party-scoped list/detail + filters, settle (pay_invoice), receipt, dashboard summary        |
 | leases.md         | Leases: draft, sign (Casper consent), commit on-chain, document, lifecycle                            |
 | listings.md       | Listings: search, detail, landlord CRUD, lifecycle, view, statistics                                  |
 | listings_media.md | Listing provenance & media: authority docs, Fair Housing screen, media upload/moderation              |
