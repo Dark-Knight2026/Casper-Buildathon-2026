@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Favicon and App Icons (all derived from public/leaseFilogo2.png) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- Legacy fallback for browsers that prefer .ico — kept last so the
+         PNG variants above win for everything modern. -->
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <!-- The manifest <link> is injected by vite-plugin-pwa (manifest.webmanifest);
+         no hand-written public/manifest.json so the two can't drift. -->
+
+    <!-- Primary Meta Tags -->
+    <title>LeaseFi</title>
+    <meta name="title" content="Find Your Dream Property | Real Estate Management Platform" />
+    <meta name="description" content="Discover exceptional properties for rent, sale, and investment. Browse 50,000+ verified listings with advanced search, secure transactions, and expert support. 98.5% satisfaction rate." />
+    <meta name="keywords" content="real estate, property search, homes for sale, rental properties, investment properties, buy house, sell house, property management" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="author" content="LeaseFi" />
+    
+    <!-- Theme and Mobile -->
+    <meta name="theme-color" content="#3B82F6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="LeaseFi" />
+    <meta name="format-detection" content="telephone=no" />
+    
+    <!-- Resource Hints for Performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+    
+    <!-- Preload Critical Resources -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'GA_MEASUREMENT_ID', {
+        page_path: window.location.pathname,
+      });
+    </script>
+  </body>
+</html>

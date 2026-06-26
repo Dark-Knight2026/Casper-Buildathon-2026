@@ -1,0 +1,55 @@
+@startuml
+package "Layout Layer" {
+    [DashboardLayout] as Layout
+    [Sidebar] as Sidebar
+    [Header] as Header
+    [ResponsiveContainer] as Container
+}
+
+package "Page Layer" {
+    [LandlordDashboard] as LandlordPage
+    [TenantDashboard] as TenantPage
+    [AgentDashboard] as AgentPage
+    [BrokerDashboard] as BrokerPage
+}
+
+package "Logic Layer (Hooks)" {
+    [useLandlordDashboard] as UseLandlord
+    [useTenantDashboard] as UseTenant
+    [useAgentDashboard] as UseAgent
+    [useBrokerDashboard] as UseBroker
+}
+
+package "Shared Components" {
+    [KPICard] as KPI
+    [ActionCenterWidget] as ActionCenter
+    [ActivityFeed] as Feed
+    [EmptyState] as Empty
+    [AdvancedFilter] as Filter
+}
+
+Layout *-- Sidebar
+Layout *-- Header
+Layout *-- Container
+
+Container *-- LandlordPage
+Container *-- TenantPage
+Container *-- AgentPage
+Container *-- BrokerPage
+
+LandlordPage --> UseLandlord
+TenantPage --> UseTenant
+AgentPage --> UseAgent
+BrokerPage --> UseBroker
+
+LandlordPage ..> KPI
+LandlordPage ..> ActionCenter
+LandlordPage ..> Feed
+
+TenantPage ..> KPI
+TenantPage ..> Empty
+
+AgentPage ..> Filter
+AgentPage ..> KPI
+
+@enduml

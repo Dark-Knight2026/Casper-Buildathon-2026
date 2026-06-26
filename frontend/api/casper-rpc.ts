@@ -1,0 +1,80 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+const API_KEY = process.env.CSPR_CLOUD_API_KEY ?? '';
+if (process.env.NODE_ENV === 'production' && !API_KEY) {
+  console.error('[security] CSPR_CLOUD_API_KEY is not set — proxy requests will be rejected');
+}
+
+const ALLOWED_RPC_METHODS = new Set([
+  'query_global_state',
+  'state_get_dictionary_item',
+  'state_get_balance',
+  'query_balance',
+  'info_get_deploy',
+  'account_put_deploy',
+  'state_get_entity',
+  'info_get_account_info',
+  'info_get_status',
+  'chain_get_state_root_hash',
+]);
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS headers
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGIN) {
+    console.error('[security] ALLOWED_ORIGIN not set in production — proxy is open to all origins');
+  }
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
+  if (!API_KEY) {
+    return res.status(500).json({ error: 'Proxy not configured' });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const rpcMethod = req.body?.method;
+  if (typeof rpcMethod !== 'string' || !ALLOWED_RPC_METHODS.has(rpcMethod)) {
+    console.warn('[casper-rpc proxy] Blocked method:', rpcMethod);
+    return res.status(403).json({ error: 'RPC method not allowed' });
+  }
+
+  // VITE_CASPER_NETWORK is intentionally used here (not a separate CASPER_NETWORK var).
+  // Vercel injects all dashboard env vars into process.env at serverless runtime,
+  // regardless of the VITE_ prefix — so this works correctly in production.
+  // The VITE_ prefix also makes Vite inject the same value into the browser bundle,
+  // keeping frontend and serverless in sync with a single variable.
+  const network = process.env.VITE_CASPER_NETWORK || 'casper-test';
+  const rpcUrl = network === 'casper'
+    ? 'https://node.cspr.cloud/rpc'
+    : 'https://node.testnet.cspr.cloud/rpc';
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'authorization': API_KEY,
+      },
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
+    const data = await response.text();
+    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+    return res.status(response.status).send(data);
+  } catch (err) {
+    console.error('[casper-rpc proxy] Error:', err);
+    return res.status(502).json({ error: 'RPC proxy request failed' });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}

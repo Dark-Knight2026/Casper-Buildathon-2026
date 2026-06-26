@@ -1,0 +1,264 @@
+@import "tailwindcss";
+@import './styles/accessibility.css';
+@import './styles/tablet.css';
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-badge-success: hsl(var(--badge-success));
+  --color-badge-success-foreground: hsl(var(--badge-success-foreground));
+  --color-badge-info: hsl(var(--badge-info));
+  --color-badge-info-foreground: hsl(var(--badge-info-foreground));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --radius-sm: calc(var(--radius) - 4px);   /* 4px */
+  --radius-md: calc(var(--radius) - 2px);   /* 6px */
+  --radius-lg: var(--radius);               /* 8px */
+}
+
+@layer base {
+  :root {
+    --background: 220 20% 98%;
+    --foreground: 214 11% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 214 11% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 214 11% 12%;
+    --primary: 214 49% 23%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 20% 96%;
+    --secondary-foreground: 214 49% 23%;
+    --muted: 220 14% 93%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 214 40% 93%;          /* subtle blue-tinted hover surface */
+    --accent-foreground: 214 49% 23%; /* dark navy text on light accent */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 214 49% 23%;
+    --radius: 0.5rem;                        /* 8px — base for radius-lg */
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    /* ============================================
+       ICO Page Variables - Light Theme for Fundraising
+       Approved Color Palette
+       ============================================ */
+
+    /* Background: Off-white/soft gray - reduces eye fatigue, increases trust */
+    --ico-bg-primary: 220 20% 98%;         /* #F7F8FA - Primary page background */
+    --ico-bg-secondary: 220 20% 96%;       /* #F0F2F5 - Section backgrounds */
+    --ico-bg-card: 0 0% 100%;              /* #FFFFFF - Card backgrounds */
+
+    /* ICO Brand Colors - Professional Fundraising Palette */
+    /* Primary: Muted emerald/forest green - signals financial growth, stability */
+    --ico-brand-primary: 163 59% 30%;      /* #1F7A63 - Primary CTAs, progress indicators */
+    --ico-brand-primary-hover: 163 59% 25%; /* #1A6654 - Hover state for primary */
+    /* Secondary: Desaturated navy/slate blue - reinforces trust and professionalism */
+    --ico-brand-secondary: 214 49% 23%;    /* #1E3557 - Section headers, links */
+    --ico-brand-secondary-hover: 214 49% 18%; /* #172A45 - Hover state for secondary */
+    --ico-brand-accent: 163 59% 35%;       /* #2E8B6F - Accent highlights */
+
+    /* ICO State Colors */
+    --ico-state-countdown: 214 49% 23%;    /* #1E3557 - Navy for countdown */
+    --ico-state-active: 163 59% 30%;       /* #1F7A63 - Green for active state */
+    --ico-state-dashboard: 214 49% 23%;    /* #1E3557 - Navy for dashboard */
+    /* ICO Progress Bar */
+    --ico-progress-bg: 220 14% 90%;        /* #E3E5E8 - Progress bar background */
+    --ico-progress-fill: 163 59% 30%;      /* #1F7A63 - Progress bar fill (green) */
+    --ico-progress-text: 220 9% 46%;       /* #6B7280 - Progress text */
+
+    /* ICO Countdown Timer */
+    --ico-timer-bg: 0 0% 100%;             /* #FFFFFF - Timer card background */
+    --ico-timer-text: 214 11% 12%;         /* #1C1F23 - Timer digits (charcoal) */
+    --ico-timer-label: 220 9% 46%;         /* #6B7280 - Timer labels (muted gray) */
+    --ico-timer-separator: 220 9% 70%;     /* #A8ABB3 - Timer separators */
+
+    /* ICO Purchase Form */
+    --ico-form-bg: 0 0% 100%;              /* #FFFFFF - Form background */
+    --ico-form-border: 220 13% 88%;        /* #DDDFE3 - Form borders */
+    --ico-form-input-bg: 220 14% 96%;      /* #F3F4F6 - Input backgrounds */
+    --ico-form-button: 163 59% 30%;        /* #1F7A63 - Button green */
+    --ico-form-button-hover: 163 59% 25%;  /* #1A6654 - Button hover */
+
+    /* ICO Dashboard Cards */
+    --ico-card-wallet: 214 49% 23%;        /* #1E3557 - Wallet card accent (navy) */
+    --ico-card-staked: 163 59% 30%;        /* #1F7A63 - Staked card accent (green) */
+    --ico-card-rewards: 163 50% 36%;       /* #2E8B6F - Rewards card accent */
+    --ico-card-total: 214 43% 25%;         /* #243B5A - Total card accent (navy) */
+
+    /* ICO Text Colors */
+    --ico-text-primary: 214 11% 12%;       /* #1C1F23 - Primary text (charcoal) */
+    --ico-text-secondary: 220 9% 46%;      /* #6B7280 - Secondary text (muted gray) */
+    --ico-text-muted: 220 9% 46%;          /* #6B7280 - Muted text (darkened for WCAG AA 4.5:1) */
+    --ico-text-highlight: 163 59% 30%;     /* #1F7A63 - Highlighted text (green) */
+
+    --ico-border-color: 220 13% 88%;       /* #DDDFE3 - Border color */
+
+    /* Badge Status Colors */
+    --badge-success: 142 72% 29%;          /* #1F7A3A - green for "For Sale", "Active" */
+    --badge-success-foreground: 0 0% 100%;
+    --badge-info: 214 49% 35%;             /* #2A4E7A - navy-blue for price changes, info */
+    --badge-info-foreground: 0 0% 100%;
+
+    --conversation-selected: 213 94% 94%;       /* blue-100 — selected conversation item */
+    --conversation-selected-hover: 213 94% 97%; /* blue-50  — hover on conversation item */
+
+    /* ICO Feedback Colors - Light Mode */
+    --ico-error-bg: 0 86% 97%;             /* #FEF2F2 - red-50 */
+    --ico-error-border: 0 72% 83%;         /* #FECACA - red-200 */
+    --ico-error-text: 0 72% 35%;           /* #B91C1C - red-700 */
+    --ico-warning-bg: 48 100% 96%;         /* #FEFCE8 - yellow-50 */
+    --ico-warning-border: 48 96% 77%;      /* #FDE047 - yellow-200 */
+    --ico-warning-text: 32 81% 29%;        /* #854D0E - yellow-700 */
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 214 49% 45%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 222 47% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 222 47% 17%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 222 47% 22%;          /* elevated surface, distinct from primary */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 222 47% 20%;
+    --input: 222 47% 20%;
+    --ring: 214 49% 45%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    /* Badge Status Colors - Dark Mode (darkened to meet WCAG AA 4.5:1 with white fg) */
+    --badge-success: 142 60% 30%;          /* ≈5.1:1 vs white */
+    --badge-success-foreground: 0 0% 100%;
+    --badge-info: 214 49% 42%;             /* ≈4.6:1 vs white */
+    --badge-info-foreground: 0 0% 100%;
+
+    --conversation-selected: 213 50% 25%;       /* dark blue — selected conversation item */
+    --conversation-selected-hover: 213 50% 20%; /* darker blue — hover on conversation item */
+
+    /* ICO Page Variables - Dark Mode */
+    --ico-bg-primary: 222 47% 8%;
+    --ico-bg-secondary: 222 47% 11%;
+    --ico-bg-card: 222 47% 11%;
+
+    /* ICO Brand Colors - Dark Mode (muted emerald/navy, lightened for dark bg contrast) */
+    --ico-brand-primary: 163 59% 50%;
+    --ico-brand-secondary: 214 49% 45%;
+    --ico-brand-accent: 163 50% 55%;
+
+    /* ICO State Colors - Dark Mode */
+    --ico-state-countdown: 214 49% 45%;
+    --ico-state-active: 163 59% 45%;
+    --ico-state-dashboard: 214 49% 45%;
+    /* ICO Progress Bar - Dark Mode */
+    --ico-progress-bg: 222 47% 18%;
+    --ico-progress-fill: 163 59% 45%;
+    --ico-progress-text: 220 9% 70%;
+
+    /* ICO Countdown Timer - Dark Mode */
+    --ico-timer-bg: 222 47% 14%;
+    --ico-timer-text: 210 40% 98%;
+    --ico-timer-label: 220 9% 60%;
+    --ico-timer-separator: 220 9% 40%;
+
+    /* ICO Purchase Form - Dark Mode */
+    --ico-form-bg: 222 47% 11%;
+    --ico-form-border: 222 47% 20%;
+    --ico-form-input-bg: 222 47% 14%;
+    --ico-form-button: 163 59% 45%;
+    --ico-form-button-hover: 163 59% 38%;
+
+    /* ICO Dashboard Cards - Dark Mode (desaturated, matching approved palette) */
+    --ico-card-wallet: 214 49% 45%;
+    --ico-card-staked: 163 59% 45%;
+    --ico-card-rewards: 163 50% 50%;
+    --ico-card-total: 214 43% 42%;
+
+    /* ICO Text Colors - Dark Mode */
+    --ico-text-primary: 210 40% 98%;
+    --ico-text-secondary: 220 9% 70%;
+    --ico-text-muted: 220 9% 50%;
+    --ico-text-highlight: 163 59% 55%;
+
+    /* ICO Border & Hover - Dark Mode */
+    --ico-border-color: 222 47% 22%;
+    --ico-brand-secondary-hover: 214 49% 35%;
+    --ico-brand-primary-hover: 163 59% 42%;   /* Lighter shade of primary for dark mode */
+
+    /* ICO Feedback Colors - Dark Mode */
+    --ico-error-bg: 0 63% 15%;             /* ~red-900/20 on dark bg */
+    --ico-error-border: 0 55% 25%;         /* ~red-800/30 on dark bg */
+    --ico-error-text: 0 91% 71%;           /* #F87171 - red-400 */
+    --ico-warning-bg: 32 77% 14%;          /* ~yellow-900/20 on dark bg */
+    --ico-warning-border: 32 65% 22%;      /* ~yellow-800/30 on dark bg */
+    --ico-warning-text: 48 96% 53%;        /* #FACC15 - yellow-400 */
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+/* ICO Toast Animations */
+@keyframes shrink-width {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.animate-shrink-width {
+  animation: shrink-width linear forwards;
+}
+
+/* Radix Select/Popover/DropdownMenu wrapper sets `z-index: 50` inline.
+   Dialog overlay+content also use z-50, so dropdowns inside dialogs end up
+   below the modal panel. !important is required because the conflicting
+   z-index is on the wrapper's inline `style` attribute. */
+html body [data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}

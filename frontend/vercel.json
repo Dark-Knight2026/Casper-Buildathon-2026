@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/email",
+      "destination": "/api/email"
+    },
+    {
+      "source": "/api/casper-rpc",
+      "destination": "/api/casper-rpc"
+    },
+    {
+      "source": "/api/coingecko",
+      "destination": "/api/coingecko"
+    },
+    {
+      "source": "/api/v1/:path*",
+      "destination": "https://leasefi.testingservernginx.win/api/v1/:path*"
+    },
+    {
+      "source": "/((?!api/|docs/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+export { useMessaging } from '@/contexts/MessagingContext';
