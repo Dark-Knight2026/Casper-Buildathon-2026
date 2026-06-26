@@ -17,15 +17,6 @@ fqn = "nft::NFT"
 fqn = "lease::Lease"
 
 [[contracts]]
-fqn = "staking::Staking"
-
-[[contracts]]
-fqn = "ico::ICO"
-
-[[contracts]]
-fqn = "vesting::Vesting"
-
-[[contracts]]
 fqn = "property_registry::PropertyRegistry"
 
 [[contracts]]
