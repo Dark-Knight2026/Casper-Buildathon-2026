@@ -502,6 +502,7 @@ fn test_create_lease_invoice_should_succeed_at_exactly_min_deadline_boundary() {
         property_manager: None,
         property_manager_bps: 0,
         deadline,
+        lease_id: U256::from(7),
     });
 
     assert_eq!(invoice_id, U256::zero(), "Invoice should be created at the minimum deadline boundary");
@@ -744,6 +745,7 @@ fn test_pay_invoice_should_give_pm_bps_of_gross_rent() {
             property_manager: Some(pm_id),
             property_manager_bps: pm_bps,
             deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
+            lease_id: U256::from(7),
         });
 
     let prev_pm = test_data.env.balance_of(&pm_wallet);
