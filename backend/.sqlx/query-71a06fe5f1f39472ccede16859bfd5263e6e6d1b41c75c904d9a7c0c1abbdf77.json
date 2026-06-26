@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO invoices (\n                lease_id, kind, tenant_id, landlord_id, property_id,\n                amount_due, rent_paid, property_manager_id, property_manager_bps,\n                status, deadline\n            )\n            SELECT\n                $1, 'rent', $2, $3, $4,\n                $5::double precision, 0, $6, $7,\n                'scheduled',\n                (NOW() + (gs::bigint * $8::bigint + $9::bigint) * INTERVAL '1 second')::date\n            FROM generate_series(0, $10 - 1) AS gs\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Uuid",
+        "Int4",
+        "Int8",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "71a06fe5f1f39472ccede16859bfd5263e6e6d1b41c75c904d9a7c0c1abbdf77"
+}

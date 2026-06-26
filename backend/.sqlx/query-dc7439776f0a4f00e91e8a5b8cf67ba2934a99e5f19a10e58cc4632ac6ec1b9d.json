@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET onchain_user_id = $1::TEXT::NUMERIC,\n                onchain_status = 'active'\n            WHERE wallet_address = $2\n              AND onchain_user_id IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dc7439776f0a4f00e91e8a5b8cf67ba2934a99e5f19a10e58cc4632ac6ec1b9d"
+}

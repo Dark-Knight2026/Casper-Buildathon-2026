@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                event_type AS \"event_type!\",\n                amount AS \"amount!\",\n                event_timestamp AS \"event_timestamp!\",\n                transaction_hash AS \"transaction_hash!\"\n            FROM staking_events\n            WHERE staker_address = $1\n              AND event_type IN ('unstake', 'withdraw')\n            ORDER BY event_timestamp DESC\n            LIMIT 200\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_type!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_events",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "amount!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_events",
+            "name": "amount"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "event_timestamp!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "staking_events",
+            "name": "event_timestamp"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "transaction_hash!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_events",
+            "name": "transaction_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ddd865e769477b4b0c94b1c95c6d6c17c4bd14313bf64e1750be6e8731e345b3"
+}

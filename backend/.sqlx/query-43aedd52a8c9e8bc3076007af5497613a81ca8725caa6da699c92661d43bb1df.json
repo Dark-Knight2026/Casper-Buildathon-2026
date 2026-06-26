@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM viewings\n            WHERE id = $1 AND listing_id = $2 AND user_id = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "43aedd52a8c9e8bc3076007af5497613a81ca8725caa6da699c92661d43bb1df"
+}

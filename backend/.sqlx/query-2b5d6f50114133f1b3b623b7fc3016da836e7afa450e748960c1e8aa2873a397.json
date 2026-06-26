@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH live AS (\n                SELECT id FROM listings WHERE id = $2 AND deleted_at IS NULL\n            ),\n            inserted AS (\n                INSERT INTO favorites (user_id, listing_id)\n                SELECT $1, id FROM live\n                ON CONFLICT (user_id, listing_id) DO NOTHING\n                RETURNING created_at\n            )\n            SELECT\n                EXISTS (SELECT 1 FROM live) AS \"listing_exists!\",\n                (SELECT created_at FROM inserted) AS \"favorited_at?\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "listing_exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "favorited_at?",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "2b5d6f50114133f1b3b623b7fc3016da836e7afa450e748960c1e8aa2873a397"
+}

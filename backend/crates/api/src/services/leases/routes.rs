@@ -1,0 +1,28 @@
+//! Router configuration for lease-agreement endpoints.
+//!
+//! Every lease endpoint is authenticated (no public reads), so this router is
+//! `.merge()`d into the protected router (blanket `require_auth`); handlers add
+//! `RoleUser`/ownership checks and declare full `/leases...` paths.
+
+use std::sync::Arc;
+
+use utoipa_axum::{router::OpenApiRouter, routes};
+
+use crate::{common::AppState, services::leases::handlers};
+
+// `/api/v1/leases/...`
+/// Builds the leases `OpenApiRouter`.
+#[inline]
+#[must_use]
+pub fn router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(handlers::list_leases))
+        .routes(routes!(handlers::create_lease))
+        .routes(routes!(handlers::get_lease))
+        .routes(routes!(handlers::update_lease))
+        .routes(routes!(handlers::delete_lease))
+        .routes(routes!(handlers::submit_lease))
+        .routes(routes!(handlers::sign_lease))
+        .routes(routes!(handlers::commit_lease))
+        .routes(routes!(handlers::lease_document))
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT GREATEST(\n                $1::TEXT::NUMERIC + ($2::TEXT::NUMERIC * ($3::TEXT::NUMERIC - $4::TEXT::NUMERIC))\n                    / 1000000000000000000,\n                0\n            )::TEXT AS \"result!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "result!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5691fa70427765d3619ed6216be23e2036287644988f2fe3475eae37034b204c"
+}

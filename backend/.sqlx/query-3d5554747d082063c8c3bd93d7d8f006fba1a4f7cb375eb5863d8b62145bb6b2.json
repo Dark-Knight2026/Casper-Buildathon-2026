@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COUNT(*) AS \"count!\"\n            FROM lease_renewals\n            WHERE deleted_at IS NULL\n              AND (\n                ($2 = 'landlord' AND landlord_id = $1)\n                OR ($2 = 'tenant' AND tenant_id = $1)\n                OR ($2 = 'both' AND (landlord_id = $1 OR tenant_id = $1))\n              )\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3d5554747d082063c8c3bd93d7d8f006fba1a4f7cb375eb5863d8b62145bb6b2"
+}

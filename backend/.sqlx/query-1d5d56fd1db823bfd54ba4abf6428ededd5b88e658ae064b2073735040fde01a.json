@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT sale_amount, price,\n                   (EXTRACT(EPOCH FROM NOW())::BIGINT * 1000 BETWEEN start_timestamp AND end_timestamp) AS is_active\n            FROM ico_schedules\n            ORDER BY\n                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT * 1000 BETWEEN start_timestamp AND end_timestamp\n                     THEN 0 ELSE 1 END,\n                block_height DESC, created_at DESC\n            LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sale_amount",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ico_schedules",
+            "name": "sale_amount"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "price",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ico_schedules",
+            "name": "price"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "is_active",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "1d5d56fd1db823bfd54ba4abf6428ededd5b88e658ae064b2073735040fde01a"
+}

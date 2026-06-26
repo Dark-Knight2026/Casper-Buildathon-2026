@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE listings\n            SET\n                authority_tier = CASE WHEN authority_tier = 'T0' THEN 'T1'\n                                      ELSE authority_tier END,\n                managed_by_pm = managed_by_pm OR $2\n            WHERE id = $1\n            RETURNING identity_verified, authority_tier, fair_housing_cleared,\n                      managed_by_pm\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "identity_verified",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "identity_verified"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "authority_tier",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "authority_tier"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "fair_housing_cleared",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "fair_housing_cleared"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "managed_by_pm",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "managed_by_pm"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5d128973561d904e3885e6cea3673651fbf6581fced6bc440cd93be0c83a890f"
+}

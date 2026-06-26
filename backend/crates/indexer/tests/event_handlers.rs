@@ -1,0 +1,1219 @@
+//! Integration tests for event handlers.
+//!
+//! Tests the business logic of individual event handlers by processing events
+//! through `processor::process_event` and asserting on the resulting DB state.
+//!
+//! Covered handlers:
+//!
+//! - **`Transfer`** - writes `blockchain_transactions` (`token_transfer`) and
+//!   updates two `token_holdings` rows (Decrease sender, Increase recipient).
+//!   Tested for all three CEP-18 token types (BIG, USDC, USDT).
+//! - **`SetAllowance`** - writes `blockchain_transactions` (`token_allowance`)
+//!   only; `token_holdings` must remain unchanged.
+//! - **`TokensPurchased`** - unknown `currency` discriminant (> 2) must be
+//!   stored as `"UNKNOWN"` in `ico_purchases` and `blockchain_transactions`.
+//! - **`IcoScheduleAdded`** - writes `ico_schedules` row with schedule ID,
+//!   price, and sale amount; UPSERT updates existing rows.
+//! - **`LeaseAgreementCreated`** - flips the lease matched by
+//!   `commit_tx_hash = deploy_hash` to `active` and stamps `onchain_lease_id`.
+//! - **`InvoiceCreated`** - binds the contract invoice id to the lease's next
+//!   unbound `scheduled` invoice (deposit first, then rent by deadline).
+
+#![cfg(feature = "integration")]
+
+mod common;
+
+use std::collections::HashSet;
+
+use serde_json::json;
+use sqlx::{FromRow, PgPool};
+
+use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
+use indexer::{
+    config::{ContractEntry, ContractRegistry, ContractType},
+    events::{self, EventRegistry},
+    processor::{self, RawEvent},
+};
+
+/// `transaction_type` / `from_address` / `amount` of a `blockchain_transactions`
+/// row, read back via a runtime `query_as` (no compile-time macro in tests).
+#[derive(FromRow)]
+struct TxTypeFromAmountRow {
+    transaction_type: String,
+    from_address: String,
+    amount: Option<String>,
+}
+
+/// `transaction_type` / `from_address` of a `blockchain_transactions` audit row.
+#[derive(FromRow)]
+struct TxTypeFromRow {
+    transaction_type: String,
+    from_address: String,
+}
+
+/// `transaction_type` / `from_address` / `amount` / `currency` of a
+/// `blockchain_transactions` row.
+#[derive(FromRow)]
+struct TxTypeFromAmountCurrencyRow {
+    transaction_type: String,
+    from_address: String,
+    amount: Option<String>,
+    currency: Option<String>,
+}
+
+/// `buyer_address` / `amount` / `currency` of an `ico_purchases` row.
+#[derive(FromRow)]
+struct IcoPurchaseRow {
+    buyer_address: String,
+    amount: String,
+    currency: String,
+}
+
+/// Full `ico_schedules` row read back to assert schedule, price, and audit fields.
+#[derive(FromRow)]
+struct IcoScheduleRow {
+    schedule_id: String,
+    start_timestamp: i64,
+    end_timestamp: i64,
+    sale_amount: String,
+    price: String,
+    transaction_hash: String,
+    block_height: i64,
+}
+
+/// `price` / `sale_amount` / `block_height` of an `ico_schedules` row, used to
+/// assert UPSERT and stale-event guard behaviour.
+#[derive(FromRow)]
+struct IcoSchedulePriceRow {
+    price: String,
+    sale_amount: String,
+    block_height: i64,
+}
+
+/// `status` and (`NUMERIC`-as-text) `onchain_lease_id` of a `leases` row, read
+/// back to assert lease activation. `onchain_lease_id` is `NULL` until bound.
+#[derive(FromRow)]
+struct LeaseStateRow {
+    status: String,
+    onchain_lease_id: Option<String>,
+}
+
+/// `kind` / `status` / (`NUMERIC`-as-text) `onchain_invoice_id` / `deadline` of
+/// an `invoices` row, read back to assert positional invoice binding.
+#[derive(FromRow)]
+struct InvoiceReconRow {
+    kind: String,
+    status: String,
+    onchain_invoice_id: Option<String>,
+    deadline: String,
+}
+
+// Transfer handler — blockchain_transactions
+
+/// Transfer must write exactly one row in `blockchain_transactions` with
+/// `transaction_type = 'token_transfer'`, `from_address` equal to the sender,
+/// and the correct amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "big_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Big,
+            event_name: "Transfer".to_owned(),
+            event_data: payloads::transfer_event_data("500"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query_as::<_, TxTypeFromAmountRow>(
+        r"
+            SELECT transaction_type, from_address, amount
+            FROM   blockchain_transactions
+            WHERE  transaction_hash = $1
+        ",
+    )
+    .bind(TRANSFER_DEPLOY_HASH)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.transaction_type, "token_transfer");
+    assert_eq!(row.from_address, FakeAddress::Alice.as_str());
+    assert_eq!(row.amount.as_deref(), Some("500"));
+}
+
+// Transfer handler — token_holdings
+
+/// Recipient receives the transferred amount; a sender who had no prior
+/// balance is created with `balance = '0'` (clamped — never goes negative).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "big_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Big,
+            event_name: "Transfer".to_owned(),
+            event_data: payloads::transfer_event_data("300"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let bob = sqlx::query_scalar::<_, String>(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+    )
+    .bind(FakeAddress::Bob.as_str())
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        bob.as_deref(),
+        Some("300"),
+        "recipient balance must equal transferred amount"
+    );
+
+    let alice = sqlx::query_scalar::<_, String>(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+    )
+    .bind(FakeAddress::Alice.as_str())
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        alice.as_deref(),
+        Some("0"),
+        "sender with no prior balance must be clamped to '0', not negative"
+    );
+}
+
+/// Sender with an existing balance has it correctly decreased.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Seed alice with 1 000 BIG tokens before the transfer.
+    sqlx::query(
+        r"
+            INSERT INTO token_holdings (user_address, token_type, balance, last_updated_at)
+            VALUES ($1, 'BIG', '1000', NOW())
+        ",
+    )
+    .bind(FakeAddress::Alice.as_str())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "big_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Big,
+            event_name: "Transfer".to_owned(),
+            event_data: payloads::transfer_event_data("400"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let alice = sqlx::query_scalar::<_, String>(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+    )
+    .bind(FakeAddress::Alice.as_str())
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        alice.as_deref(),
+        Some("600"),
+        "sender balance must decrease by the transferred amount"
+    );
+}
+
+// SetAllowance handler — blockchain_transactions
+
+/// `SetAllowance` must write exactly one row in `blockchain_transactions` with
+/// `transaction_type = 'token_allowance'`, `from_address` equal to the owner,
+/// and the approved amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "big_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 200,
+            contract_type: ContractType::Big,
+            event_name: "SetAllowance".to_owned(),
+            event_data: json!({
+                "owner": FakeAddress::Alice.as_str(),
+                "spender": FakeAddress::ContractX.as_str(),
+                "amount": "1000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query_as::<_, TxTypeFromAmountRow>(
+        r"
+            SELECT transaction_type, from_address, amount
+            FROM   blockchain_transactions
+            WHERE  transaction_hash = $1
+        ",
+    )
+    .bind(TRANSFER_DEPLOY_HASH)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.transaction_type, "token_allowance");
+    assert_eq!(row.from_address, FakeAddress::Alice.as_str());
+    assert_eq!(row.amount.as_deref(), Some("1000"));
+}
+
+// TokensPurchased handler — ico_purchases + blockchain_transactions
+
+/// `TokensPurchased` must write one row to `ico_purchases` with correct buyer,
+/// amount, and currency label, and one row to `blockchain_transactions` with
+/// `transaction_type = 'token_purchase'`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "buyer": FakeAddress::Buyer.as_str(),
+                "amount": "1000000000",
+                "currency": 0,
+                "cost": "500000000",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let purchase = sqlx::query_as::<_, IcoPurchaseRow>(
+        r"
+            SELECT buyer_address, amount, currency
+            FROM   ico_purchases
+            WHERE  transaction_hash = $1
+        ",
+    )
+    .bind(PURCHASE_DEPLOY_HASH)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(purchase.buyer_address, FakeAddress::Buyer.as_str());
+    assert_eq!(purchase.amount, "1000000000");
+    assert_eq!(purchase.currency, "CSPR");
+
+    let tx_row = sqlx::query_as::<_, TxTypeFromAmountCurrencyRow>(
+        r"
+            SELECT transaction_type, from_address, amount, currency
+            FROM   blockchain_transactions
+            WHERE  transaction_hash = $1
+        ",
+    )
+    .bind(PURCHASE_DEPLOY_HASH)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(tx_row.transaction_type, "token_purchase");
+    assert_eq!(tx_row.from_address, FakeAddress::Buyer.as_str());
+    assert_eq!(tx_row.amount.as_deref(), Some("500000000"));
+    assert_eq!(tx_row.currency.as_deref(), Some("CSPR"));
+}
+
+/// `TokensPurchased` must increase the buyer's BIG balance by the purchased amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "buyer": FakeAddress::Buyer.as_str(),
+                "amount": "750",
+                "currency": 1,
+                "cost": "100",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let balance = sqlx::query_scalar::<_, String>(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+    )
+    .bind(FakeAddress::Buyer.as_str())
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        balance.as_deref(),
+        Some("750"),
+        "buyer's BIG balance must equal the purchased amount"
+    );
+}
+
+// Transfer handler — non-BIG token types (USDC, USDT)
+
+/// Transfer for `ContractType::Usdc` must write `token_holdings` rows with
+/// `token_type = 'USDC'`, not `'BIG'`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "usdc_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Usdc,
+            event_name: "Transfer".to_owned(),
+            event_data: payloads::transfer_event_data("250"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let bob = sqlx::query_scalar::<_, String>(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = $1 AND token_type = 'USDC'
+        ",
+    )
+    .bind(FakeAddress::Bob.as_str())
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        bob.as_deref(),
+        Some("250"),
+        "recipient USDC balance must equal transferred amount"
+    );
+
+    // BIG table must be untouched.
+    let big_count = sqlx::query_scalar::<_, i64>(
+        r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        big_count, 0,
+        "Transfer on USDC contract must not touch BIG token_holdings"
+    );
+}
+
+/// Transfer for `ContractType::Usdt` must write `token_holdings` rows with
+/// `token_type = 'USDT'`, not `'BIG'`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "usdt_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Usdt,
+            event_name: "Transfer".to_owned(),
+            event_data: payloads::transfer_event_data("350"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let bob = sqlx::query_scalar::<_, String>(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = $1 AND token_type = 'USDT'
+        ",
+    )
+    .bind(FakeAddress::Bob.as_str())
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        bob.as_deref(),
+        Some("350"),
+        "recipient USDT balance must equal transferred amount"
+    );
+
+    // BIG table must be untouched.
+    let big_count = sqlx::query_scalar::<_, i64>(
+        r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        big_count, 0,
+        "Transfer on USDT contract must not touch BIG token_holdings"
+    );
+}
+
+// TokensPurchased handler — unknown currency discriminant
+
+/// `TokensPurchased` with a `currency` discriminant > 2 must store `"UNKNOWN"`
+/// in both `ico_purchases.currency` and `blockchain_transactions.currency`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "buyer": FakeAddress::Buyer.as_str(),
+                "amount": "500",
+                "currency": 99u8,
+                "cost": "200",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let purchase_currency = sqlx::query_scalar::<_, String>(
+        r"SELECT currency FROM ico_purchases WHERE transaction_hash = $1",
+    )
+    .bind(PURCHASE_DEPLOY_HASH)
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        purchase_currency.as_deref(),
+        Some("UNKNOWN"),
+        "unknown currency discriminant must be stored as 'UNKNOWN' in ico_purchases"
+    );
+
+    let tx_currency = sqlx::query_scalar::<_, Option<String>>(
+        r"SELECT currency FROM blockchain_transactions WHERE transaction_hash = $1",
+    )
+    .bind(PURCHASE_DEPLOY_HASH)
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        tx_currency.flatten().as_deref(),
+        Some("UNKNOWN"),
+        "unknown currency discriminant must be stored as 'UNKNOWN' in blockchain_transactions"
+    );
+}
+
+// SetAllowance handler — token_holdings isolation
+
+/// `SetAllowance` must not create or modify any `token_holdings` rows — it
+/// records an approval, not a balance movement.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "big_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 200,
+            contract_type: ContractType::Big,
+            event_name: "SetAllowance".to_owned(),
+            event_data: json!({
+                "owner": FakeAddress::Alice.as_str(),
+                "spender": FakeAddress::ContractX.as_str(),
+                "amount": "1000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let holdings = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM token_holdings")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        holdings, 0,
+        "SetAllowance must not write any token_holdings rows"
+    );
+}
+
+/// `IcoScheduleAdded` must write exactly one row to `ico_schedules` with the
+/// correct schedule ID, price, and sale amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000009999";
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-1",
+                "start_timestamp": 1_700_000_000_u64,
+                "end_timestamp": 1_710_000_000_u64,
+                "sale_amount": "500000000000000000000000000",
+                "price": "500000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query_as::<_, IcoScheduleRow>(
+        r"
+            SELECT schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height
+            FROM   ico_schedules
+            WHERE  schedule_id = 'schedule-1'
+        ",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.schedule_id, "schedule-1");
+    assert_eq!(row.start_timestamp, 1_700_000_000);
+    assert_eq!(row.end_timestamp, 1_710_000_000);
+    assert_eq!(row.sale_amount, "500000000000000000000000000");
+    assert_eq!(row.price, "500000");
+    assert_eq!(row.transaction_hash, deploy_hash);
+    assert_eq!(row.block_height, 500);
+
+    // Must also write a blockchain_transactions audit row.
+    let tx_row = sqlx::query_as::<_, TxTypeFromRow>(
+        r"
+            SELECT transaction_type, from_address
+            FROM   blockchain_transactions
+            WHERE  transaction_hash = $1
+        ",
+    )
+    .bind(deploy_hash)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(tx_row.transaction_type, "ico_schedule_added");
+    assert_eq!(tx_row.from_address, "ico_hash");
+}
+
+/// Re-processing the same `IcoScheduleAdded` event must update the existing
+/// row (UPSERT), not fail or duplicate.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash_1 = "0000000000000000000000000000000000000000000000000000000000009901";
+    let deploy_hash_2 = "0000000000000000000000000000000000000000000000000000000000009902";
+
+    // First event
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_1.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-upsert",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "100",
+                "price": "100000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Second event with same schedule ID but updated price
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_2.to_owned(),
+            block_height: 200,
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-upsert",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "200",
+                "price": "750000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let count = sqlx::query_scalar::<_, i64>(
+        r"
+            SELECT COUNT(*) FROM ico_schedules
+            WHERE schedule_id = 'schedule-upsert'
+        ",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(count, 1, "UPSERT must not create duplicate rows");
+
+    let row = sqlx::query_as::<_, IcoSchedulePriceRow>(
+        r"
+            SELECT price, sale_amount, block_height FROM ico_schedules
+            WHERE schedule_id = 'schedule-upsert'
+        ",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.price, "750000", "price must be updated by UPSERT");
+    assert_eq!(
+        row.sale_amount, "200",
+        "sale_amount must be updated by UPSERT"
+    );
+    assert_eq!(
+        row.block_height, 200,
+        "block_height must be updated by UPSERT"
+    );
+}
+
+/// A stale `IcoScheduleAdded` event (lower `block_height`) must NOT overwrite
+/// a newer schedule row. The `block_height` guard prevents out-of-order updates.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash_new = "0000000000000000000000000000000000000000000000000000000000009903";
+    let deploy_hash_old = "0000000000000000000000000000000000000000000000000000000000009904";
+
+    // Newer event first (block_height=500)
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_new.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-guard",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "999",
+                "price": "750000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Stale event arrives later (block_height=100) - must NOT overwrite
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_old.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-guard",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "50",
+                "price": "100000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query_as::<_, IcoSchedulePriceRow>(
+        r"
+            SELECT price, sale_amount, block_height FROM ico_schedules
+            WHERE schedule_id = 'schedule-guard'
+        ",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        row.price, "750000",
+        "stale event must not overwrite newer price"
+    );
+    assert_eq!(
+        row.sale_amount, "999",
+        "stale event must not overwrite newer sale_amount"
+    );
+    assert_eq!(
+        row.block_height, 500,
+        "stale event must not overwrite newer block_height"
+    );
+}
+
+// Contract registry — upsert_contract_registry
+
+/// Upserting contract registry must not deactivate contracts that belong to
+/// other environments / indexer instances on a shared database.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn upsert_contract_registry_preserves_foreign_contracts(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    sqlx::query("ALTER TABLE contract_registry DISABLE ROW LEVEL SECURITY")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Seed a "foreign" contract not managed by this indexer instance.
+    sqlx::query(
+        r"INSERT INTO contract_registry (contract_type, contract_hash, is_active)
+          VALUES ('staking', 'foreign_staking_hash', TRUE)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // This indexer only manages ICO.
+    let registry = ContractRegistry {
+        ico: Some(ContractEntry::new("ico_hash_abc", 0)),
+        ..ContractRegistry::default()
+    };
+
+    events::db::upsert_contract_registry(&pool, &registry)
+        .await
+        .unwrap();
+
+    // Foreign contract must still be active.
+    let foreign_active = sqlx::query_scalar::<_, bool>(
+        "SELECT is_active FROM contract_registry WHERE contract_type = 'staking'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        foreign_active,
+        "upsert must not deactivate contracts outside its own set"
+    );
+
+    // ICO contract must be active with the correct hash.
+    let ico_active = sqlx::query_scalar::<_, bool>(
+        "SELECT is_active FROM contract_registry WHERE contract_type = 'ico'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(ico_active, "managed contract must be active after upsert");
+}
+
+// Deduplication - transform_idx NULL vs 0
+
+/// Events with `transform_idx = NULL` and `transform_idx = 0` must be treated
+/// as distinct rows. Casper transform index 0 is a real, commonly-occurring
+/// value; NULL means "unavailable" (e.g. streaming events).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn null_and_zero_transform_idx_are_distinct_events(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy = "a".repeat(64);
+    let contract = "c".repeat(64);
+    let event_data = serde_json::json!({});
+
+    // Insert event with transform_idx = NULL (streaming, index unavailable).
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, NULL)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Insert event with transform_idx = 0 (backfill, real index).
+    // This must NOT collide with the NULL row.
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, 0)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .expect("transform_idx=0 must not collide with transform_idx=NULL");
+
+    let count = sqlx::query_scalar::<_, i64>(
+        r"SELECT COUNT(*) FROM blockchain_events
+          WHERE transaction_hash = $1 AND event_type = 'Transfer' AND contract_address = $2",
+    )
+    .bind(&deploy)
+    .bind(&contract)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        count, 2,
+        "NULL and 0 transform_idx must produce two distinct rows"
+    );
+}
+
+// Escrow / Lease handlers — on-chain reconciliation
+// (lease activation by commit_tx_hash; invoice bind by onchain_lease_id)
+
+/// Seed the off-chain mirror that `/commit` writes: a `pending_signatures` lease
+/// wired to `commit_tx_hash` (and optionally `onchain_lease_id`), plus its three
+/// `scheduled` invoices (one security deposit, then two rent months by ascending
+/// deadline). Gives the bind/activate handlers a real
+/// `users -> property -> lease -> invoices` graph to match.
+///
+/// Pass `onchain_lease_id = None` for a lease still awaiting activation (the
+/// activate-by-hash tests); pass `Some(id)` for the invoice-bind tests, which
+/// match the lease by `onchain_lease_id`.
+///
+/// Every UUID and date is generated in SQL: the indexer test crate depends on
+/// neither `uuid` nor `chrono`.
+async fn seed_committed_lease_mirror(
+    pool: &PgPool,
+    commit_tx_hash: &str,
+    onchain_lease_id: Option<&str>,
+) {
+    sqlx::query(
+        r"
+            WITH landlord AS (
+                INSERT INTO users (email, first_name, last_name, role)
+                VALUES ('landlord-' || gen_random_uuid()::text || '@test.example', 'Test', 'Landlord', 'landlord')
+                RETURNING id
+            ),
+            tenant AS (
+                INSERT INTO users (email, first_name, last_name, role)
+                VALUES ('tenant-' || gen_random_uuid()::text || '@test.example', 'Test', 'Tenant', 'tenant')
+                RETURNING id
+            ),
+            property AS (
+                INSERT INTO properties (landlord_id, property_type, address_line1, city, state, zip_code)
+                SELECT landlord.id, 'single_family', '1 Test St', 'Denver', 'CO', '80202'
+                FROM landlord
+                RETURNING id, landlord_id
+            ),
+            lease AS (
+                INSERT INTO leases (landlord_id, property_id, tenant_ids, primary_tenant_id, type, status, start_date, end_date, monthly_rent, security_deposit, created_by, commit_tx_hash, onchain_lease_id)
+                SELECT p.landlord_id, p.id, ARRAY[t.id], t.id, 'fixed_term', 'pending_signatures', DATE '2026-06-25', DATE '2027-06-20', 10.00, 10.00, p.landlord_id, $1, $2::TEXT::NUMERIC
+                FROM property p, tenant t
+                RETURNING id, landlord_id, property_id, primary_tenant_id
+            )
+            INSERT INTO invoices (lease_id, kind, tenant_id, landlord_id, property_id, amount_due, deadline)
+            SELECT lease.id, mirror.kind, lease.primary_tenant_id, lease.landlord_id, lease.property_id, 10.00, mirror.deadline
+            FROM lease,
+                 (VALUES ('security_deposit', DATE '2026-07-25'),
+                         ('rent',             DATE '2026-07-25'),
+                         ('rent',             DATE '2026-08-24')) AS mirror(kind, deadline)
+        ",
+    )
+    .bind(commit_tx_hash)
+    .bind(onchain_lease_id)
+    .execute(pool)
+    .await
+    .expect("seed committed lease mirror");
+}
+
+/// `LeaseAgreementCreated` whose deploy hash equals the lease's `commit_tx_hash`
+/// flips that lease to `active` and stamps `onchain_lease_id`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn lease_agreement_created_activates_matching_pending_lease(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let commit_tx_hash = "a".repeat(64);
+    seed_committed_lease_mirror(&pool, &commit_tx_hash, None).await;
+
+    let mut tx = pool.begin().await.unwrap();
+    let activated = events::db::activate_lease_by_commit_tx_hash(&mut tx, &commit_tx_hash, "4")
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(activated, "matching commit_tx_hash must activate the lease");
+
+    let lease = sqlx::query_as::<_, LeaseStateRow>(
+        r"
+            SELECT status, onchain_lease_id::text AS onchain_lease_id
+            FROM   leases
+            WHERE  commit_tx_hash = $1
+        ",
+    )
+    .bind(&commit_tx_hash)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(lease.status, "active");
+    assert_eq!(lease.onchain_lease_id.as_deref(), Some("4"));
+}
+
+/// A deploy hash that matches no lease activates nothing: the seeded lease stays
+/// `pending_signatures` with a `NULL` `onchain_lease_id`, and the handler reports
+/// no match (the skip path behind the "no matching pending lease" warning).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn lease_agreement_created_skips_on_hash_mismatch(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let real_hash = "d".repeat(64);
+    seed_committed_lease_mirror(&pool, &real_hash, None).await;
+
+    let other_hash = "e".repeat(64);
+    let mut tx = pool.begin().await.unwrap();
+    let activated = events::db::activate_lease_by_commit_tx_hash(&mut tx, &other_hash, "4")
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(!activated, "non-matching hash must not activate any lease");
+
+    let lease = sqlx::query_as::<_, LeaseStateRow>(
+        r"
+            SELECT status, onchain_lease_id::text AS onchain_lease_id
+            FROM   leases
+            WHERE  commit_tx_hash = $1
+        ",
+    )
+    .bind(&real_hash)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(lease.status, "pending_signatures");
+    assert_eq!(lease.onchain_lease_id, None);
+}
+
+/// On-chain `InvoiceCreated` events bind to the lease's scheduled invoices
+/// positionally: the security deposit first, then rent by ascending deadline.
+/// Two events bind two invoices; the later rent month stays unbound. The lease
+/// is matched by the `onchain_lease_id` carried in the event.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn invoice_created_binds_scheduled_invoices_deposit_first(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let onchain_lease_id = "7";
+    seed_committed_lease_mirror(&pool, &"b".repeat(64), Some(onchain_lease_id)).await;
+
+    let mut tx = pool.begin().await.unwrap();
+    let first = events::db::bind_invoice_onchain_id_by_lease_id(&mut tx, onchain_lease_id, "100")
+        .await
+        .unwrap();
+    let second = events::db::bind_invoice_onchain_id_by_lease_id(&mut tx, onchain_lease_id, "101")
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(first && second, "both events must bind an invoice");
+
+    let invoices = sqlx::query_as::<_, InvoiceReconRow>(
+        r"
+            SELECT i.kind, i.status, i.onchain_invoice_id::text AS onchain_invoice_id, i.deadline::text AS deadline
+            FROM invoices i
+            JOIN leases l ON l.id = i.lease_id
+            WHERE l.onchain_lease_id = $1::TEXT::NUMERIC
+            ORDER BY (i.kind = 'security_deposit') DESC, i.deadline ASC
+        ",
+    )
+    .bind(onchain_lease_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    // First event bound the deposit; it moved to `pending` with id 100.
+    assert_eq!(invoices[0].kind, "security_deposit");
+    assert_eq!(invoices[0].onchain_invoice_id.as_deref(), Some("100"));
+    assert_eq!(invoices[0].status, "pending");
+
+    // Second event bound the earliest-deadline rent month with id 101.
+    assert_eq!(invoices[1].kind, "rent");
+    assert_eq!(invoices[1].deadline, "2026-07-25");
+    assert_eq!(invoices[1].onchain_invoice_id.as_deref(), Some("101"));
+    assert_eq!(invoices[1].status, "pending");
+
+    // Only two events arrived, so the later rent month is still unbound.
+    assert_eq!(invoices[2].onchain_invoice_id, None);
+    assert_eq!(invoices[2].status, "scheduled");
+}
+
+/// An `InvoiceCreated` for a lease with no off-chain mirror yet (not activated,
+/// so no matching `onchain_lease_id`) binds nothing and is skipped cleanly,
+/// never errors (the skip path behind the "no matching unbound invoice" warning).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn invoice_created_skips_when_mirror_not_seeded(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let mut tx = pool.begin().await.unwrap();
+    let bound = events::db::bind_invoice_onchain_id_by_lease_id(&mut tx, "999", "1")
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    assert!(
+        !bound,
+        "no seeded mirror -> nothing to bind, must skip cleanly"
+    );
+}

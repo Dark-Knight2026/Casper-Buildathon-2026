@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET deleted_at = NOW(),\n                email = 'deleted-' || $1::text || '@deleted.local',\n                jwt_invalidate_before = NOW(),\n                updated_at = NOW()\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "12a27783bc5e37051ce5dbb922c1b5dfaf3ee8a645bc530e4053d4ccd9343989"
+}

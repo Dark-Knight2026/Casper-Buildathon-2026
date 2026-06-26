@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT landlord_id\n            FROM properties\n            WHERE id = $1 AND deleted_at IS NULL\n            FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "landlord_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "landlord_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8091f2170b4e21e87b8242285667109819263dacf2afffa44be89962face3d16"
+}

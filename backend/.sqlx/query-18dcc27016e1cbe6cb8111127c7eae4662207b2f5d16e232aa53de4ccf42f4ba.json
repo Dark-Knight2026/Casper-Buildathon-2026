@@ -1,0 +1,198 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                u.id,\n                u.wallet_address,\n                u.role,\n                u.status,\n                u.email,\n                u.first_name,\n                u.last_name,\n                u.phone,\n                u.avatar_url,\n                u.bio,\n                u.is_profile_complete,\n                u.verification_level,\n                u.onchain_user_id::text AS onchain_user_id,\n                u.created_at AS \"created_at!\",\n                u.updated_at AS \"updated_at!\",\n                (\n                    SELECT COUNT(DISTINCT l.id)\n                    FROM leases l\n                    WHERE l.status = 'active'\n                      AND (\n                          l.primary_tenant_id = u.id\n                          OR l.landlord_id = u.id\n                          OR l.agent_id = u.id\n                          OR u.id = ANY(l.tenant_ids)\n                      )\n                ) AS \"active_leases_count!\"\n            FROM users u\n            WHERE u.id = $1 AND u.deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "wallet_address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "wallet_address"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "role",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "email",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "first_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "first_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "last_name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "phone",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "phone"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "avatar_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "avatar_url"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "bio",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "bio"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "is_profile_complete",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "is_profile_complete"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "verification_level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "verification_level"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "onchain_user_id",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "created_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "updated_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "active_leases_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      null,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "18dcc27016e1cbe6cb8111127c7eae4662207b2f5d16e232aa53de4ccf42f4ba"
+}

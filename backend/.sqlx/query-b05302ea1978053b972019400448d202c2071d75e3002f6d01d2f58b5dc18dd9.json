@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE invoices\n            SET status = 'paid'\n            WHERE onchain_invoice_id = $1::TEXT::NUMERIC\n              AND status IN ('pending', 'partial')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b05302ea1978053b972019400448d202c2071d75e3002f6d01d2f58b5dc18dd9"
+}

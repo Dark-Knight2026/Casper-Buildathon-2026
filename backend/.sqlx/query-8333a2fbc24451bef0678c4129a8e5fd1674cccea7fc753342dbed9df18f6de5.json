@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM email_send_retries\n            WHERE status IN ('completed', 'failed')\n              AND completed_at < NOW() - ($1 * INTERVAL '1 second')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8333a2fbc24451bef0678c4129a8e5fd1674cccea7fc753342dbed9df18f6de5"
+}

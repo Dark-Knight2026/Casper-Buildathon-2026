@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE listings\n            SET state = 'withdrawn', deleted_at = now()\n            WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a3d66f0c7c6946c4cf3043db824ac07305fd9758715affedceaa4ae5d2e0e95b"
+}

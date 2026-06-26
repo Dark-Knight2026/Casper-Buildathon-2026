@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO audit_logs (\n                user_id,\n                action,\n                resource_type,\n                resource_id,\n                metadata,\n                status\n            )\n            VALUES (\n                $1,\n                'revoke_all_sessions',\n                'user',\n                $1,\n                jsonb_build_object('keep_current', $2::bool),\n                'success'\n            )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4c0d325e93710a50258fcd4e85670280f2097e65c3f288d0dc3f7a020c697b01"
+}

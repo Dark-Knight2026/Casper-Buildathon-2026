@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, listing_id, url, cid, position, moderation_status\n            FROM listing_media\n            WHERE listing_id = $1\n            ORDER BY position ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "listing_media",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "listing_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "listing_media",
+            "name": "listing_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listing_media",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "cid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listing_media",
+            "name": "cid"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "position",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "listing_media",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "moderation_status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listing_media",
+            "name": "moderation_status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "8a4bf80227be49b27041fed4b7a3d71de0b1312d93f2001ee8b78dd4646489a2"
+}

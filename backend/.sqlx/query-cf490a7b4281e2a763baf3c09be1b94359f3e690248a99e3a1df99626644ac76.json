@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH ordered_invoices AS (\n                SELECT id, ROW_NUMBER() OVER (\n                    ORDER BY (kind = 'security_deposit') DESC, deadline ASC\n                ) AS pos\n                FROM invoices\n                WHERE lease_id = $1\n                  AND onchain_invoice_id IS NULL\n                  AND status = 'scheduled'\n            ),\n            ordered_events AS (\n                SELECT\n                    (event_data->>'invoice_id')::NUMERIC AS onchain_invoice_id,\n                    ROW_NUMBER() OVER (\n                        ORDER BY (event_data->>'invoice_id')::NUMERIC ASC\n                    ) AS pos\n                FROM blockchain_events\n                WHERE event_type = 'InvoiceCreated'\n                  AND transaction_hash = $2\n            )\n            UPDATE invoices i\n            SET onchain_invoice_id = oe.onchain_invoice_id,\n                status = 'pending'\n            FROM ordered_invoices oi\n            JOIN ordered_events oe ON oe.pos = oi.pos\n            WHERE i.id = oi.id\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cf490a7b4281e2a763baf3c09be1b94359f3e690248a99e3a1df99626644ac76"
+}

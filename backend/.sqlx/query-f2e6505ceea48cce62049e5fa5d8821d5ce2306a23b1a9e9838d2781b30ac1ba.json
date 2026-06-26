@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT 1 AS heartbeat",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "heartbeat",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f2e6505ceea48cce62049e5fa5d8821d5ce2306a23b1a9e9838d2781b30ac1ba"
+}

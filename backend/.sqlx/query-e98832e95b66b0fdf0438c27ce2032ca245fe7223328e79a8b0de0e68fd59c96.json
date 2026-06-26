@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE vesting_schedules\n            SET claimed_amount = (claimed_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,\n                updated_at     = NOW()\n            WHERE vesting_id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e98832e95b66b0fdf0438c27ce2032ca245fe7223328e79a8b0de0e68fd59c96"
+}

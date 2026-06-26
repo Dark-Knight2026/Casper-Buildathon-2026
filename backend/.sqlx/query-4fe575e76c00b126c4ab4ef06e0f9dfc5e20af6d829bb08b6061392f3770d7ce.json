@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET password_hash = $2,\n                jwt_invalidate_before = $3,\n                updated_at = NOW()\n            WHERE id = $1 AND deleted_at IS NULL\n            RETURNING role, verification_level\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "role",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "verification_level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "verification_level"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4fe575e76c00b126c4ab4ef06e0f9dfc5e20af6d829bb08b6061392f3770d7ce"
+}

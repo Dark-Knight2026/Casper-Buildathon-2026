@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE listings\n            SET fair_housing_cleared = $2\n            WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d47ed5e8da1d6a992cdd5b4914d28041927b87ee6319e68e4d24cfe1381c1f85"
+}

@@ -1,0 +1,129 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO background_checks (\n                application_id, requested_by, check_type, status, result,\n                reference, completed_at\n            )\n            VALUES (\n                $1, $2, $3, $4, $5, $6,\n                CASE WHEN $4 IN ('completed', 'failed') THEN NOW() ELSE NULL END\n            )\n            RETURNING\n                id, application_id, requested_by, check_type, status,\n                result AS \"result?: Json<Value>\", reference,\n                created_at, completed_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "requested_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "requested_by"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "check_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "check_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "result?: Json<Value>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "result"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "reference",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "reference"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "completed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "completed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "b2f05f62d9ca54d8b08929ebc700f1987e2e722607b93d9701bc22a62aa0cde1"
+}

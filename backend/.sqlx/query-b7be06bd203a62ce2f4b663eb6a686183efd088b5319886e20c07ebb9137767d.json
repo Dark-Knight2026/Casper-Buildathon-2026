@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                a.monthly_income::float8 AS \"monthly_income!\",\n                a.employment_length,\n                a.reference2_name,\n                (l.terms->>'rentMonthly')::float8 AS rent_monthly\n            FROM rental_applications a\n            LEFT JOIN listings l ON l.id = a.listing_id\n            WHERE a.id = $1 AND a.landlord_id = $2 AND a.status <> 'draft'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "monthly_income!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "employment_length",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "employment_length"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "reference2_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rental_applications",
+            "name": "reference2_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rent_monthly",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "b7be06bd203a62ce2f4b663eb6a686183efd088b5319886e20c07ebb9137767d"
+}
