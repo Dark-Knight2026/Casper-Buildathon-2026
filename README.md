@@ -97,7 +97,7 @@ All eight core contracts are deployed and verifiable on the Casper Testnet (snap
 | **NFT** | CEP-95 lease & property certificates | `hash-ace4693ddf7b06251a1960ce7e296b01e64352cc74dd6ba0b574eefdf7dec781` |
 | **UserRegistry** | On-chain identity (no PII) | `hash-29cd2d0ae790bed5feca98b5f0b725f8a8dda423726bcfbd06b81278e91d5482` |
 | **PropertyRegistry** | Property records & lifecycle | `hash-dfc5d21eb4e2eb9098019c810d774805a43af8a56bba8c9c6fd47b4d4043de4e` |
-| **Lease** | Lease lifecycle & coordination | `hash-e41a90b197bb24d04c9185e91d15b0b33f80711b7addf74ca8e00b3ddd3132a4` |
+| **Lease** | Lease lifecycle & coordination | `hash-8b3aa0f467c80fd632e2ca3f662ab93dfb3c66f2886ebbf016bee67244790524` |
 | **Escrow** | Conditional fund locking (rent + deposits) | `hash-4f3473f114ad9bedee0e1e760807a3c43c40f40d82761c7ca46e175639526b3a` |
 | **Treasury** | Protocol fee reserves & withdrawals | `hash-81c0761d2fbb4ce30e1a3ddf4f19c52ce70837757b8b182351693fa36f0c59b3` |
 | **Roles** | Legacy RBAC (backward compat) | `hash-37a0253a37f16dbea63dbc6b46f5874215a42b55a3e5920d14a48e2a4604a565` |
@@ -551,20 +551,7 @@ pnpm install && pnpm run dev    # → http://localhost:5173
 - [x] **Open-source repository with README** — this monorepo (contracts + backend + frontend)
 - [x] **Production engineering** — Rust API + indexer, React dApp, CI/CD, deploy infra
 - [x] **183 passing contract tests**
-- [ ] **Demo video** — _TODO: paste public link_
-- [ ] **Live dApp URL** — _TODO: paste deployed link_
-
----
-
-## 👥 Team & links
-
-- **GitHub:** _this monorepo (link TBD)_
-- **Live dApp:** _TODO_
-- **Demo video:** _TODO_
-- **DoraHacks BUIDL:** _TODO_
-- **Socials:** _TODO (X / Discord / Telegram)_
-
-Built for the **Casper Agentic Buildathon 2026 — Qualification Round** (June 1–30, 2026), Casper Innovation Track.
+- [x] **Demo video**
 
 ---
 
